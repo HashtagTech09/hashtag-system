@@ -14,7 +14,508 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      attendance: {
+        Row: {
+          batch_id: number
+          created_at: string
+          date: string
+          id: number
+          organization_id: number
+          status: string
+          student_id: number
+        }
+        Insert: {
+          batch_id: number
+          created_at?: string
+          date: string
+          id?: never
+          organization_id: number
+          status: string
+          student_id: number
+        }
+        Update: {
+          batch_id?: number
+          created_at?: string
+          date?: string
+          id?: never
+          organization_id?: number
+          status?: string
+          student_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attendance_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attendance_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attendance_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      batches: {
+        Row: {
+          capacity: number | null
+          created_at: string
+          days: string[] | null
+          end_time: string | null
+          id: number
+          instructor_id: number | null
+          level: string | null
+          name: string
+          organization_id: number
+          start_time: string | null
+          studio_id: number | null
+          style: string | null
+        }
+        Insert: {
+          capacity?: number | null
+          created_at?: string
+          days?: string[] | null
+          end_time?: string | null
+          id?: never
+          instructor_id?: number | null
+          level?: string | null
+          name: string
+          organization_id: number
+          start_time?: string | null
+          studio_id?: number | null
+          style?: string | null
+        }
+        Update: {
+          capacity?: number | null
+          created_at?: string
+          days?: string[] | null
+          end_time?: string | null
+          id?: never
+          instructor_id?: number | null
+          level?: string | null
+          name?: string
+          organization_id?: number
+          start_time?: string | null
+          studio_id?: number | null
+          style?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "batches_instructor_id_fkey"
+            columns: ["instructor_id"]
+            isOneToOne: false
+            referencedRelation: "staff_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "batches_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "batches_studio_id_fkey"
+            columns: ["studio_id"]
+            isOneToOne: false
+            referencedRelation: "studios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      drop_ins: {
+        Row: {
+          adjustable_until: string | null
+          adjusted: boolean | null
+          amount: number
+          batch_id: number
+          class_date: string
+          created_at: string
+          id: number
+          organization_id: number
+          student_id: number
+        }
+        Insert: {
+          adjustable_until?: string | null
+          adjusted?: boolean | null
+          amount: number
+          batch_id: number
+          class_date: string
+          created_at?: string
+          id?: never
+          organization_id: number
+          student_id: number
+        }
+        Update: {
+          adjustable_until?: string | null
+          adjusted?: boolean | null
+          amount?: number
+          batch_id?: number
+          class_date?: string
+          created_at?: string
+          id?: never
+          organization_id?: number
+          student_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "drop_ins_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "drop_ins_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "drop_ins_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      enrollments: {
+        Row: {
+          batch_id: number
+          created_at: string
+          end_date: string
+          id: number
+          late_renewal: boolean | null
+          organization_id: number
+          payment_id: number | null
+          registration_fee_applied: boolean | null
+          start_date: string
+          status_type: string
+          student_id: number
+        }
+        Insert: {
+          batch_id: number
+          created_at?: string
+          end_date: string
+          id?: never
+          late_renewal?: boolean | null
+          organization_id: number
+          payment_id?: number | null
+          registration_fee_applied?: boolean | null
+          start_date: string
+          status_type: string
+          student_id: number
+        }
+        Update: {
+          batch_id?: number
+          created_at?: string
+          end_date?: string
+          id?: never
+          late_renewal?: boolean | null
+          organization_id?: number
+          payment_id?: number | null
+          registration_fee_applied?: boolean | null
+          start_date?: string
+          status_type?: string
+          student_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "enrollments_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "enrollments_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "enrollments_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "enrollments_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      organizations: {
+        Row: {
+          created_at: string
+          id: number
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: never
+          name: string
+        }
+        Update: {
+          created_at?: string
+          id?: never
+          name?: string
+        }
+        Relationships: []
+      }
+      payments: {
+        Row: {
+          amount: number
+          created_at: string
+          gateway_order_id: string | null
+          gateway_payment_id: string | null
+          id: number
+          organization_id: number
+          payment_mode: string | null
+          status: string
+          student_id: number
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          gateway_order_id?: string | null
+          gateway_payment_id?: string | null
+          id?: never
+          organization_id: number
+          payment_mode?: string | null
+          status?: string
+          student_id: number
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          gateway_order_id?: string | null
+          gateway_payment_id?: string | null
+          id?: never
+          organization_id?: number
+          payment_mode?: string | null
+          status?: string
+          student_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payments_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pricing_plans: {
+        Row: {
+          batch_count: number
+          id: number
+          organization_id: number
+          price: number
+        }
+        Insert: {
+          batch_count: number
+          id?: never
+          organization_id: number
+          price: number
+        }
+        Update: {
+          batch_count?: number
+          id?: never
+          organization_id?: number
+          price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pricing_plans_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      staff_users: {
+        Row: {
+          auth_user_id: string | null
+          created_at: string
+          email: string | null
+          id: number
+          name: string
+          organization_id: number
+          phone: string | null
+          role: string
+          studio_id: number | null
+        }
+        Insert: {
+          auth_user_id?: string | null
+          created_at?: string
+          email?: string | null
+          id?: never
+          name: string
+          organization_id: number
+          phone?: string | null
+          role: string
+          studio_id?: number | null
+        }
+        Update: {
+          auth_user_id?: string | null
+          created_at?: string
+          email?: string | null
+          id?: never
+          name?: string
+          organization_id?: number
+          phone?: string | null
+          role?: string
+          studio_id?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_users_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_users_studio_id_fkey"
+            columns: ["studio_id"]
+            isOneToOne: false
+            referencedRelation: "studios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      students: {
+        Row: {
+          created_at: string
+          email: string | null
+          id: number
+          name: string
+          organization_id: number
+          parent_name: string | null
+          parent_phone: string | null
+          phone: string | null
+          source: string | null
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          id?: never
+          name: string
+          organization_id: number
+          parent_name?: string | null
+          parent_phone?: string | null
+          phone?: string | null
+          source?: string | null
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          id?: never
+          name?: string
+          organization_id?: number
+          parent_name?: string | null
+          parent_phone?: string | null
+          phone?: string | null
+          source?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "students_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      studios: {
+        Row: {
+          created_at: string
+          id: number
+          location: string | null
+          name: string
+          organization_id: number
+        }
+        Insert: {
+          created_at?: string
+          id?: never
+          location?: string | null
+          name: string
+          organization_id: number
+        }
+        Update: {
+          created_at?: string
+          id?: never
+          location?: string | null
+          name?: string
+          organization_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "studios_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      system_settings: {
+        Row: {
+          id: number
+          key: string
+          organization_id: number
+          value: string
+        }
+        Insert: {
+          id?: never
+          key: string
+          organization_id: number
+          value: string
+        }
+        Update: {
+          id?: never
+          key?: string
+          organization_id?: number
+          value?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "system_settings_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
