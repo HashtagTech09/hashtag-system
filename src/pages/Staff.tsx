@@ -42,7 +42,7 @@ const StaffPage = () => {
     fetchData();
   };
 
-  const resetForm = () => { setForm({ name: "", email: "", phone: "", role: "instructor", studio_id: "" }); setEditId(null); setDialogOpen(false); };
+  const resetForm = () => { setForm({ name: "", email: "", phone: "", role: "instructor" }); setEditId(null); setDialogOpen(false); };
 
   const handleDelete = async (id: number) => {
     await supabase.from("users").delete().eq("id", id);
