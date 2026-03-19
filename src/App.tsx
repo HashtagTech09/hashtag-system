@@ -7,7 +7,7 @@ import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import LoginPage from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import StudiosPage from "./pages/Studios";
-import StaffPage from "./pages/Staff";
+import UsersPage from "./pages/Staff";
 import StudentsPage from "./pages/Students";
 import BatchesPage from "./pages/Batches";
 import EnrollmentsPage from "./pages/Enrollments";
