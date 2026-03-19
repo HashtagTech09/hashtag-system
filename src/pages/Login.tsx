@@ -6,19 +6,25 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 
 const LoginPage = () => {
-  const { signIn } = useAuth();
+  const { signIn, signUp } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
-      await signIn(email, password);
-      toast.success("Logged in successfully");
+      if (isSignUp) {
+        await signUp(email, password);
+        toast.success("Account created! Check your email to verify.");
+      } else {
+        await signIn(email, password);
+        toast.success("Logged in successfully");
+      }
     } catch (err: any) {
-      toast.error(err.message || "Login failed");
+      toast.error(err.message || (isSignUp ? "Sign up failed" : "Login failed"));
     } finally {
       setLoading(false);
     }
@@ -55,12 +61,24 @@ const LoginPage = () => {
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
               required
+              minLength={6}
             />
           </div>
           <Button type="submit" className="w-full gradient-primary" disabled={loading}>
-            {loading ? "Signing in..." : "Sign In"}
+            {loading ? (isSignUp ? "Creating account..." : "Signing in...") : (isSignUp ? "Create Account" : "Sign In")}
           </Button>
         </form>
+
+        <p className="text-center text-sm text-muted-foreground mt-6">
+          {isSignUp ? "Already have an account?" : "Don't have an account?"}{" "}
+          <button
+            type="button"
+            onClick={() => setIsSignUp(!isSignUp)}
+            className="text-primary hover:underline font-medium"
+          >
+            {isSignUp ? "Sign In" : "Sign Up"}
+          </button>
+        </p>
       </div>
     </div>
   );
