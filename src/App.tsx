@@ -7,7 +7,7 @@ import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import LoginPage from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import StudiosPage from "./pages/Studios";
-import StaffPage from "./pages/Staff";
+import UsersPage from "./pages/Staff";
 import StudentsPage from "./pages/Students";
 import BatchesPage from "./pages/Batches";
 import EnrollmentsPage from "./pages/Enrollments";
@@ -37,7 +37,7 @@ const AppRoutes = () => (
     <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
     <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
     <Route path="/studios" element={<ProtectedRoute><StudiosPage /></ProtectedRoute>} />
-    <Route path="/staff" element={<ProtectedRoute><StaffPage /></ProtectedRoute>} />
+    <Route path="/users" element={<ProtectedRoute><UsersPage /></ProtectedRoute>} />
     <Route path="/students" element={<ProtectedRoute><StudentsPage /></ProtectedRoute>} />
     <Route path="/batches" element={<ProtectedRoute><BatchesPage /></ProtectedRoute>} />
     <Route path="/enrollments" element={<ProtectedRoute><EnrollmentsPage /></ProtectedRoute>} />

@@ -30,7 +30,7 @@ import { Button } from "@/components/ui/button";
 const mainItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Studios", url: "/studios", icon: Building2 },
-  { title: "Staff", url: "/staff", icon: Users },
+  { title: "Users", url: "/users", icon: Users },
   { title: "Students", url: "/students", icon: GraduationCap },
   { title: "Batches", url: "/batches", icon: Layers },
 ];

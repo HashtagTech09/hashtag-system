@@ -54,6 +54,7 @@ const StaffPage = () => {
 
   const handleSave = async () => {
     if (!form.name.trim()) { toast.error("Name is required"); return; }
+
     if (selectedRoles.length === 0) { toast.error("At least one role is required"); return; }
 
     let photoUrl: string | null = null;
@@ -81,7 +82,7 @@ const StaffPage = () => {
       await supabase.from("user_roles").delete().eq("user_id", editId).eq("organization_id", 1);
     } else {
       const { data, error } = await supabase.from("users").insert(payload).select("id").single();
-      if (error || !data) { toast.error("Failed to create staff"); return; }
+      if (error || !data) { toast.error("Failed to create user"); return; }
       userId = data.id;
     }
 
@@ -95,7 +96,7 @@ const StaffPage = () => {
     }));
     await supabase.from("user_roles").insert(roleInserts);
 
-    toast.success(editId ? "Staff updated" : "Staff added");
+    toast.success(editId ? "User updated" : "User added");
     resetForm();
     fetchData();
   };
@@ -112,7 +113,7 @@ const StaffPage = () => {
 
   const handleDelete = async (id: number) => {
     await supabase.from("users").delete().eq("id", id);
-    toast.success("Staff deleted");
+    toast.success("User deleted");
     fetchData();
   };
 
@@ -139,18 +140,18 @@ const StaffPage = () => {
   };
 
   return (
-    <AdminLayout title="Staff Management">
+    <AdminLayout title="User Management">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div className="relative w-full sm:w-72">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Search staff..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10" />
+          <Input placeholder="Search users..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10" />
         </div>
         <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
           <DialogTrigger asChild>
-            <Button className="gradient-primary"><Plus className="h-4 w-4 mr-2" />Add Staff</Button>
+            <Button className="gradient-primary"><Plus className="h-4 w-4 mr-2" />Add User</Button>
           </DialogTrigger>
           <DialogContent>
-            <DialogHeader><DialogTitle>{editId ? "Edit Staff" : "Add Staff"}</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle>{editId ? "Edit User" : "Add User"}</DialogTitle></DialogHeader>
             <div className="space-y-4 max-h-[60vh] overflow-y-auto">
               <div className="flex justify-center">
                 <label className="cursor-pointer">
@@ -255,7 +256,7 @@ const StaffPage = () => {
                   </TableRow>
                 );
               })}
-              {filtered.length === 0 && <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No staff found</TableCell></TableRow>}
+              {filtered.length === 0 && <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No users found</TableCell></TableRow>}
             </TableBody>
           </Table>
         </CardContent>
