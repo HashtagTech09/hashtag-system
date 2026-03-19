@@ -154,6 +154,7 @@ const EnrollmentsPage = () => {
               {filtered.map((e) => (
                 <TableRow key={e.id}>
                   <TableCell className="font-medium">{e.students?.name}</TableCell>
+                  <TableCell className="text-muted-foreground">{e.students ? getDisplayPhone(e.students) : "—"}</TableCell>
                   <TableCell className="text-muted-foreground">{e.batches?.name}</TableCell>
                   <TableCell><Badge className={statusColors[e.status_type] || ""} variant="secondary">{e.status_type}{e.late_renewal ? " (Late)" : ""}</Badge></TableCell>
                   <TableCell className="hidden md:table-cell text-muted-foreground">{e.start_date}</TableCell>
