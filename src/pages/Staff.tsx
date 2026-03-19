@@ -101,7 +101,7 @@ const StaffPage = () => {
                   <TableCell className="font-medium">{s.name}</TableCell>
                   <TableCell><Badge className={roleColors[s.role] || ""} variant="secondary">{s.role}</Badge></TableCell>
                   <TableCell className="hidden md:table-cell text-muted-foreground">{s.email || "—"}</TableCell>
-                  <TableCell className="hidden md:table-cell text-muted-foreground">{s.studios?.name || "—"}</TableCell>
+                  <TableCell className="hidden md:table-cell text-muted-foreground">{s.phone || "—"}</TableCell>
                   <TableCell>
                     <div className="flex gap-1">
                       <Button variant="ghost" size="icon" onClick={() => { setForm({ name: s.name, email: s.email || "", phone: s.phone || "", role: s.role, studio_id: s.studio_id ? String(s.studio_id) : "" }); setEditId(s.id); setDialogOpen(true); }}><Edit className="h-4 w-4" /></Button>
