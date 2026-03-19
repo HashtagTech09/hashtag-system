@@ -30,7 +30,7 @@ const AttendancePage = () => {
       // Get students with active enrollments in this batch
       const { data: enrollments } = await supabase
         .from("enrollments")
-        .select("student_id, students(id, name)")
+        .select("student_id, students(id, name, phone, users(phone))")
         .eq("organization_id", 1)
         .eq("batch_id", Number(selectedBatch))
         .lte("start_date", date)
