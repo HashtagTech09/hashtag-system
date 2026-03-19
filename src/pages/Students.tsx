@@ -26,7 +26,7 @@ const StudentsPage = () => {
   const fetchStudents = async () => {
     const { data } = await supabase
       .from("students")
-      .select("*, users(name)")
+      .select("*, users(name, phone, email)")
       .eq("organization_id", 1)
       .order("created_at", { ascending: false });
     setStudents(data || []);
