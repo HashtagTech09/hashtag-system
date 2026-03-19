@@ -36,7 +36,7 @@ const StaffPage = () => {
     const payload = { organization_id: 1, name: form.name, email: form.email || null, phone: form.phone || null, role: form.role, studio_id: form.studio_id ? Number(form.studio_id) : null };
     if (editId) {
       const { organization_id, ...updatePayload } = payload;
-      await supabase.from("staff_users").update(updatePayload).eq("id", editId);
+      await supabase.from("users").update(updatePayload).eq("id", editId);
       toast.success("Staff updated");
     } else {
       await supabase.from("staff_users").insert(payload);
