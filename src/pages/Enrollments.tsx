@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Badge } from "@/components/ui/badge";
 import { Plus, Search } from "lucide-react";
 import { toast } from "sonner";
+import { getDisplayPhone } from "@/lib/studentUtils";
 
 const EnrollmentsPage = () => {
   const [enrollments, setEnrollments] = useState<any[]>([]);
