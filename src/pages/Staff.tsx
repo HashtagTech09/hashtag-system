@@ -17,7 +17,7 @@ const StaffPage = () => {
   const [studios, setStudios] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [form, setForm] = useState({ name: "", email: "", phone: "", role: "instructor", studio_id: "" });
+  const [form, setForm] = useState({ name: "", email: "", phone: "", role: "instructor" });
   const [editId, setEditId] = useState<number | null>(null);
 
   const fetchData = async () => {
