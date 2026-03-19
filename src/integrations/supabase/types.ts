@@ -114,7 +114,7 @@ export type Database = {
             foreignKeyName: "batches_instructor_id_fkey"
             columns: ["instructor_id"]
             isOneToOne: false
-            referencedRelation: "staff_users"
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
           {
@@ -360,57 +360,6 @@ export type Database = {
           },
         ]
       }
-      staff_users: {
-        Row: {
-          auth_user_id: string | null
-          created_at: string
-          email: string | null
-          id: number
-          name: string
-          organization_id: number
-          phone: string | null
-          role: string
-          studio_id: number | null
-        }
-        Insert: {
-          auth_user_id?: string | null
-          created_at?: string
-          email?: string | null
-          id?: never
-          name: string
-          organization_id: number
-          phone?: string | null
-          role: string
-          studio_id?: number | null
-        }
-        Update: {
-          auth_user_id?: string | null
-          created_at?: string
-          email?: string | null
-          id?: never
-          name?: string
-          organization_id?: number
-          phone?: string | null
-          role?: string
-          studio_id?: number | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "staff_users_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "staff_users_studio_id_fkey"
-            columns: ["studio_id"]
-            isOneToOne: false
-            referencedRelation: "studios"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       students: {
         Row: {
           created_at: string
@@ -422,6 +371,7 @@ export type Database = {
           parent_phone: string | null
           phone: string | null
           source: string | null
+          user_id: number | null
         }
         Insert: {
           created_at?: string
@@ -433,6 +383,7 @@ export type Database = {
           parent_phone?: string | null
           phone?: string | null
           source?: string | null
+          user_id?: number | null
         }
         Update: {
           created_at?: string
@@ -444,6 +395,7 @@ export type Database = {
           parent_phone?: string | null
           phone?: string | null
           source?: string | null
+          user_id?: number | null
         }
         Relationships: [
           {
@@ -451,6 +403,13 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "students_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
@@ -509,6 +468,44 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "system_settings_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      users: {
+        Row: {
+          created_at: string
+          email: string | null
+          id: number
+          name: string
+          organization_id: number
+          phone: string | null
+          role: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          id?: never
+          name: string
+          organization_id: number
+          phone?: string | null
+          role: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          id?: never
+          name?: string
+          organization_id?: number
+          phone?: string | null
+          role?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_users_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
