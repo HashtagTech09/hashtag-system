@@ -104,7 +104,7 @@ const StaffPage = () => {
                   <TableCell className="hidden md:table-cell text-muted-foreground">{s.phone || "—"}</TableCell>
                   <TableCell>
                     <div className="flex gap-1">
-                      <Button variant="ghost" size="icon" onClick={() => { setForm({ name: s.name, email: s.email || "", phone: s.phone || "", role: s.role, studio_id: s.studio_id ? String(s.studio_id) : "" }); setEditId(s.id); setDialogOpen(true); }}><Edit className="h-4 w-4" /></Button>
+                      <Button variant="ghost" size="icon" onClick={() => { setForm({ name: s.name, email: s.email || "", phone: s.phone || "", role: s.role }); setEditId(s.id); setDialogOpen(true); }}><Edit className="h-4 w-4" /></Button>
                       <Button variant="ghost" size="icon" onClick={() => handleDelete(s.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                     </div>
                   </TableCell>
