@@ -82,7 +82,7 @@ const StaffPage = () => {
       await supabase.from("user_roles").delete().eq("user_id", editId).eq("organization_id", 1);
     } else {
       const { data, error } = await supabase.from("users").insert(payload).select("id").single();
-      if (error || !data) { toast.error("Failed to create staff"); return; }
+      if (error || !data) { toast.error("Failed to create user"); return; }
       userId = data.id;
     }
 
