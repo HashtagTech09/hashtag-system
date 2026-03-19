@@ -20,7 +20,7 @@ interface RoleRecord {
   type: string;
 }
 
-const StaffPage = () => {
+const UsersPage = () => {
   const [staff, setStaff] = useState<any[]>([]);
   const [roles, setRoles] = useState<RoleRecord[]>([]);
   const [search, setSearch] = useState("");
@@ -265,4 +265,4 @@ const StaffPage = () => {
   );
 };
 
-export default StaffPage;
+export default UsersPage;
