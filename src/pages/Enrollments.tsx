@@ -143,6 +143,7 @@ const EnrollmentsPage = () => {
             <TableHeader>
               <TableRow>
                 <TableHead>Student</TableHead>
+                <TableHead>Phone</TableHead>
                 <TableHead>Batch</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead className="hidden md:table-cell">Start</TableHead>
