@@ -21,12 +21,8 @@ const StaffPage = () => {
   const [editId, setEditId] = useState<number | null>(null);
 
   const fetchData = async () => {
-    const [staffRes, studioRes] = await Promise.all([
-      supabase.from("users").select("*").eq("organization_id", 1).order("created_at", { ascending: false }),
-      supabase.from("studios").select("*").eq("organization_id", 1),
-    ]);
-    setStaff(staffRes.data || []);
-    setStudios(studioRes.data || []);
+    const { data } = await supabase.from("users").select("*").eq("organization_id", 1).order("created_at", { ascending: false });
+    setStaff(data || []);
   };
 
   useEffect(() => { fetchData(); }, []);
