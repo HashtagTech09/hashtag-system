@@ -49,7 +49,7 @@ const StaffPage = () => {
   const resetForm = () => { setForm({ name: "", email: "", phone: "", role: "instructor", studio_id: "" }); setEditId(null); setDialogOpen(false); };
 
   const handleDelete = async (id: number) => {
-    await supabase.from("staff_users").delete().eq("id", id);
+    await supabase.from("users").delete().eq("id", id);
     toast.success("Staff deleted");
     fetchData();
   };

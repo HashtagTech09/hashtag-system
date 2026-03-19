@@ -150,7 +150,7 @@ const BatchesPage = () => {
                   <TableCell className="text-muted-foreground">{batch.style || "—"}</TableCell>
                   <TableCell className="hidden md:table-cell"><div className="flex gap-1 flex-wrap">{(batch.days || []).map((d: string) => <Badge key={d} variant="outline" className="text-xs">{d}</Badge>)}</div></TableCell>
                   <TableCell className="hidden md:table-cell text-muted-foreground">{batch.start_time && batch.end_time ? `${batch.start_time.slice(0, 5)} - ${batch.end_time.slice(0, 5)}` : "—"}</TableCell>
-                  <TableCell className="hidden lg:table-cell text-muted-foreground">{batch.staff_users?.name || "—"}</TableCell>
+                  <TableCell className="hidden lg:table-cell text-muted-foreground">{batch.users?.name || "—"}</TableCell>
                   <TableCell>
                     <div className="flex gap-1">
                       <Button variant="ghost" size="icon" onClick={() => { setForm({ name: batch.name, style: batch.style || "", level: batch.level || "", days: batch.days || [], start_time: batch.start_time || "", end_time: batch.end_time || "", studio_id: batch.studio_id ? String(batch.studio_id) : "", instructor_id: batch.instructor_id ? String(batch.instructor_id) : "", capacity: batch.capacity ? String(batch.capacity) : "" }); setEditId(batch.id); setDialogOpen(true); }}><Edit className="h-4 w-4" /></Button>
