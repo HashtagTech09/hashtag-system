@@ -23,7 +23,7 @@ const EnrollmentsPage = () => {
 
   const fetchData = async () => {
     const [enrollRes, studentRes, batchRes] = await Promise.all([
-      supabase.from("enrollments").select("*, students(name), batches(name)").eq("organization_id", 1).order("created_at", { ascending: false }),
+      supabase.from("enrollments").select("*, students(name, phone, users(phone)), batches(name)").eq("organization_id", 1).order("created_at", { ascending: false }),
       supabase.from("students").select("*").eq("organization_id", 1).order("name"),
       supabase.from("batches").select("*").eq("organization_id", 1).order("name"),
     ]);
