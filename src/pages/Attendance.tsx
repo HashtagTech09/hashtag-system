@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Check, X } from "lucide-react";
+import { getDisplayPhone, getPhoneSource } from "@/lib/studentUtils";
 
 const AttendancePage = () => {
   const [batches, setBatches] = useState<any[]>([]);
