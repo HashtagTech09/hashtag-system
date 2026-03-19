@@ -50,6 +50,7 @@ const PaymentsPage = () => {
               {filtered.map((p) => (
                 <TableRow key={p.id}>
                   <TableCell className="font-medium">{p.students?.name}</TableCell>
+                  <TableCell className="text-muted-foreground">{p.students ? getDisplayPhone(p.students) : "—"}</TableCell>
                   <TableCell className="font-display">₹{Number(p.amount).toLocaleString()}</TableCell>
                   <TableCell className="text-muted-foreground capitalize">{p.payment_mode || "—"}</TableCell>
                   <TableCell><Badge className={statusColors[p.status] || ""} variant="secondary">{p.status}</Badge></TableCell>
