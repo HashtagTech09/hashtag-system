@@ -29,7 +29,7 @@ const StaffPage = () => {
 
   const handleSave = async () => {
     if (!form.name.trim()) { toast.error("Name is required"); return; }
-    const payload = { organization_id: 1, name: form.name, email: form.email || null, phone: form.phone || null, role: form.role, studio_id: form.studio_id ? Number(form.studio_id) : null };
+    const payload = { organization_id: 1, name: form.name, email: form.email || null, phone: form.phone || null, role: form.role };
     if (editId) {
       const { organization_id, ...updatePayload } = payload;
       await supabase.from("users").update(updatePayload).eq("id", editId);
