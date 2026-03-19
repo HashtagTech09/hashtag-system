@@ -150,7 +150,7 @@ const StaffPage = () => {
             <Button className="gradient-primary"><Plus className="h-4 w-4 mr-2" />Add User</Button>
           </DialogTrigger>
           <DialogContent>
-            <DialogHeader><DialogTitle>{editId ? "Edit Staff" : "Add Staff"}</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle>{editId ? "Edit User" : "Add User"}</DialogTitle></DialogHeader>
             <div className="space-y-4 max-h-[60vh] overflow-y-auto">
               <div className="flex justify-center">
                 <label className="cursor-pointer">
