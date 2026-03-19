@@ -93,7 +93,7 @@ const StaffPage = () => {
         <CardContent className="p-0">
           <Table>
             <TableHeader>
-              <TableRow><TableHead>Name</TableHead><TableHead>Role</TableHead><TableHead className="hidden md:table-cell">Email</TableHead><TableHead className="hidden md:table-cell">Studio</TableHead><TableHead className="w-24">Actions</TableHead></TableRow>
+              <TableRow><TableHead>Name</TableHead><TableHead>Role</TableHead><TableHead className="hidden md:table-cell">Email</TableHead><TableHead className="hidden md:table-cell">Phone</TableHead><TableHead className="w-24">Actions</TableHead></TableRow>
             </TableHeader>
             <TableBody>
               {filtered.map((s) => (
