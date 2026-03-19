@@ -82,14 +82,7 @@ const StaffPage = () => {
                   </SelectContent>
                 </Select>
               </div>
-              <div><Label>Studio</Label>
-                <Select value={form.studio_id} onValueChange={(v) => setForm({ ...form, studio_id: v })}>
-                  <SelectTrigger><SelectValue placeholder="Select studio" /></SelectTrigger>
-                  <SelectContent>
-                    {studios.map((s) => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
+              <Button className="w-full gradient-primary" onClick={handleSave}>Save</Button>
               <Button className="w-full gradient-primary" onClick={handleSave}>Save</Button>
             </div>
           </DialogContent>
