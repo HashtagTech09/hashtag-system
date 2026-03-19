@@ -125,9 +125,12 @@ const StudentsPage = () => {
     }
   };
 
-  const filtered = students.filter((s) =>
-    s.name.toLowerCase().includes(search.toLowerCase()) || (s.phone && s.phone.includes(search))
-  );
+  const filtered = students.filter((s) => {
+    const q = search.toLowerCase();
+    return s.name.toLowerCase().includes(q) ||
+      (s.phone && s.phone.includes(search)) ||
+      (s.users?.phone && s.users.phone.includes(search));
+  });
 
   return (
     <AdminLayout title="Students">
