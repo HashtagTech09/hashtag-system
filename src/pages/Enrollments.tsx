@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Badge } from "@/components/ui/badge";
 import { Plus, Search } from "lucide-react";
 import { toast } from "sonner";
+import { getDisplayPhone } from "@/lib/studentUtils";
 
 const EnrollmentsPage = () => {
   const [enrollments, setEnrollments] = useState<any[]>([]);
@@ -22,7 +23,7 @@ const EnrollmentsPage = () => {
 
   const fetchData = async () => {
     const [enrollRes, studentRes, batchRes] = await Promise.all([
-      supabase.from("enrollments").select("*, students(name), batches(name)").eq("organization_id", 1).order("created_at", { ascending: false }),
+      supabase.from("enrollments").select("*, students(name, phone, users(phone)), batches(name)").eq("organization_id", 1).order("created_at", { ascending: false }),
       supabase.from("students").select("*").eq("organization_id", 1).order("name"),
       supabase.from("batches").select("*").eq("organization_id", 1).order("name"),
     ]);
@@ -142,6 +143,7 @@ const EnrollmentsPage = () => {
             <TableHeader>
               <TableRow>
                 <TableHead>Student</TableHead>
+                <TableHead>Phone</TableHead>
                 <TableHead>Batch</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead className="hidden md:table-cell">Start</TableHead>
@@ -152,13 +154,14 @@ const EnrollmentsPage = () => {
               {filtered.map((e) => (
                 <TableRow key={e.id}>
                   <TableCell className="font-medium">{e.students?.name}</TableCell>
+                  <TableCell className="text-muted-foreground">{e.students ? getDisplayPhone(e.students) : "—"}</TableCell>
                   <TableCell className="text-muted-foreground">{e.batches?.name}</TableCell>
                   <TableCell><Badge className={statusColors[e.status_type] || ""} variant="secondary">{e.status_type}{e.late_renewal ? " (Late)" : ""}</Badge></TableCell>
                   <TableCell className="hidden md:table-cell text-muted-foreground">{e.start_date}</TableCell>
                   <TableCell className="hidden md:table-cell text-muted-foreground">{e.end_date}</TableCell>
                 </TableRow>
               ))}
-              {filtered.length === 0 && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">No enrollments found</TableCell></TableRow>}
+              {filtered.length === 0 && <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No enrollments found</TableCell></TableRow>}
             </TableBody>
           </Table>
         </CardContent>

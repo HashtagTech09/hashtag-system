@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Check, X } from "lucide-react";
+import { getDisplayPhone, getPhoneSource } from "@/lib/studentUtils";
 
 const AttendancePage = () => {
   const [batches, setBatches] = useState<any[]>([]);
@@ -29,7 +30,7 @@ const AttendancePage = () => {
       // Get students with active enrollments in this batch
       const { data: enrollments } = await supabase
         .from("enrollments")
-        .select("student_id, students(id, name)")
+        .select("student_id, students(id, name, phone, users(phone))")
         .eq("organization_id", 1)
         .eq("batch_id", Number(selectedBatch))
         .lte("start_date", date)
@@ -84,7 +85,10 @@ const AttendancePage = () => {
               <div className="space-y-3">
                 {students.map((student) => (
                   <div key={student.id} className="flex items-center justify-between p-3 rounded-lg border border-border">
-                    <span className="font-medium">{student.name}</span>
+                    <div className="flex flex-col">
+                      <span className="font-medium">{student.name}</span>
+                      <span className="text-xs text-muted-foreground">{getDisplayPhone(student)}</span>
+                    </div>
                     <div className="flex gap-2">
                       <Button
                         size="sm"

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import AdminLayout from "@/components/AdminLayout";
+import { getDisplayPhone, getDisplayEmail, getPhoneSource, getEmailSource } from "@/lib/studentUtils";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,7 +26,7 @@ const StudentsPage = () => {
   const fetchStudents = async () => {
     const { data } = await supabase
       .from("students")
-      .select("*, users(name)")
+      .select("*, users(name, phone, email)")
       .eq("organization_id", 1)
       .order("created_at", { ascending: false });
     setStudents(data || []);
@@ -124,9 +125,12 @@ const StudentsPage = () => {
     }
   };
 
-  const filtered = students.filter((s) =>
-    s.name.toLowerCase().includes(search.toLowerCase()) || (s.phone && s.phone.includes(search))
-  );
+  const filtered = students.filter((s) => {
+    const q = search.toLowerCase();
+    return s.name.toLowerCase().includes(q) ||
+      (s.phone && s.phone.includes(search)) ||
+      (s.users?.phone && s.users.phone.includes(search));
+  });
 
   return (
     <AdminLayout title="Students">
@@ -207,8 +211,18 @@ const StudentsPage = () => {
                       <span className="font-medium">{student.name}</span>
                     </div>
                   </TableCell>
-                  <TableCell className="text-muted-foreground">{student.phone || "—"}</TableCell>
-                  <TableCell className="hidden md:table-cell text-muted-foreground">{student.email || "—"}</TableCell>
+                  <TableCell>
+                    <div className="flex flex-col">
+                      <span className="text-foreground">{getDisplayPhone(student)}</span>
+                      {getPhoneSource(student) && <span className="text-xs text-muted-foreground">{getPhoneSource(student)}</span>}
+                    </div>
+                  </TableCell>
+                  <TableCell className="hidden md:table-cell">
+                    <div className="flex flex-col">
+                      <span className="text-foreground">{getDisplayEmail(student)}</span>
+                      {getEmailSource(student) && <span className="text-xs text-muted-foreground">{getEmailSource(student)}</span>}
+                    </div>
+                  </TableCell>
                   <TableCell className="hidden lg:table-cell text-muted-foreground">{student.users?.name || "—"}</TableCell>
                   <TableCell>
                     <div className="flex gap-1">
