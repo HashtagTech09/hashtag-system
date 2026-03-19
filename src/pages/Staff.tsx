@@ -22,7 +22,7 @@ const StaffPage = () => {
 
   const fetchData = async () => {
     const [staffRes, studioRes] = await Promise.all([
-      supabase.from("staff_users").select("*, studios(name)").eq("organization_id", 1).order("created_at", { ascending: false }),
+      supabase.from("users").select("*").eq("organization_id", 1).order("created_at", { ascending: false }),
       supabase.from("studios").select("*").eq("organization_id", 1),
     ]);
     setStaff(staffRes.data || []);
