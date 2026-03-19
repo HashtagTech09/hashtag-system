@@ -51,7 +51,7 @@ const StaffPage = () => {
 
   const filtered = staff.filter((s) => s.name.toLowerCase().includes(search.toLowerCase()));
 
-  const roleColors: Record<string, string> = { admin: "bg-primary/20 text-primary", manager: "bg-warning/20 text-warning", frontdesk: "bg-success/20 text-success", instructor: "bg-secondary text-secondary-foreground" };
+  const roleColors: Record<string, string> = { admin: "bg-primary/20 text-primary", manager: "bg-warning/20 text-warning", frontdesk: "bg-success/20 text-success", instructor: "bg-secondary text-secondary-foreground", parent: "bg-accent text-accent-foreground" };
 
   return (
     <AdminLayout title="Staff Management">
