@@ -15,7 +15,6 @@ import { toast } from "sonner";
 const StaffPage = () => {
   const [staff, setStaff] = useState<any[]>([]);
   const [search, setSearch] = useState("");
-  const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", phone: "", role: "instructor" });
   const [editId, setEditId] = useState<number | null>(null);
