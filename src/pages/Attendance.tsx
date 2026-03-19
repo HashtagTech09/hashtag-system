@@ -85,7 +85,10 @@ const AttendancePage = () => {
               <div className="space-y-3">
                 {students.map((student) => (
                   <div key={student.id} className="flex items-center justify-between p-3 rounded-lg border border-border">
-                    <span className="font-medium">{student.name}</span>
+                    <div className="flex flex-col">
+                      <span className="font-medium">{student.name}</span>
+                      <span className="text-xs text-muted-foreground">{getDisplayPhone(student)}</span>
+                    </div>
                     <div className="flex gap-2">
                       <Button
                         size="sm"
