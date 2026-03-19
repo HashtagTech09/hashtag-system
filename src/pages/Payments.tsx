@@ -39,6 +39,7 @@ const PaymentsPage = () => {
             <TableHeader>
               <TableRow>
                 <TableHead>Student</TableHead>
+                <TableHead>Phone</TableHead>
                 <TableHead>Amount</TableHead>
                 <TableHead>Mode</TableHead>
                 <TableHead>Status</TableHead>
