@@ -147,7 +147,7 @@ const StaffPage = () => {
         </div>
         <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
           <DialogTrigger asChild>
-            <Button className="gradient-primary"><Plus className="h-4 w-4 mr-2" />Add Staff</Button>
+            <Button className="gradient-primary"><Plus className="h-4 w-4 mr-2" />Add User</Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle>{editId ? "Edit Staff" : "Add Staff"}</DialogTitle></DialogHeader>
