@@ -265,4 +265,4 @@ const UsersPage = () => {
   );
 };
 
-export default StaffPage;
+export default UsersPage;
