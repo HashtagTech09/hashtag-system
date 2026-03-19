@@ -14,7 +14,7 @@ const PaymentsPage = () => {
 
   useEffect(() => {
     const fetchPayments = async () => {
-      const { data } = await supabase.from("payments").select("*, students(name)").eq("organization_id", 1).order("created_at", { ascending: false });
+      const { data } = await supabase.from("payments").select("*, students(name, phone, users(phone))").eq("organization_id", 1).order("created_at", { ascending: false });
       setPayments(data || []);
     };
     fetchPayments();
