@@ -96,7 +96,7 @@ const StaffPage = () => {
     }));
     await supabase.from("user_roles").insert(roleInserts);
 
-    toast.success(editId ? "Staff updated" : "Staff added");
+    toast.success(editId ? "User updated" : "User added");
     resetForm();
     fetchData();
   };
