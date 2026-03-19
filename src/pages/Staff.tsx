@@ -39,7 +39,7 @@ const StaffPage = () => {
       await supabase.from("users").update(updatePayload).eq("id", editId);
       toast.success("Staff updated");
     } else {
-      await supabase.from("staff_users").insert(payload);
+      await supabase.from("users").insert(payload);
       toast.success("Staff added");
     }
     resetForm();
