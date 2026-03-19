@@ -25,9 +25,9 @@ const BatchesPage = () => {
 
   const fetchData = async () => {
     const [batchRes, studioRes, instrRes] = await Promise.all([
-      supabase.from("batches").select("*, studios(name), staff_users(name)").eq("organization_id", 1).order("created_at", { ascending: false }),
+      supabase.from("batches").select("*, studios(name), users(name)").eq("organization_id", 1).order("created_at", { ascending: false }),
       supabase.from("studios").select("*").eq("organization_id", 1),
-      supabase.from("staff_users").select("*").eq("organization_id", 1).eq("role", "instructor"),
+      supabase.from("users").select("*").eq("organization_id", 1).eq("role", "instructor"),
     ]);
     setBatches(batchRes.data || []);
     setStudios(studioRes.data || []);
