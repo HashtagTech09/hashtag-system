@@ -54,6 +54,7 @@ const StaffPage = () => {
 
   const handleSave = async () => {
     if (!form.name.trim()) { toast.error("Name is required"); return; }
+
     if (selectedRoles.length === 0) { toast.error("At least one role is required"); return; }
 
     let photoUrl: string | null = null;
