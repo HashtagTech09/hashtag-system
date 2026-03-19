@@ -360,6 +360,24 @@ export type Database = {
           },
         ]
       }
+      roles: {
+        Row: {
+          id: number
+          name: string
+          type: string
+        }
+        Insert: {
+          id?: never
+          name: string
+          type: string
+        }
+        Update: {
+          id?: never
+          name?: string
+          type?: string
+        }
+        Relationships: []
+      }
       students: {
         Row: {
           created_at: string
@@ -475,6 +493,55 @@ export type Database = {
           },
         ]
       }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: number
+          is_primary: boolean
+          organization_id: number
+          role_id: number
+          user_id: number
+        }
+        Insert: {
+          created_at?: string
+          id?: never
+          is_primary?: boolean
+          organization_id: number
+          role_id: number
+          user_id: number
+        }
+        Update: {
+          created_at?: string
+          id?: never
+          is_primary?: boolean
+          organization_id?: number
+          role_id?: number
+          user_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_roles_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_roles_role_id_fkey"
+            columns: ["role_id"]
+            isOneToOne: false
+            referencedRelation: "roles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_roles_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       users: {
         Row: {
           created_at: string
@@ -484,7 +551,6 @@ export type Database = {
           organization_id: number
           phone: string | null
           photo: string | null
-          role: string
           source: string | null
         }
         Insert: {
@@ -495,7 +561,6 @@ export type Database = {
           organization_id: number
           phone?: string | null
           photo?: string | null
-          role: string
           source?: string | null
         }
         Update: {
@@ -506,7 +571,6 @@ export type Database = {
           organization_id?: number
           phone?: string | null
           photo?: string | null
-          role?: string
           source?: string | null
         }
         Relationships: [
