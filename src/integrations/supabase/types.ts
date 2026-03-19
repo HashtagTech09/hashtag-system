@@ -434,25 +434,37 @@ export type Database = {
       }
       studios: {
         Row: {
+          code: string | null
           created_at: string
+          dreamcatcher: string | null
+          google_maps_url: string | null
           id: number
           location: string | null
           name: string
           organization_id: number
+          wingperson: string | null
         }
         Insert: {
+          code?: string | null
           created_at?: string
+          dreamcatcher?: string | null
+          google_maps_url?: string | null
           id?: never
           location?: string | null
           name: string
           organization_id: number
+          wingperson?: string | null
         }
         Update: {
+          code?: string | null
           created_at?: string
+          dreamcatcher?: string | null
+          google_maps_url?: string | null
           id?: never
           location?: string | null
           name?: string
           organization_id?: number
+          wingperson?: string | null
         }
         Relationships: [
           {
