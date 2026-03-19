@@ -363,38 +363,38 @@ export type Database = {
       students: {
         Row: {
           created_at: string
+          dob: string | null
           email: string | null
+          gender: string | null
           id: number
           name: string
           organization_id: number
-          parent_name: string | null
-          parent_phone: string | null
           phone: string | null
-          source: string | null
+          photo: string | null
           user_id: number | null
         }
         Insert: {
           created_at?: string
+          dob?: string | null
           email?: string | null
+          gender?: string | null
           id?: never
           name: string
           organization_id: number
-          parent_name?: string | null
-          parent_phone?: string | null
           phone?: string | null
-          source?: string | null
+          photo?: string | null
           user_id?: number | null
         }
         Update: {
           created_at?: string
+          dob?: string | null
           email?: string | null
+          gender?: string | null
           id?: never
           name?: string
           organization_id?: number
-          parent_name?: string | null
-          parent_phone?: string | null
           phone?: string | null
-          source?: string | null
+          photo?: string | null
           user_id?: number | null
         }
         Relationships: [
@@ -483,7 +483,9 @@ export type Database = {
           name: string
           organization_id: number
           phone: string | null
+          photo: string | null
           role: string
+          source: string | null
         }
         Insert: {
           created_at?: string
@@ -492,7 +494,9 @@ export type Database = {
           name: string
           organization_id: number
           phone?: string | null
+          photo?: string | null
           role: string
+          source?: string | null
         }
         Update: {
           created_at?: string
@@ -501,7 +505,9 @@ export type Database = {
           name?: string
           organization_id?: number
           phone?: string | null
+          photo?: string | null
           role?: string
+          source?: string | null
         }
         Relationships: [
           {
