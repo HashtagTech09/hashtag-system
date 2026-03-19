@@ -211,8 +211,18 @@ const StudentsPage = () => {
                       <span className="font-medium">{student.name}</span>
                     </div>
                   </TableCell>
-                  <TableCell className="text-muted-foreground">{student.phone || "—"}</TableCell>
-                  <TableCell className="hidden md:table-cell text-muted-foreground">{student.email || "—"}</TableCell>
+                  <TableCell>
+                    <div className="flex flex-col">
+                      <span className="text-foreground">{getDisplayPhone(student)}</span>
+                      {getPhoneSource(student) && <span className="text-xs text-muted-foreground">{getPhoneSource(student)}</span>}
+                    </div>
+                  </TableCell>
+                  <TableCell className="hidden md:table-cell">
+                    <div className="flex flex-col">
+                      <span className="text-foreground">{getDisplayEmail(student)}</span>
+                      {getEmailSource(student) && <span className="text-xs text-muted-foreground">{getEmailSource(student)}</span>}
+                    </div>
+                  </TableCell>
                   <TableCell className="hidden lg:table-cell text-muted-foreground">{student.users?.name || "—"}</TableCell>
                   <TableCell>
                     <div className="flex gap-1">
