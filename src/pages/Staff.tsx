@@ -113,7 +113,7 @@ const StaffPage = () => {
 
   const handleDelete = async (id: number) => {
     await supabase.from("users").delete().eq("id", id);
-    toast.success("Staff deleted");
+    toast.success("User deleted");
     fetchData();
   };
 
