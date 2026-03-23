@@ -132,6 +132,7 @@ export default function BatchSessionsDialog({ open, onOpenChange, batch }: Props
 
         <div className="flex gap-2 mb-4">
           <Button variant={tab === "list" ? "default" : "outline"} size="sm" onClick={() => setTab("list")}>Sessions</Button>
+          <Button variant={tab === "calendar" ? "default" : "outline"} size="sm" onClick={() => setTab("calendar")}>Calendar</Button>
           <Button variant={tab === "generate" ? "default" : "outline"} size="sm" onClick={() => setTab("generate")}>Generate</Button>
         </div>
 
