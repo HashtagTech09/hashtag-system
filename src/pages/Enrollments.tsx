@@ -189,7 +189,7 @@ const EnrollmentsPage = () => {
                 <Select value={form.subscription_plan_id} onValueChange={computeCycleAssignment}>
                   <SelectTrigger><SelectValue placeholder="No plan (manual dates)" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">No plan</SelectItem>
+                    <SelectItem value="none">No plan</SelectItem>
                     {subPlans.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
