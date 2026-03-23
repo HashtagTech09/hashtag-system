@@ -9,10 +9,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Trash2, Edit } from "lucide-react";
+import { Plus, Search, Trash2, Edit, X } from "lucide-react";
 import { toast } from "sonner";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+type ScheduleEntry = { day: string; start_time: string; end_time: string };
 
 const BatchesPage = () => {
   const [batches, setBatches] = useState<any[]>([]);
@@ -20,14 +22,14 @@ const BatchesPage = () => {
   const [instructors, setInstructors] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [form, setForm] = useState({ name: "", style: "", level: "", days: [] as string[], start_time: "", end_time: "", studio_id: "", instructor_id: "", capacity: "" });
+  const [form, setForm] = useState({ name: "", style: "", level: "", schedule: [] as ScheduleEntry[], studio_id: "", instructor_id: "", capacity: "" });
+  const [editId, setEditId] = useState<number | null>(null);
 
   const generateBatchCode = (name: string, studioId: string) => {
     const studio = studios.find((s) => String(s.id) === studioId);
     const cleanName = name.replace(/\s+/g, "");
     return studio?.code ? `${cleanName}-${studio.code}` : cleanName;
   };
-  const [editId, setEditId] = useState<number | null>(null);
 
   const fetchData = async () => {
     const [batchRes, studioRes, instrRes] = await Promise.all([
@@ -43,7 +45,20 @@ const BatchesPage = () => {
   useEffect(() => { fetchData(); }, []);
 
   const toggleDay = (day: string) => {
-    setForm((f) => ({ ...f, days: f.days.includes(day) ? f.days.filter((d) => d !== day) : [...f.days, day] }));
+    setForm((f) => {
+      const exists = f.schedule.find((s) => s.day === day);
+      if (exists) {
+        return { ...f, schedule: f.schedule.filter((s) => s.day !== day) };
+      }
+      return { ...f, schedule: [...f.schedule, { day, start_time: "", end_time: "" }] };
+    });
+  };
+
+  const updateScheduleTime = (day: string, field: "start_time" | "end_time", value: string) => {
+    setForm((f) => ({
+      ...f,
+      schedule: f.schedule.map((s) => s.day === day ? { ...s, [field]: value } : s),
+    }));
   };
 
   const handleSave = async () => {
@@ -51,7 +66,7 @@ const BatchesPage = () => {
     const batchCode = generateBatchCode(form.name, form.studio_id);
     const payload = {
       organization_id: 1, name: form.name, style: form.style || null, level: form.level || null,
-      days: form.days, start_time: form.start_time || null, end_time: form.end_time || null,
+      schedule: form.schedule.length > 0 ? form.schedule : null,
       studio_id: form.studio_id ? Number(form.studio_id) : null,
       instructor_id: form.instructor_id ? Number(form.instructor_id) : null,
       capacity: form.capacity ? Number(form.capacity) : null,
@@ -69,7 +84,7 @@ const BatchesPage = () => {
     fetchData();
   };
 
-  const resetForm = () => { setForm({ name: "", style: "", level: "", days: [], start_time: "", end_time: "", studio_id: "", instructor_id: "", capacity: "" }); setEditId(null); setDialogOpen(false); };
+  const resetForm = () => { setForm({ name: "", style: "", level: "", schedule: [], studio_id: "", instructor_id: "", capacity: "" }); setEditId(null); setDialogOpen(false); };
 
   const handleDelete = async (id: number) => {
     await supabase.from("batches").delete().eq("id", id);
@@ -77,7 +92,25 @@ const BatchesPage = () => {
     fetchData();
   };
 
-  const filtered = batches.filter((b) => b.name.toLowerCase().includes(search.toLowerCase()) || (b.batch_code && b.batch_code.toLowerCase().includes(search.toLowerCase())));
+  const getSchedule = (batch: any): ScheduleEntry[] => {
+    if (!batch.schedule) return [];
+    if (Array.isArray(batch.schedule)) return batch.schedule;
+    return [];
+  };
+
+  const formatScheduleDisplay = (batch: any) => {
+    const sched = getSchedule(batch);
+    if (sched.length === 0) return "—";
+    return sched.map((s) => `${s.day} ${s.start_time?.slice(0, 5) || ""}–${s.end_time?.slice(0, 5) || ""}`).join(", ");
+  };
+
+  const filtered = batches.filter((b) =>
+    b.name.toLowerCase().includes(search.toLowerCase()) ||
+    (b.batch_code && b.batch_code.toLowerCase().includes(search.toLowerCase()))
+  );
+
+  // Sort schedule entries by day order for display
+  const sortedSchedule = [...form.schedule].sort((a, b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day));
 
   return (
     <AdminLayout title="Batches">
@@ -113,16 +146,34 @@ const BatchesPage = () => {
                 </div>
               </div>
               <div>
-                <Label>Days</Label>
+                <Label>Days & Schedule</Label>
                 <div className="flex flex-wrap gap-2 mt-1">
                   {DAYS.map((day) => (
-                    <Badge key={day} variant={form.days.includes(day) ? "default" : "outline"} className={`cursor-pointer ${form.days.includes(day) ? "gradient-primary" : ""}`} onClick={() => toggleDay(day)}>{day}</Badge>
+                    <Badge
+                      key={day}
+                      variant={form.schedule.some((s) => s.day === day) ? "default" : "outline"}
+                      className={`cursor-pointer ${form.schedule.some((s) => s.day === day) ? "gradient-primary" : ""}`}
+                      onClick={() => toggleDay(day)}
+                    >
+                      {day}
+                    </Badge>
                   ))}
                 </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div><Label>Start Time</Label><Input type="time" value={form.start_time} onChange={(e) => setForm({ ...form, start_time: e.target.value })} /></div>
-                <div><Label>End Time</Label><Input type="time" value={form.end_time} onChange={(e) => setForm({ ...form, end_time: e.target.value })} /></div>
+                {sortedSchedule.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    {sortedSchedule.map((entry) => (
+                      <div key={entry.day} className="flex items-center gap-2">
+                        <span className="text-sm font-medium w-10">{entry.day}</span>
+                        <Input type="time" className="w-28" value={entry.start_time} onChange={(e) => updateScheduleTime(entry.day, "start_time", e.target.value)} />
+                        <span className="text-muted-foreground text-sm">–</span>
+                        <Input type="time" className="w-28" value={entry.end_time} onChange={(e) => updateScheduleTime(entry.day, "end_time", e.target.value)} />
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => toggleDay(entry.day)}>
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               <div><Label>Studio</Label>
                 <Select value={form.studio_id} onValueChange={(v) => setForm({ ...form, studio_id: v })}>
@@ -151,8 +202,7 @@ const BatchesPage = () => {
                 <TableHead>Batch ID</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Style</TableHead>
-                <TableHead className="hidden md:table-cell">Days</TableHead>
-                <TableHead className="hidden md:table-cell">Time</TableHead>
+                <TableHead className="hidden md:table-cell">Schedule</TableHead>
                 <TableHead className="hidden lg:table-cell">Instructor</TableHead>
                 <TableHead className="w-24">Actions</TableHead>
               </TableRow>
@@ -163,18 +213,28 @@ const BatchesPage = () => {
                   <TableCell className="font-mono text-xs text-muted-foreground">{batch.batch_code || "—"}</TableCell>
                   <TableCell className="font-medium">{batch.name}</TableCell>
                   <TableCell className="text-muted-foreground">{batch.style || "—"}</TableCell>
-                  <TableCell className="hidden md:table-cell"><div className="flex gap-1 flex-wrap">{(batch.days || []).map((d: string) => <Badge key={d} variant="outline" className="text-xs">{d}</Badge>)}</div></TableCell>
-                  <TableCell className="hidden md:table-cell text-muted-foreground">{batch.start_time && batch.end_time ? `${batch.start_time.slice(0, 5)} - ${batch.end_time.slice(0, 5)}` : "—"}</TableCell>
+                  <TableCell className="hidden md:table-cell text-muted-foreground text-sm">{formatScheduleDisplay(batch)}</TableCell>
                   <TableCell className="hidden lg:table-cell text-muted-foreground">{batch.users?.name || "—"}</TableCell>
                   <TableCell>
                     <div className="flex gap-1">
-                      <Button variant="ghost" size="icon" onClick={() => { setForm({ name: batch.name, style: batch.style || "", level: batch.level || "", days: batch.days || [], start_time: batch.start_time || "", end_time: batch.end_time || "", studio_id: batch.studio_id ? String(batch.studio_id) : "", instructor_id: batch.instructor_id ? String(batch.instructor_id) : "", capacity: batch.capacity ? String(batch.capacity) : "" }); setEditId(batch.id); setDialogOpen(true); }}><Edit className="h-4 w-4" /></Button>
+                      <Button variant="ghost" size="icon" onClick={() => {
+                        const sched = getSchedule(batch);
+                        setForm({
+                          name: batch.name, style: batch.style || "", level: batch.level || "",
+                          schedule: sched,
+                          studio_id: batch.studio_id ? String(batch.studio_id) : "",
+                          instructor_id: batch.instructor_id ? String(batch.instructor_id) : "",
+                          capacity: batch.capacity ? String(batch.capacity) : "",
+                        });
+                        setEditId(batch.id);
+                        setDialogOpen(true);
+                      }}><Edit className="h-4 w-4" /></Button>
                       <Button variant="ghost" size="icon" onClick={() => handleDelete(batch.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                     </div>
                   </TableCell>
                 </TableRow>
               ))}
-              {filtered.length === 0 && <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">No batches found</TableCell></TableRow>}
+              {filtered.length === 0 && <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No batches found</TableCell></TableRow>}
             </TableBody>
           </Table>
         </CardContent>
