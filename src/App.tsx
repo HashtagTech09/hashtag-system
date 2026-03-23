@@ -14,6 +14,7 @@ import EnrollmentsPage from "./pages/Enrollments";
 import PaymentsPage from "./pages/Payments";
 import AttendancePage from "./pages/Attendance";
 import SettingsPage from "./pages/Settings";
+import PlanCyclesPage from "./pages/PlanCycles";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -40,6 +41,7 @@ const AppRoutes = () => (
     <Route path="/users" element={<ProtectedRoute><UsersPage /></ProtectedRoute>} />
     <Route path="/students" element={<ProtectedRoute><StudentsPage /></ProtectedRoute>} />
     <Route path="/batches" element={<ProtectedRoute><BatchesPage /></ProtectedRoute>} />
+    <Route path="/plan-cycles" element={<ProtectedRoute><PlanCyclesPage /></ProtectedRoute>} />
     <Route path="/enrollments" element={<ProtectedRoute><EnrollmentsPage /></ProtectedRoute>} />
     <Route path="/payments" element={<ProtectedRoute><PaymentsPage /></ProtectedRoute>} />
     <Route path="/attendance" element={<ProtectedRoute><AttendancePage /></ProtectedRoute>} />

@@ -246,41 +246,50 @@ export type Database = {
         Row: {
           batch_id: number
           created_at: string
+          end_cycle_id: number | null
           end_date: string
           id: number
           late_renewal: boolean | null
           organization_id: number
           payment_id: number | null
           registration_fee_applied: boolean | null
+          start_cycle_id: number | null
           start_date: string
           status_type: string
           student_id: number
+          subscription_plan_id: number | null
         }
         Insert: {
           batch_id: number
           created_at?: string
+          end_cycle_id?: number | null
           end_date: string
           id?: never
           late_renewal?: boolean | null
           organization_id: number
           payment_id?: number | null
           registration_fee_applied?: boolean | null
+          start_cycle_id?: number | null
           start_date: string
           status_type: string
           student_id: number
+          subscription_plan_id?: number | null
         }
         Update: {
           batch_id?: number
           created_at?: string
+          end_cycle_id?: number | null
           end_date?: string
           id?: never
           late_renewal?: boolean | null
           organization_id?: number
           payment_id?: number | null
           registration_fee_applied?: boolean | null
+          start_cycle_id?: number | null
           start_date?: string
           status_type?: string
           student_id?: number
+          subscription_plan_id?: number | null
         }
         Relationships: [
           {
@@ -288,6 +297,13 @@ export type Database = {
             columns: ["batch_id"]
             isOneToOne: false
             referencedRelation: "batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "enrollments_end_cycle_id_fkey"
+            columns: ["end_cycle_id"]
+            isOneToOne: false
+            referencedRelation: "plan_cycles"
             referencedColumns: ["id"]
           },
           {
@@ -305,10 +321,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "enrollments_start_cycle_id_fkey"
+            columns: ["start_cycle_id"]
+            isOneToOne: false
+            referencedRelation: "plan_cycles"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "enrollments_student_id_fkey"
             columns: ["student_id"]
             isOneToOne: false
             referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "enrollments_subscription_plan_id_fkey"
+            columns: ["subscription_plan_id"]
+            isOneToOne: false
+            referencedRelation: "subscription_plans"
             referencedColumns: ["id"]
           },
         ]
@@ -378,6 +408,50 @@ export type Database = {
             columns: ["student_id"]
             isOneToOne: false
             referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      plan_cycles: {
+        Row: {
+          created_at: string
+          duration_days: number | null
+          end_date: string | null
+          id: number
+          is_active: boolean
+          name: string
+          organization_id: number
+          plan_type: string
+          start_date: string
+        }
+        Insert: {
+          created_at?: string
+          duration_days?: number | null
+          end_date?: string | null
+          id?: never
+          is_active?: boolean
+          name: string
+          organization_id: number
+          plan_type?: string
+          start_date: string
+        }
+        Update: {
+          created_at?: string
+          duration_days?: number | null
+          end_date?: string | null
+          id?: never
+          is_active?: boolean
+          name?: string
+          organization_id?: number
+          plan_type?: string
+          start_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plan_cycles_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -537,6 +611,79 @@ export type Database = {
             columns: ["wingperson_id"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      subscription_plan_cycles: {
+        Row: {
+          id: number
+          plan_type: string
+          sequence_order: number
+          subscription_plan_id: number
+        }
+        Insert: {
+          id?: never
+          plan_type?: string
+          sequence_order: number
+          subscription_plan_id: number
+        }
+        Update: {
+          id?: never
+          plan_type?: string
+          sequence_order?: number
+          subscription_plan_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscription_plan_cycles_subscription_plan_id_fkey"
+            columns: ["subscription_plan_id"]
+            isOneToOne: false
+            referencedRelation: "subscription_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      subscription_plans: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: number
+          is_active: boolean
+          name: string
+          organization_id: number
+          total_cycles: number
+          total_grid_cycles: number
+          total_regular_cycles: number
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: never
+          is_active?: boolean
+          name: string
+          organization_id: number
+          total_cycles?: number
+          total_grid_cycles?: number
+          total_regular_cycles?: number
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: never
+          is_active?: boolean
+          name?: string
+          organization_id?: number
+          total_cycles?: number
+          total_grid_cycles?: number
+          total_regular_cycles?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscription_plans_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
