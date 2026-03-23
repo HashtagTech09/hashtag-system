@@ -66,6 +66,57 @@ export type Database = {
           },
         ]
       }
+      batch_sessions: {
+        Row: {
+          batch_id: number
+          created_at: string
+          day: string
+          end_time: string
+          id: number
+          organization_id: number
+          session_date: string
+          start_time: string
+          status: string
+        }
+        Insert: {
+          batch_id: number
+          created_at?: string
+          day: string
+          end_time: string
+          id?: never
+          organization_id: number
+          session_date: string
+          start_time: string
+          status?: string
+        }
+        Update: {
+          batch_id?: number
+          created_at?: string
+          day?: string
+          end_time?: string
+          id?: never
+          organization_id?: number
+          session_date?: string
+          start_time?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "batch_sessions_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "batch_sessions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       batches: {
         Row: {
           batch_code: string | null

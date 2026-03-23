@@ -9,7 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Trash2, Edit, X } from "lucide-react";
+import { Plus, Search, Trash2, Edit, X, Calendar } from "lucide-react";
+import BatchSessionsDialog from "@/components/BatchSessionsDialog";
 import { TimePickerPopover } from "@/components/ui/time-picker";
 import { toast } from "sonner";
 
@@ -25,6 +26,7 @@ const BatchesPage = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState({ name: "", style: "", level: "", schedule: [] as ScheduleEntry[], studio_id: "", instructor_id: "", capacity: "" });
   const [editId, setEditId] = useState<number | null>(null);
+  const [sessionsBatch, setSessionsBatch] = useState<any>(null);
 
   const generateBatchCode = (name: string, studioId: string) => {
     const studio = studios.find((s) => String(s.id) === studioId);
@@ -218,6 +220,9 @@ const BatchesPage = () => {
                   <TableCell className="hidden lg:table-cell text-muted-foreground">{batch.users?.name || "—"}</TableCell>
                   <TableCell>
                     <div className="flex gap-1">
+                      <Button variant="ghost" size="icon" title="Sessions" onClick={() => setSessionsBatch(batch)}>
+                        <Calendar className="h-4 w-4" />
+                      </Button>
                       <Button variant="ghost" size="icon" onClick={() => {
                         const sched = getSchedule(batch);
                         setForm({
@@ -240,6 +245,13 @@ const BatchesPage = () => {
           </Table>
         </CardContent>
       </Card>
+      {sessionsBatch && (
+        <BatchSessionsDialog
+          open={!!sessionsBatch}
+          onOpenChange={(open) => { if (!open) setSessionsBatch(null); }}
+          batch={sessionsBatch}
+        />
+      )}
     </AdminLayout>
   );
 };
