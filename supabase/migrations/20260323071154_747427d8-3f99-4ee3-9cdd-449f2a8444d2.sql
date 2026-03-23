@@ -1,0 +1,1 @@
+ALTER TABLE public.batches ADD COLUMN batch_code text;
