@@ -4,7 +4,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Button } from "@/components/ui/button";
 import { Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ScrollArea } from "@/components/ui/scroll-area";
 
 const HOURS = Array.from({ length: 12 }, (_, i) => i + 1);
 const MINUTES = Array.from({ length: 12 }, (_, i) => i * 5);
@@ -76,7 +75,7 @@ export function TimePickerPopover({ value, onChange, placeholder = "Pick time" }
       <PopoverContent className="w-auto p-0" align="start">
         <div className="flex gap-0 h-48">
           {/* Hours */}
-          <ScrollArea className="h-48 w-14 border-r border-border">
+          <div className="h-48 w-14 overflow-y-auto border-r border-border">
             <div ref={hourRef} className="py-2">
               {HOURS.map((h) => (
                 <button
@@ -92,9 +91,9 @@ export function TimePickerPopover({ value, onChange, placeholder = "Pick time" }
                 </button>
               ))}
             </div>
-          </ScrollArea>
+          </div>
           {/* Minutes */}
-          <ScrollArea className="h-48 w-14 border-r border-border">
+          <div className="h-48 w-14 overflow-y-auto border-r border-border">
             <div ref={minRef} className="py-2">
               {MINUTES.map((m) => (
                 <button
@@ -110,7 +109,7 @@ export function TimePickerPopover({ value, onChange, placeholder = "Pick time" }
                 </button>
               ))}
             </div>
-          </ScrollArea>
+          </div>
           {/* AM/PM */}
           <div className="flex flex-col justify-center gap-1 px-2">
             {PERIODS.map((p) => (
