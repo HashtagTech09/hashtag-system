@@ -68,6 +68,7 @@ export type Database = {
       }
       batches: {
         Row: {
+          batch_code: string | null
           capacity: number | null
           created_at: string
           days: string[] | null
@@ -82,6 +83,7 @@ export type Database = {
           style: string | null
         }
         Insert: {
+          batch_code?: string | null
           capacity?: number | null
           created_at?: string
           days?: string[] | null
@@ -96,6 +98,7 @@ export type Database = {
           style?: string | null
         }
         Update: {
+          batch_code?: string | null
           capacity?: number | null
           created_at?: string
           days?: string[] | null

@@ -21,6 +21,12 @@ const BatchesPage = () => {
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState({ name: "", style: "", level: "", days: [] as string[], start_time: "", end_time: "", studio_id: "", instructor_id: "", capacity: "" });
+
+  const generateBatchCode = (name: string, studioId: string) => {
+    const studio = studios.find((s) => String(s.id) === studioId);
+    const cleanName = name.replace(/\s+/g, "");
+    return studio?.code ? `${cleanName}-${studio.code}` : cleanName;
+  };
   const [editId, setEditId] = useState<number | null>(null);
 
   const fetchData = async () => {
@@ -42,12 +48,14 @@ const BatchesPage = () => {
 
   const handleSave = async () => {
     if (!form.name.trim()) { toast.error("Name is required"); return; }
+    const batchCode = generateBatchCode(form.name, form.studio_id);
     const payload = {
       organization_id: 1, name: form.name, style: form.style || null, level: form.level || null,
       days: form.days, start_time: form.start_time || null, end_time: form.end_time || null,
       studio_id: form.studio_id ? Number(form.studio_id) : null,
       instructor_id: form.instructor_id ? Number(form.instructor_id) : null,
       capacity: form.capacity ? Number(form.capacity) : null,
+      batch_code: batchCode || null,
     };
     if (editId) {
       const { organization_id, ...updatePayload } = payload;
@@ -69,7 +77,7 @@ const BatchesPage = () => {
     fetchData();
   };
 
-  const filtered = batches.filter((b) => b.name.toLowerCase().includes(search.toLowerCase()));
+  const filtered = batches.filter((b) => b.name.toLowerCase().includes(search.toLowerCase()) || (b.batch_code && b.batch_code.toLowerCase().includes(search.toLowerCase())));
 
   return (
     <AdminLayout title="Batches">
@@ -85,6 +93,11 @@ const BatchesPage = () => {
           <DialogContent className="max-w-lg">
             <DialogHeader><DialogTitle>{editId ? "Edit Batch" : "Add Batch"}</DialogTitle></DialogHeader>
             <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+              {form.name && (
+                <div className="p-2 rounded bg-muted text-sm text-muted-foreground">
+                  Batch ID: <span className="font-mono font-medium text-foreground">{generateBatchCode(form.name, form.studio_id)}</span>
+                </div>
+              )}
               <div><Label>Name *</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
               <div className="grid grid-cols-2 gap-4">
                 <div><Label>Style</Label><Input placeholder="Hip Hop, Bollywood..." value={form.style} onChange={(e) => setForm({ ...form, style: e.target.value })} /></div>
@@ -135,6 +148,7 @@ const BatchesPage = () => {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead>Batch ID</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Style</TableHead>
                 <TableHead className="hidden md:table-cell">Days</TableHead>
@@ -146,6 +160,7 @@ const BatchesPage = () => {
             <TableBody>
               {filtered.map((batch) => (
                 <TableRow key={batch.id}>
+                  <TableCell className="font-mono text-xs text-muted-foreground">{batch.batch_code || "—"}</TableCell>
                   <TableCell className="font-medium">{batch.name}</TableCell>
                   <TableCell className="text-muted-foreground">{batch.style || "—"}</TableCell>
                   <TableCell className="hidden md:table-cell"><div className="flex gap-1 flex-wrap">{(batch.days || []).map((d: string) => <Badge key={d} variant="outline" className="text-xs">{d}</Badge>)}</div></TableCell>
@@ -159,7 +174,7 @@ const BatchesPage = () => {
                   </TableCell>
                 </TableRow>
               ))}
-              {filtered.length === 0 && <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No batches found</TableCell></TableRow>}
+              {filtered.length === 0 && <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">No batches found</TableCell></TableRow>}
             </TableBody>
           </Table>
         </CardContent>
