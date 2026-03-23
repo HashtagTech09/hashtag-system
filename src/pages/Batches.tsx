@@ -93,6 +93,11 @@ const BatchesPage = () => {
           <DialogContent className="max-w-lg">
             <DialogHeader><DialogTitle>{editId ? "Edit Batch" : "Add Batch"}</DialogTitle></DialogHeader>
             <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+              {form.name && (
+                <div className="p-2 rounded bg-muted text-sm text-muted-foreground">
+                  Batch ID: <span className="font-mono font-medium text-foreground">{generateBatchCode(form.name, form.studio_id)}</span>
+                </div>
+              )}
               <div><Label>Name *</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
               <div className="grid grid-cols-2 gap-4">
                 <div><Label>Style</Label><Input placeholder="Hip Hop, Bollywood..." value={form.style} onChange={(e) => setForm({ ...form, style: e.target.value })} /></div>
