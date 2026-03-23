@@ -1,58 +1,31 @@
-
-
-# Calendar View for Batch Sessions
+# Auto-Mark Past Sessions as Completed
 
 ## Overview
-Add a third tab "Calendar" to the BatchSessionsDialog that renders sessions on a month calendar grid, giving a visual overview of when sessions fall and their status.
 
-## Approach
-Use the existing `react-day-picker` `Calendar` component with custom `modifiers` and `modifiersStyles` to color-code dates that have sessions. Clicking a date shows a popover or inline panel with that day's session details and actions.
+Automatically set `status` to `completed` for any session whose `session_date` is before today. This runs on the backend via a scheduled function so it happens without user interaction.
 
-## Changes: `src/components/BatchSessionsDialog.tsx`
+## Approach: Scheduled Backend Function
 
-### New "Calendar" tab
-- Add a third tab button alongside "Sessions" and "Generate"
-- When active, render a `Calendar` component in `month` mode
+Create a backend function that runs daily (via pg_cron) to bulk-update past sessions.
 
-### Calendar rendering
-- Build a map of `date → Session[]` from the sessions array
-- Use `react-day-picker`'s `modifiers` prop to highlight dates by status:
-  - Scheduled → blue dot/highlight
-  - Cancelled → red
-  - Holiday → yellow
-  - Sold Out → gray
-  - Completed → green
-- For dates with multiple sessions, show the "most important" status color
+### 1. Backend Function (`supabase/functions/mark-completed-sessions`)
 
-### Day click interaction
-- Clicking a date with sessions shows an inline detail panel below the calendar listing that day's sessions with:
-  - Time, status badge, slots info
-  - Quick actions (status change, delete) via the existing dropdown menu
+- Simple function that runs: `UPDATE batch_sessions SET status = 'completed' WHERE session_date < CURRENT_DATE AND status = 'scheduled'`
+- Only updates `scheduled` sessions (leaves cancelled/holiday/sold_out untouched)
 
-### Layout
-```text
-┌─────────────────────────────────────────┐
-│ [Sessions] [Calendar] [Generate]        │
-├─────────────────────────────────────────┤
-│        ◄  March 2026  ►                 │
-│  Mo  Tu  We  Th  Fr  Sa  Su             │
-│                           1             │
-│  2   3   4   5   6   7   8              │
-│  9  10  11  12  13  14  15              │
-│ 16  17  18  19  20  21  22              │
-│ ●23 24 ●25  26 ●27  28  29              │
-│ ●30 31                                  │
-├─────────────────────────────────────────┤
-│ March 23 (Mon):                         │
-│ 18:00–19:00  [Scheduled]  Slots: 20  ⋮  │
-└─────────────────────────────────────────┘
-```
+### 2. Schedule via pg_cron
 
-- Dots/highlights on dates with sessions
-- Selected date detail panel below
+- Run the update daily at midnight UTC
+- Uses `pg_cron` + `pg_net` to invoke the edge function on schedule
 
-## Technical Details
-- No new dependencies — uses existing `Calendar` component and `date-fns`
-- Custom day rendering via `react-day-picker`'s `components` or `modifiers` to show dots
-- All existing session CRUD actions reused from current code
+### 3. Frontend Fallback
 
+- In `BatchSessionsDialog.tsx` and `SessionCalendarView.tsx`, when fetching sessions, also run a quick client-side check: if any loaded session has `session_date < today` and `status = 'scheduled'`, fire a batch update to mark them completed
+- This ensures immediate correctness even if the cron hasn't run yet
+
+## Summary of Changes
+
+1. **Edge function**: `mark-completed-sessions` — updates past scheduled sessions to completed
+2. **pg_cron job**: Scheduled daily invocation
+3. **Frontend**: On session fetch, opportunistically mark overdue sessions as completed
+4. UI Change : don't show/ hide the completed session in the interface 
