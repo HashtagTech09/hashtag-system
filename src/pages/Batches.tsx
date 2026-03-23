@@ -160,6 +160,7 @@ const BatchesPage = () => {
             <TableBody>
               {filtered.map((batch) => (
                 <TableRow key={batch.id}>
+                  <TableCell className="font-mono text-xs text-muted-foreground">{batch.batch_code || "—"}</TableCell>
                   <TableCell className="font-medium">{batch.name}</TableCell>
                   <TableCell className="text-muted-foreground">{batch.style || "—"}</TableCell>
                   <TableCell className="hidden md:table-cell"><div className="flex gap-1 flex-wrap">{(batch.days || []).map((d: string) => <Badge key={d} variant="outline" className="text-xs">{d}</Badge>)}</div></TableCell>
