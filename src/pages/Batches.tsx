@@ -245,6 +245,13 @@ const BatchesPage = () => {
           </Table>
         </CardContent>
       </Card>
+      {sessionsBatch && (
+        <BatchSessionsDialog
+          open={!!sessionsBatch}
+          onOpenChange={(open) => { if (!open) setSessionsBatch(null); }}
+          batch={sessionsBatch}
+        />
+      )}
     </AdminLayout>
   );
 };
