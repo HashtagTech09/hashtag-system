@@ -436,42 +436,56 @@ export type Database = {
         Row: {
           code: string | null
           created_at: string
-          dreamcatcher: string | null
+          dreamcatcher_id: number | null
           google_maps_url: string | null
           id: number
           location: string | null
           name: string
           organization_id: number
-          wingperson: string | null
+          wingperson_id: number | null
         }
         Insert: {
           code?: string | null
           created_at?: string
-          dreamcatcher?: string | null
+          dreamcatcher_id?: number | null
           google_maps_url?: string | null
           id?: never
           location?: string | null
           name: string
           organization_id: number
-          wingperson?: string | null
+          wingperson_id?: number | null
         }
         Update: {
           code?: string | null
           created_at?: string
-          dreamcatcher?: string | null
+          dreamcatcher_id?: number | null
           google_maps_url?: string | null
           id?: never
           location?: string | null
           name?: string
           organization_id?: number
-          wingperson?: string | null
+          wingperson_id?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "studios_dreamcatcher_id_fkey"
+            columns: ["dreamcatcher_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "studios_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "studios_wingperson_id_fkey"
+            columns: ["wingperson_id"]
+            isOneToOne: false
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]

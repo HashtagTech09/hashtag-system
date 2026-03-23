@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Search, Trash2, Edit, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 
@@ -15,25 +16,35 @@ interface StudioForm {
   location: string;
   google_maps_url: string;
   code: string;
-  wingperson: string;
-  dreamcatcher: string;
+  wingperson_id: string;
+  dreamcatcher_id: string;
 }
 
-const emptyForm: StudioForm = { name: "", location: "", google_maps_url: "", code: "", wingperson: "", dreamcatcher: "" };
+const emptyForm: StudioForm = { name: "", location: "", google_maps_url: "", code: "", wingperson_id: "", dreamcatcher_id: "" };
 
 const StudiosPage = () => {
   const [studios, setStudios] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState<StudioForm>(emptyForm);
   const [editId, setEditId] = useState<number | null>(null);
 
   const fetchStudios = async () => {
-    const { data } = await supabase.from("studios").select("*").eq("organization_id", 1).order("name");
+    const { data } = await supabase
+      .from("studios")
+      .select("*, wingperson:users!studios_wingperson_id_fkey(id, name), dreamcatcher:users!studios_dreamcatcher_id_fkey(id, name)")
+      .eq("organization_id", 1)
+      .order("name");
     setStudios(data || []);
   };
 
-  useEffect(() => { fetchStudios(); }, []);
+  const fetchUsers = async () => {
+    const { data } = await supabase.from("users").select("id, name").eq("organization_id", 1).order("name");
+    setUsers(data || []);
+  };
+
+  useEffect(() => { fetchStudios(); fetchUsers(); }, []);
 
   const handleSave = async () => {
     if (!form.name.trim()) { toast.error("Name is required"); return; }
@@ -42,8 +53,8 @@ const StudiosPage = () => {
       location: form.location || null,
       google_maps_url: form.google_maps_url || null,
       code: form.code || null,
-      wingperson: form.wingperson || null,
-      dreamcatcher: form.dreamcatcher || null,
+      wingperson_id: form.wingperson_id ? Number(form.wingperson_id) : null,
+      dreamcatcher_id: form.dreamcatcher_id ? Number(form.dreamcatcher_id) : null,
     };
     if (editId) {
       await supabase.from("studios").update(payload).eq("id", editId);
@@ -90,8 +101,28 @@ const StudiosPage = () => {
               <div><Label>Address</Label><Input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} /></div>
               <div><Label>Google Maps URL</Label><Input value={form.google_maps_url} onChange={(e) => setForm({ ...form, google_maps_url: e.target.value })} /></div>
               <div className="grid grid-cols-2 gap-4">
-                <div><Label>Wingperson</Label><Input value={form.wingperson} onChange={(e) => setForm({ ...form, wingperson: e.target.value })} /></div>
-                <div><Label>Dreamcatcher</Label><Input value={form.dreamcatcher} onChange={(e) => setForm({ ...form, dreamcatcher: e.target.value })} /></div>
+                <div>
+                  <Label>Wingperson</Label>
+                  <Select value={form.wingperson_id} onValueChange={(v) => setForm({ ...form, wingperson_id: v })}>
+                    <SelectTrigger><SelectValue placeholder="Select user" /></SelectTrigger>
+                    <SelectContent>
+                      {users.map((u) => (
+                        <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Dreamcatcher</Label>
+                  <Select value={form.dreamcatcher_id} onValueChange={(v) => setForm({ ...form, dreamcatcher_id: v })}>
+                    <SelectTrigger><SelectValue placeholder="Select user" /></SelectTrigger>
+                    <SelectContent>
+                      {users.map((u) => (
+                        <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <Button className="w-full gradient-primary" onClick={handleSave}>Save</Button>
             </div>
@@ -126,8 +157,8 @@ const StudiosPage = () => {
                       </a>
                     ) : "—"}
                   </TableCell>
-                  <TableCell className="text-muted-foreground">{studio.wingperson || "—"}</TableCell>
-                  <TableCell className="text-muted-foreground">{studio.dreamcatcher || "—"}</TableCell>
+                  <TableCell className="text-muted-foreground">{studio.wingperson?.name || "—"}</TableCell>
+                  <TableCell className="text-muted-foreground">{studio.dreamcatcher?.name || "—"}</TableCell>
                   <TableCell>
                     <div className="flex gap-1">
                       <Button variant="ghost" size="icon" onClick={() => {
@@ -136,8 +167,8 @@ const StudiosPage = () => {
                           location: studio.location || "",
                           google_maps_url: studio.google_maps_url || "",
                           code: studio.code || "",
-                          wingperson: studio.wingperson || "",
-                          dreamcatcher: studio.dreamcatcher || "",
+                          wingperson_id: studio.wingperson_id ? String(studio.wingperson_id) : "",
+                          dreamcatcher_id: studio.dreamcatcher_id ? String(studio.dreamcatcher_id) : "",
                         });
                         setEditId(studio.id);
                         setDialogOpen(true);
