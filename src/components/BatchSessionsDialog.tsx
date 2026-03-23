@@ -36,7 +36,7 @@ interface Props {
 }
 
 export default function BatchSessionsDialog({ open, onOpenChange, batch }: Props) {
-  const [tab, setTab] = useState<"generate" | "list">("list");
+  const [tab, setTab] = useState<"generate" | "list" | "calendar">("list");
   const [startDate, setStartDate] = useState<Date>();
   const [endDate, setEndDate] = useState<Date>();
   const [preview, setPreview] = useState<{ day: string; date: Date; start_time: string; end_time: string }[]>([]);
