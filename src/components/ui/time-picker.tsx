@@ -75,7 +75,7 @@ export function TimePickerPopover({ value, onChange, placeholder = "Pick time" }
       <PopoverContent className="w-auto p-0" align="start">
         <div className="flex gap-0 h-48">
           {/* Hours */}
-          <ScrollArea className="h-48 w-14 border-r border-border">
+          <div className="h-48 w-14 overflow-y-auto border-r border-border">
             <div ref={hourRef} className="py-2">
               {HOURS.map((h) => (
                 <button
@@ -91,7 +91,7 @@ export function TimePickerPopover({ value, onChange, placeholder = "Pick time" }
                 </button>
               ))}
             </div>
-          </ScrollArea>
+          </div>
           {/* Minutes */}
           <ScrollArea className="h-48 w-14 border-r border-border">
             <div ref={minRef} className="py-2">
