@@ -71,14 +71,12 @@ export type Database = {
           batch_code: string | null
           capacity: number | null
           created_at: string
-          days: string[] | null
-          end_time: string | null
           id: number
           instructor_id: number | null
           level: string | null
           name: string
           organization_id: number
-          start_time: string | null
+          schedule: Json | null
           studio_id: number | null
           style: string | null
         }
@@ -86,14 +84,12 @@ export type Database = {
           batch_code?: string | null
           capacity?: number | null
           created_at?: string
-          days?: string[] | null
-          end_time?: string | null
           id?: never
           instructor_id?: number | null
           level?: string | null
           name: string
           organization_id: number
-          start_time?: string | null
+          schedule?: Json | null
           studio_id?: number | null
           style?: string | null
         }
@@ -101,14 +97,12 @@ export type Database = {
           batch_code?: string | null
           capacity?: number | null
           created_at?: string
-          days?: string[] | null
-          end_time?: string | null
           id?: never
           instructor_id?: number | null
           level?: string | null
           name?: string
           organization_id?: number
-          start_time?: string | null
+          schedule?: Json | null
           studio_id?: number | null
           style?: string | null
         }
