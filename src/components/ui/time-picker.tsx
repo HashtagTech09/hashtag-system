@@ -93,7 +93,7 @@ export function TimePickerPopover({ value, onChange, placeholder = "Pick time" }
             </div>
           </div>
           {/* Minutes */}
-          <div className="h-48 w-14 overflow-y-auto border-r border-border">
+          <div className="h-48 w-14 overflow-y-auto border-r border-border" style={{ overscrollBehavior: "contain", WebkitOverflowScrolling: "touch" }} onWheel={(e) => e.stopPropagation()}>
             <div ref={minRef} className="py-2">
               {MINUTES.map((m) => (
                 <button
