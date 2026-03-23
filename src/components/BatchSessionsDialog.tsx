@@ -53,10 +53,22 @@ export default function BatchSessionsDialog({ open, onOpenChange, batch }: Props
   }, [open, batch]);
 
   const fetchSessions = async () => {
+    const today = formatDate(new Date(), "yyyy-MM-dd");
+
+    // Opportunistically mark past scheduled sessions as completed
+    await supabase
+      .from("batch_sessions")
+      .update({ status: "completed" })
+      .eq("batch_id", batch.id)
+      .lt("session_date", today)
+      .eq("status", "scheduled");
+
+    // Fetch only non-completed sessions
     const { data } = await supabase
       .from("batch_sessions")
       .select("*")
       .eq("batch_id", batch.id)
+      .neq("status", "completed")
       .order("session_date", { ascending: true });
     setSessions(data || []);
   };
