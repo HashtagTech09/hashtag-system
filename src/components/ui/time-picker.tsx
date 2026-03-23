@@ -75,7 +75,7 @@ export function TimePickerPopover({ value, onChange, placeholder = "Pick time" }
       <PopoverContent className="w-auto p-0" align="start">
         <div className="flex gap-0 h-48">
           {/* Hours */}
-          <div className="h-48 w-14 overflow-y-auto border-r border-border">
+          <div className="h-48 w-14 overflow-y-auto border-r border-border" style={{ overscrollBehavior: "contain", WebkitOverflowScrolling: "touch" }} onWheel={(e) => e.stopPropagation()}>
             <div ref={hourRef} className="py-2">
               {HOURS.map((h) => (
                 <button
