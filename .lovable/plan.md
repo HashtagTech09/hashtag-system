@@ -1,56 +1,58 @@
 
 
-# Generate Class Sessions (Slots) from Batch Schedules
+# Calendar View for Batch Sessions
 
 ## Overview
-Create a `batch_sessions` table that stores individual class instances generated from a batch's recurring schedule for a given date range. Each session represents one specific class occurrence (e.g., "Hip Hop Beginners — Mon Jan 6, 6:00-7:00 PM"). These sessions become the foundation for attendance tracking, future booking, and reporting.
+Add a third tab "Calendar" to the BatchSessionsDialog that renders sessions on a month calendar grid, giving a visual overview of when sessions fall and their status.
 
-## Database Migration
+## Approach
+Use the existing `react-day-picker` `Calendar` component with custom `modifiers` and `modifiersStyles` to color-code dates that have sessions. Clicking a date shows a popover or inline panel with that day's session details and actions.
 
-### New table: `batch_sessions`
-```sql
-CREATE TABLE public.batch_sessions (
-  id bigint generated always as identity primary key,
-  organization_id bigint NOT NULL REFERENCES public.organizations(id),
-  batch_id bigint NOT NULL REFERENCES public.batches(id) ON DELETE CASCADE,
-  session_date date NOT NULL,
-  day text NOT NULL,           -- "Mon", "Tue", etc.
-  start_time text NOT NULL,    -- "18:00"
-  end_time text NOT NULL,      -- "19:00"
-  status text NOT NULL DEFAULT 'scheduled', -- scheduled, completed, cancelled
-  created_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (batch_id, session_date, start_time)
-);
-```
-RLS: authenticated full CRUD (matching current pattern).
+## Changes: `src/components/BatchSessionsDialog.tsx`
 
-## Frontend: Session Generation UI
+### New "Calendar" tab
+- Add a third tab button alongside "Sessions" and "Generate"
+- When active, render a `Calendar` component in `month` mode
 
-### On the Batches page
-- Add a **"Generate Sessions"** button (per batch or bulk)
-- Clicking opens a dialog to pick a **date range** (e.g., "Jan 1 – Jan 31")
-- System reads the batch's `schedule` JSONB, iterates each date in range, matches day-of-week, and inserts one `batch_session` row per match
-- Shows a preview of how many sessions will be created before confirming
+### Calendar rendering
+- Build a map of `date → Session[]` from the sessions array
+- Use `react-day-picker`'s `modifiers` prop to highlight dates by status:
+  - Scheduled → blue dot/highlight
+  - Cancelled → red
+  - Holiday → yellow
+  - Sold Out → gray
+  - Completed → green
+- For dates with multiple sessions, show the "most important" status color
 
-### New "Sessions" view (inside Batches page or as a sub-tab)
-- List all generated sessions for a selected batch
-- Columns: Date, Day, Time, Status
-- Allow cancelling individual sessions (sets status to `cancelled`)
+### Day click interaction
+- Clicking a date with sessions shows an inline detail panel below the calendar listing that day's sessions with:
+  - Time, status badge, slots info
+  - Quick actions (status change, delete) via the existing dropdown menu
 
-## Generation Logic (Frontend)
+### Layout
 ```text
-For each date in [start_date, end_date]:
-  dayName = getDayName(date)  // "Mon", "Tue"...
-  For each entry in batch.schedule where entry.day === dayName:
-    Insert batch_session(batch_id, date, day, start_time, end_time)
+┌─────────────────────────────────────────┐
+│ [Sessions] [Calendar] [Generate]        │
+├─────────────────────────────────────────┤
+│        ◄  March 2026  ►                 │
+│  Mo  Tu  We  Th  Fr  Sa  Su             │
+│                           1             │
+│  2   3   4   5   6   7   8              │
+│  9  10  11  12  13  14  15              │
+│ 16  17  18  19  20  21  22              │
+│ ●23 24 ●25  26 ●27  28  29              │
+│ ●30 31                                  │
+├─────────────────────────────────────────┤
+│ March 23 (Mon):                         │
+│ 18:00–19:00  [Scheduled]  Slots: 20  ⋮  │
+└─────────────────────────────────────────┘
 ```
 
-## Attendance Integration (Future-ready)
-- Currently attendance links to `batch_id` + `date`. Once sessions exist, attendance can optionally reference `session_id` for precise tracking
-- No change to attendance table now — this is additive
+- Dots/highlights on dates with sessions
+- Selected date detail panel below
 
-## Summary of Changes
-1. **Migration**: Create `batch_sessions` table with RLS
-2. **Batches page**: Add "Generate Sessions" button + date range dialog + generation logic
-3. **Sessions list**: Show generated sessions per batch with status management
+## Technical Details
+- No new dependencies — uses existing `Calendar` component and `date-fns`
+- Custom day rendering via `react-day-picker`'s `components` or `modifiers` to show dots
+- All existing session CRUD actions reused from current code
 
