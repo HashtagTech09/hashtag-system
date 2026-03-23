@@ -48,12 +48,14 @@ const BatchesPage = () => {
 
   const handleSave = async () => {
     if (!form.name.trim()) { toast.error("Name is required"); return; }
+    const batchCode = generateBatchCode(form.name, form.studio_id);
     const payload = {
       organization_id: 1, name: form.name, style: form.style || null, level: form.level || null,
       days: form.days, start_time: form.start_time || null, end_time: form.end_time || null,
       studio_id: form.studio_id ? Number(form.studio_id) : null,
       instructor_id: form.instructor_id ? Number(form.instructor_id) : null,
       capacity: form.capacity ? Number(form.capacity) : null,
+      batch_code: batchCode || null,
     };
     if (editId) {
       const { organization_id, ...updatePayload } = payload;
