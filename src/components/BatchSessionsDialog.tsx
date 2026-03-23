@@ -259,6 +259,20 @@ export default function BatchSessionsDialog({ open, onOpenChange, batch }: Props
             </Table>
           </div>
         )}
+
+        {tab === "calendar" && (
+          <SessionCalendarView
+            sessions={sessions}
+            onUpdateStatus={updateStatus}
+            onDelete={handleDelete}
+            onSaveSlots={(id, slots) => {
+              supabase.from("batch_sessions").update({ available_slots: slots }).eq("id", id).then(() => {
+                toast.success("Slots updated");
+                fetchSessions();
+              });
+            }}
+          />
+        )}
       </DialogContent>
     </Dialog>
   );
