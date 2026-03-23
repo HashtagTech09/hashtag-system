@@ -220,6 +220,9 @@ const BatchesPage = () => {
                   <TableCell className="hidden lg:table-cell text-muted-foreground">{batch.users?.name || "—"}</TableCell>
                   <TableCell>
                     <div className="flex gap-1">
+                      <Button variant="ghost" size="icon" title="Sessions" onClick={() => setSessionsBatch(batch)}>
+                        <Calendar className="h-4 w-4" />
+                      </Button>
                       <Button variant="ghost" size="icon" onClick={() => {
                         const sched = getSchedule(batch);
                         setForm({
