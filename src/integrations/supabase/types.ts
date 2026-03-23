@@ -68,6 +68,7 @@ export type Database = {
       }
       batch_sessions: {
         Row: {
+          available_slots: number | null
           batch_id: number
           created_at: string
           day: string
@@ -79,6 +80,7 @@ export type Database = {
           status: string
         }
         Insert: {
+          available_slots?: number | null
           batch_id: number
           created_at?: string
           day: string
@@ -90,6 +92,7 @@ export type Database = {
           status?: string
         }
         Update: {
+          available_slots?: number | null
           batch_id?: number
           created_at?: string
           day?: string

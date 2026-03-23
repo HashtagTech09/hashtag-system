@@ -1,0 +1,1 @@
+ALTER TABLE public.batch_sessions ADD COLUMN available_slots integer NULL;
