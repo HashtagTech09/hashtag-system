@@ -26,6 +26,7 @@ const BatchesPage = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState({ name: "", style: "", level: "", schedule: [] as ScheduleEntry[], studio_id: "", instructor_id: "", capacity: "" });
   const [editId, setEditId] = useState<number | null>(null);
+  const [sessionsBatch, setSessionsBatch] = useState<any>(null);
 
   const generateBatchCode = (name: string, studioId: string) => {
     const studio = studios.find((s) => String(s.id) === studioId);
