@@ -165,9 +165,9 @@ const BatchesPage = () => {
                     {sortedSchedule.map((entry) => (
                       <div key={entry.day} className="flex items-center gap-2">
                         <span className="text-sm font-medium w-10">{entry.day}</span>
-                        <Input type="time" className="w-28" value={entry.start_time} onChange={(e) => updateScheduleTime(entry.day, "start_time", e.target.value)} />
+                        <TimePickerPopover value={entry.start_time} onChange={(v) => updateScheduleTime(entry.day, "start_time", v)} placeholder="Start" />
                         <span className="text-muted-foreground text-sm">–</span>
-                        <Input type="time" className="w-28" value={entry.end_time} onChange={(e) => updateScheduleTime(entry.day, "end_time", e.target.value)} />
+                        <TimePickerPopover value={entry.end_time} onChange={(v) => updateScheduleTime(entry.day, "end_time", v)} placeholder="End" />
                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => toggleDay(entry.day)}>
                           <X className="h-3 w-3" />
                         </Button>
