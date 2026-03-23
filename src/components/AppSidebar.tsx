@@ -4,6 +4,7 @@ import {
   Users,
   GraduationCap,
   Layers,
+  CalendarDays,
   CreditCard,
   UserCheck,
   ClipboardList,
