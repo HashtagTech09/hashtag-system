@@ -1,50 +1,37 @@
 
 
-# Support Per-Day Timings for Batches
+# Clock-Style Time Picker for Batch Schedule
 
-## Problem
-Currently batches have a single `start_time` and `end_time` applied to all days. In reality, a batch might run Mon 6-7pm and Wed 7-8pm — different timings per day.
+## Overview
+Replace the native `<Input type="time">` fields in the batch schedule builder with a custom clock-style time picker using scroll wheels for hours, minutes, and AM/PM selection — wrapped in a Popover.
 
 ## Approach
-Replace the flat `days`, `start_time`, `end_time` columns with a structured `schedule` JSONB column that stores per-day timing.
+Create a reusable `TimePickerPopover` component that:
+- Shows a button displaying the current time (or "Pick time")
+- On click, opens a Popover with three scroll columns: **Hour** (1-12), **Minute** (00, 05, 10, ... 55), **AM/PM**
+- On selection, converts to 24h format and calls `onChange` with the HH:mm string
 
-## Database Migration
+## New File: `src/components/ui/time-picker.tsx`
+- A `TimePickerPopover` component with props: `value: string` (HH:mm 24h), `onChange: (time: string) => void`, `placeholder?: string`
+- Inside the popover: three side-by-side scrollable lists for hour, minute, AM/PM
+- Highlighted/selected items styled distinctly
+- Auto-scrolls to current selection on open
 
-1. **Add `schedule` column** to `batches` (jsonb, nullable)
-   - Format: `[{"day": "Mon", "start_time": "18:00", "end_time": "19:00"}, {"day": "Wed", "start_time": "19:00", "end_time": "20:00"}]`
-2. **Migrate existing data**: Convert current `days` + `start_time`/`end_time` into the new schedule format
-3. **Drop** `days`, `start_time`, `end_time` columns
+## Changes: `src/pages/Batches.tsx`
+- Replace `<Input type="time" ...>` on lines 167 and 169 with `<TimePickerPopover>` components
+- Import the new component
 
-## Frontend Changes (`src/pages/Batches.tsx`)
-
-### Form
-- Replace the current days toggle + single time inputs with a dynamic schedule builder:
-  - Click a day badge to add it to the schedule
-  - Each selected day gets its own start/end time row
-  - Removing a day removes its time row
-- Example UI:
+## Visual Design
 ```text
-Days & Schedule:
-[Mon] [Tue] [Wed] [Thu] [Fri] [Sat] [Sun]
-
-  Mon:  [18:00] - [19:00]  ✕
-  Wed:  [19:00] - [20:00]  ✕
+┌─────────────────────┐
+│  [06:00 PM]  button  │  ← click to open
+├─────────────────────┤
+│  Hr │ Min │  AM/PM  │
+│  04 │  00 │   AM    │
+│  05 │  05 │ ●PM     │
+│ ●06 │  10 │         │
+│  07 │  15 │         │
+│  08 │ ●20 │         │
+└─────────────────────┘
 ```
-
-### Table Display
-- "Days" column: show day badges (extracted from schedule)
-- "Time" column: show per-day times, e.g. `Mon 18:00-19:00, Wed 19:00-20:00`
-
-### Save Logic
-- Build the schedule JSON array from the form state and save to `schedule` column
-
-### Edit Prefill
-- Parse `schedule` JSON back into the per-day form state
-
-## Attendance Page Impact
-- Update `Attendance.tsx` to read days from `schedule` instead of `days` array (for any day-based filtering if needed)
-
-## Technical Details
-- Form state changes from `{ days: string[], start_time, end_time }` to `{ schedule: Array<{day: string, start_time: string, end_time: string}> }`
-- JSONB gives flexibility without needing a separate `batch_schedules` table
 
