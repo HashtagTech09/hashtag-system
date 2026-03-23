@@ -54,7 +54,7 @@ export default function BatchSessionsDialog({ open, onOpenChange, batch }: Props
     for (const d of days) {
       const dayName = DAY_MAP[getDay(d)];
       for (const entry of schedule) {
-        if (entry.day === dayName) {
+        if (normalizeDay(entry.day) === dayName) {
           results.push({ day: dayName, date: d, start_time: entry.start_time, end_time: entry.end_time });
         }
       }
