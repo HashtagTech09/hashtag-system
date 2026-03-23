@@ -440,7 +440,7 @@ export type Database = {
           organization_id: number
           phone: string | null
           photo: string | null
-          user_id: number | null
+          user_id: number
         }
         Insert: {
           created_at?: string
@@ -452,7 +452,7 @@ export type Database = {
           organization_id: number
           phone?: string | null
           photo?: string | null
-          user_id?: number | null
+          user_id: number
         }
         Update: {
           created_at?: string
@@ -464,7 +464,7 @@ export type Database = {
           organization_id?: number
           phone?: string | null
           photo?: string | null
-          user_id?: number | null
+          user_id?: number
         }
         Relationships: [
           {
