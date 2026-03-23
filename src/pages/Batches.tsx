@@ -77,7 +77,7 @@ const BatchesPage = () => {
     fetchData();
   };
 
-  const filtered = batches.filter((b) => b.name.toLowerCase().includes(search.toLowerCase()));
+  const filtered = batches.filter((b) => b.name.toLowerCase().includes(search.toLowerCase()) || (b.batch_code && b.batch_code.toLowerCase().includes(search.toLowerCase())));
 
   return (
     <AdminLayout title="Batches">
