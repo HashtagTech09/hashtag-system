@@ -15,6 +15,8 @@ type ScheduleEntry = { day: string; start_time: string; end_time: string };
 type Session = { id: number; session_date: string; day: string; start_time: string; end_time: string; status: string };
 
 const DAY_MAP: Record<number, string> = { 0: "Sun", 1: "Mon", 2: "Tue", 3: "Wed", 4: "Thu", 5: "Fri", 6: "Sat" };
+const LONG_TO_SHORT: Record<string, string> = { Sunday: "Sun", Monday: "Mon", Tuesday: "Tue", Wednesday: "Wed", Thursday: "Thu", Friday: "Fri", Saturday: "Sat" };
+const normalizeDay = (d: string) => LONG_TO_SHORT[d] || d;
 
 interface Props {
   open: boolean;
