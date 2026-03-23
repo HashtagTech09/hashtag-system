@@ -34,6 +34,7 @@ const mainItems = [
   { title: "Users", url: "/users", icon: Users },
   { title: "Students", url: "/students", icon: GraduationCap },
   { title: "Batches", url: "/batches", icon: Layers },
+  { title: "Plan Cycles", url: "/plan-cycles", icon: CalendarDays },
 ];
 
 const operationItems = [

@@ -12,32 +12,102 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 import { getDisplayPhone } from "@/lib/studentUtils";
+import { parseISO } from "date-fns";
 
 const EnrollmentsPage = () => {
   const [enrollments, setEnrollments] = useState<any[]>([]);
   const [students, setStudents] = useState<any[]>([]);
   const [batches, setBatches] = useState<any[]>([]);
+  const [subPlans, setSubPlans] = useState<any[]>([]);
+  const [subPlanCycles, setSubPlanCycles] = useState<any[]>([]);
+  const [planCycles, setPlanCycles] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [form, setForm] = useState({ student_id: "", batch_ids: [] as string[], payment_mode: "cash", status_type: "NEW" });
+  const [form, setForm] = useState({
+    student_id: "", batch_ids: [] as string[], payment_mode: "cash", status_type: "NEW",
+    subscription_plan_id: "", computed_start: "", computed_end: "", start_cycle_name: "", end_cycle_name: "",
+    start_cycle_id: null as number | null, end_cycle_id: null as number | null,
+  });
 
   const fetchData = async () => {
-    const [enrollRes, studentRes, batchRes] = await Promise.all([
-      supabase.from("enrollments").select("*, students(name, phone, users(phone)), batches(name)").eq("organization_id", 1).order("created_at", { ascending: false }),
+    const [enrollRes, studentRes, batchRes, planRes, seqRes, cycleRes] = await Promise.all([
+      supabase.from("enrollments").select("*, students(name, phone, users(phone)), batches(name), subscription_plans(name), start_cycle:plan_cycles!enrollments_start_cycle_id_fkey(name), end_cycle:plan_cycles!enrollments_end_cycle_id_fkey(name)").eq("organization_id", 1).order("created_at", { ascending: false }),
       supabase.from("students").select("*").eq("organization_id", 1).order("name"),
       supabase.from("batches").select("*").eq("organization_id", 1).order("name"),
+      supabase.from("subscription_plans").select("*").eq("organization_id", 1).eq("is_active", true).order("id"),
+      supabase.from("subscription_plan_cycles").select("*").order("sequence_order"),
+      supabase.from("plan_cycles").select("*").eq("organization_id", 1).order("start_date"),
     ]);
     setEnrollments(enrollRes.data || []);
     setStudents(studentRes.data || []);
     setBatches(batchRes.data || []);
+    setSubPlans(planRes.data || []);
+    setSubPlanCycles(seqRes.data || []);
+    setPlanCycles(cycleRes.data || []);
   };
 
   useEffect(() => { fetchData(); }, []);
 
+  // Compute cycle assignment when subscription plan changes
+  const computeCycleAssignment = (planId: string) => {
+    if (!planId) {
+      setForm(f => ({ ...f, subscription_plan_id: "", computed_start: "", computed_end: "", start_cycle_name: "", end_cycle_name: "", start_cycle_id: null, end_cycle_id: null }));
+      return;
+    }
+
+    const plan = subPlans.find(p => p.id === Number(planId));
+    if (!plan) return;
+
+    const sequence = subPlanCycles.filter(s => s.subscription_plan_id === plan.id).sort((a, b) => a.sequence_order - b.sequence_order);
+
+    // Find current active cycle or cycle containing today
+    const today = new Date();
+    let startIdx = planCycles.findIndex(c => c.is_active);
+    if (startIdx === -1) {
+      startIdx = planCycles.findIndex(c => {
+        const s = parseISO(c.start_date);
+        const e = c.end_date ? parseISO(c.end_date) : new Date("2099-12-31");
+        return today >= s && today <= e;
+      });
+    }
+    if (startIdx === -1) startIdx = 0;
+
+    // Walk through calendar cycles matching sequence types
+    const matched: any[] = [];
+    let calIdx = startIdx;
+    for (const seqEntry of sequence) {
+      while (calIdx < planCycles.length) {
+        if (planCycles[calIdx].plan_type === seqEntry.plan_type) {
+          matched.push(planCycles[calIdx]);
+          calIdx++;
+          break;
+        }
+        calIdx++;
+      }
+    }
+
+    if (matched.length === sequence.length) {
+      const startCycle = matched[0];
+      const endCycle = matched[matched.length - 1];
+      setForm(f => ({
+        ...f,
+        subscription_plan_id: planId,
+        computed_start: startCycle.start_date,
+        computed_end: endCycle.end_date || "",
+        start_cycle_name: startCycle.name,
+        end_cycle_name: endCycle.name,
+        start_cycle_id: startCycle.id,
+        end_cycle_id: endCycle.id,
+      }));
+    } else {
+      toast.error("Not enough matching cycles in calendar for this plan");
+      setForm(f => ({ ...f, subscription_plan_id: planId, computed_start: "", computed_end: "", start_cycle_name: "", end_cycle_name: "", start_cycle_id: null, end_cycle_id: null }));
+    }
+  };
+
   const handleEnroll = async () => {
     if (!form.student_id || form.batch_ids.length === 0) { toast.error("Select a student and at least one batch"); return; }
 
-    // Fetch pricing
     const { data: pricing } = await supabase.from("pricing_plans").select("*").eq("organization_id", 1).eq("batch_count", form.batch_ids.length).single();
     const { data: settings } = await supabase.from("system_settings").select("*").eq("organization_id", 1);
     const regFee = Number(settings?.find((s) => s.key === "registration_fee")?.value || 0);
@@ -46,7 +116,6 @@ const EnrollmentsPage = () => {
     const applyRegFee = form.status_type === "NEW" || form.status_type === "REV";
     const totalAmount = baseAmount + (applyRegFee ? regFee : 0);
 
-    // Create payment
     const { data: payment, error: payError } = await supabase.from("payments").insert({
       organization_id: 1, student_id: Number(form.student_id), amount: totalAmount,
       payment_mode: form.payment_mode, status: "success",
@@ -54,23 +123,25 @@ const EnrollmentsPage = () => {
 
     if (payError) { toast.error("Payment failed"); return; }
 
-    // Create enrollments
     const today = new Date();
-    const endDate = new Date(today);
-    endDate.setMonth(endDate.getMonth() + 1);
+    const startDate = form.computed_start || today.toISOString().split("T")[0];
+    const endDate = form.computed_end || (() => { const d = new Date(today); d.setMonth(d.getMonth() + 1); return d.toISOString().split("T")[0]; })();
 
     const enrollmentRecords = form.batch_ids.map((batchId) => ({
       organization_id: 1, student_id: Number(form.student_id), batch_id: Number(batchId),
       payment_id: payment.id, status_type: form.status_type,
       registration_fee_applied: applyRegFee, late_renewal: false,
-      start_date: today.toISOString().split("T")[0], end_date: endDate.toISOString().split("T")[0],
+      start_date: startDate, end_date: endDate,
+      subscription_plan_id: form.subscription_plan_id ? Number(form.subscription_plan_id) : null,
+      start_cycle_id: form.start_cycle_id,
+      end_cycle_id: form.end_cycle_id,
     }));
 
     const { error } = await supabase.from("enrollments").insert(enrollmentRecords);
     if (error) { toast.error("Enrollment failed"); return; }
 
     toast.success(`Enrolled successfully! Amount: ₹${totalAmount}`);
-    setForm({ student_id: "", batch_ids: [], payment_mode: "cash", status_type: "NEW" });
+    setForm({ student_id: "", batch_ids: [], payment_mode: "cash", status_type: "NEW", subscription_plan_id: "", computed_start: "", computed_end: "", start_cycle_name: "", end_cycle_name: "", start_cycle_id: null, end_cycle_id: null });
     setDialogOpen(false);
     fetchData();
   };
@@ -114,6 +185,24 @@ const EnrollmentsPage = () => {
                 </Select>
               </div>
               <div>
+                <Label>Subscription Plan (optional)</Label>
+                <Select value={form.subscription_plan_id} onValueChange={computeCycleAssignment}>
+                  <SelectTrigger><SelectValue placeholder="No plan (manual dates)" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">No plan</SelectItem>
+                    {subPlans.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                {form.computed_start && (
+                  <div className="mt-2 p-2 rounded border border-border text-sm">
+                    <p className="text-muted-foreground">
+                      Validity: <span className="text-foreground font-medium">{form.start_cycle_name}</span> → <span className="text-foreground font-medium">{form.end_cycle_name}</span>
+                    </p>
+                    <p className="text-muted-foreground">{form.computed_start} to {form.computed_end || "Open"}</p>
+                  </div>
+                )}
+              </div>
+              <div>
                 <Label>Select Batches</Label>
                 <div className="flex flex-wrap gap-2 mt-2">
                   {batches.map((b) => (
@@ -146,6 +235,8 @@ const EnrollmentsPage = () => {
                 <TableHead>Phone</TableHead>
                 <TableHead>Batch</TableHead>
                 <TableHead>Type</TableHead>
+                <TableHead className="hidden md:table-cell">Plan</TableHead>
+                <TableHead className="hidden md:table-cell">Cycles</TableHead>
                 <TableHead className="hidden md:table-cell">Start</TableHead>
                 <TableHead className="hidden md:table-cell">End</TableHead>
               </TableRow>
@@ -157,11 +248,15 @@ const EnrollmentsPage = () => {
                   <TableCell className="text-muted-foreground">{e.students ? getDisplayPhone(e.students) : "—"}</TableCell>
                   <TableCell className="text-muted-foreground">{e.batches?.name}</TableCell>
                   <TableCell><Badge className={statusColors[e.status_type] || ""} variant="secondary">{e.status_type}{e.late_renewal ? " (Late)" : ""}</Badge></TableCell>
+                  <TableCell className="hidden md:table-cell text-muted-foreground">{e.subscription_plans?.name || "—"}</TableCell>
+                  <TableCell className="hidden md:table-cell text-muted-foreground">
+                    {e.start_cycle && e.end_cycle ? `${e.start_cycle.name} → ${e.end_cycle.name}` : "—"}
+                  </TableCell>
                   <TableCell className="hidden md:table-cell text-muted-foreground">{e.start_date}</TableCell>
                   <TableCell className="hidden md:table-cell text-muted-foreground">{e.end_date}</TableCell>
                 </TableRow>
               ))}
-              {filtered.length === 0 && <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No enrollments found</TableCell></TableRow>}
+              {filtered.length === 0 && <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">No enrollments found</TableCell></TableRow>}
             </TableBody>
           </Table>
         </CardContent>
