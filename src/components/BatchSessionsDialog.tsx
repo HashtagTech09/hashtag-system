@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { CalendarIcon, Loader2, MoreHorizontal, Trash2, XCircle, Sun, Ban, CheckCircle, Users } from "lucide-react";
+import SessionCalendarView from "@/components/SessionCalendarView";
 import { format, eachDayOfInterval, getDay } from "date-fns";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -35,7 +36,7 @@ interface Props {
 }
 
 export default function BatchSessionsDialog({ open, onOpenChange, batch }: Props) {
-  const [tab, setTab] = useState<"generate" | "list">("list");
+  const [tab, setTab] = useState<"generate" | "list" | "calendar">("list");
   const [startDate, setStartDate] = useState<Date>();
   const [endDate, setEndDate] = useState<Date>();
   const [preview, setPreview] = useState<{ day: string; date: Date; start_time: string; end_time: string }[]>([]);
@@ -131,6 +132,7 @@ export default function BatchSessionsDialog({ open, onOpenChange, batch }: Props
 
         <div className="flex gap-2 mb-4">
           <Button variant={tab === "list" ? "default" : "outline"} size="sm" onClick={() => setTab("list")}>Sessions</Button>
+          <Button variant={tab === "calendar" ? "default" : "outline"} size="sm" onClick={() => setTab("calendar")}>Calendar</Button>
           <Button variant={tab === "generate" ? "default" : "outline"} size="sm" onClick={() => setTab("generate")}>Generate</Button>
         </div>
 
@@ -256,6 +258,20 @@ export default function BatchSessionsDialog({ open, onOpenChange, batch }: Props
               </TableBody>
             </Table>
           </div>
+        )}
+
+        {tab === "calendar" && (
+          <SessionCalendarView
+            sessions={sessions}
+            onUpdateStatus={updateStatus}
+            onDelete={handleDelete}
+            onSaveSlots={(id, slots) => {
+              supabase.from("batch_sessions").update({ available_slots: slots }).eq("id", id).then(() => {
+                toast.success("Slots updated");
+                fetchSessions();
+              });
+            }}
+          />
         )}
       </DialogContent>
     </Dialog>
