@@ -148,6 +148,7 @@ const BatchesPage = () => {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead>Batch ID</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Style</TableHead>
                 <TableHead className="hidden md:table-cell">Days</TableHead>
