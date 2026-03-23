@@ -21,6 +21,12 @@ const BatchesPage = () => {
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState({ name: "", style: "", level: "", days: [] as string[], start_time: "", end_time: "", studio_id: "", instructor_id: "", capacity: "" });
+
+  const generateBatchCode = (name: string, studioId: string) => {
+    const studio = studios.find((s) => String(s.id) === studioId);
+    const cleanName = name.replace(/\s+/g, "");
+    return studio?.code ? `${cleanName}-${studio.code}` : cleanName;
+  };
   const [editId, setEditId] = useState<number | null>(null);
 
   const fetchData = async () => {
