@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { CalendarIcon, Loader2, MoreHorizontal, Trash2, XCircle, Sun, Ban, CheckCircle, Users } from "lucide-react";
+import SessionCalendarView from "@/components/SessionCalendarView";
 import { format, eachDayOfInterval, getDay } from "date-fns";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
