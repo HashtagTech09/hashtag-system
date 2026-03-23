@@ -1,17 +1,22 @@
 
 
-# Enable Mouse Wheel Scrolling in Time Picker
+# Fix Two-Finger Trackpad Scrolling in Time Picker
 
 ## Problem
-The `ScrollArea` (Radix) only allows scrolling via the thin scrollbar handle. Users expect to scroll through hours/minutes by using their mouse wheel or trackpad directly over the list content.
+On Mac, two-finger trackpad scrolling doesn't work inside the time picker popover. This is because Radix UI's `PopoverContent` captures and blocks scroll/wheel events by default to prevent background page scrolling.
 
-## Fix
-Replace `ScrollArea` with plain `div` containers that have native `overflow-y: auto` styling. This enables natural mouse wheel / trackpad scrolling on the hour and minute columns without needing the Radix scrollbar abstraction.
+## Fix (`src/components/ui/time-picker.tsx`)
 
-## Changes: `src/components/ui/time-picker.tsx`
-- Remove `ScrollArea` import
-- Replace the two `<ScrollArea>` wrappers with `<div className="h-48 w-14 overflow-y-auto border-r border-border">` containers
-- Keep the inner `ref` divs and button items unchanged
+Add explicit `onWheel` handlers with `e.stopPropagation()` on the hour and minute scroll containers to ensure wheel events are consumed by the scrollable div rather than being intercepted by the Popover layer. Also add the CSS property `overscroll-behavior: contain` to prevent scroll chaining to the parent/page.
 
-This is a minimal change — just swapping the wrapper element to enable native scroll behavior.
+Changes to the two scrollable divs (hours and minutes):
+```tsx
+<div
+  className="h-48 w-14 overflow-y-auto border-r border-border"
+  style={{ overscrollBehavior: "contain", WebkitOverflowScrolling: "touch" }}
+  onWheel={(e) => e.stopPropagation()}
+>
+```
+
+This is a 2-line addition per scrollable container — no structural changes needed.
 
