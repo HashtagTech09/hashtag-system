@@ -48,6 +48,34 @@ const EnrollmentsPage = () => {
 
   useEffect(() => { fetchData(); }, []);
 
+  // Check if a plan's sequence matches upcoming cycles
+  const isPlanValid = (plan: any): boolean => {
+    const sequence = subPlanCycles.filter(s => s.subscription_plan_id === plan.id).sort((a, b) => a.sequence_order - b.sequence_order);
+    if (sequence.length === 0) return false;
+    const today = new Date();
+    let startIdx = planCycles.findIndex(c => c.is_active);
+    if (startIdx === -1) {
+      startIdx = planCycles.findIndex(c => {
+        const s = parseISO(c.start_date);
+        const e = c.end_date ? parseISO(c.end_date) : new Date("2099-12-31");
+        return today >= s && today <= e;
+      });
+    }
+    if (startIdx === -1) startIdx = 0;
+    let calIdx = startIdx;
+    for (const seqEntry of sequence) {
+      let found = false;
+      while (calIdx < planCycles.length) {
+        if (planCycles[calIdx].plan_type === seqEntry.plan_type) { calIdx++; found = true; break; }
+        calIdx++;
+      }
+      if (!found) return false;
+    }
+    return true;
+  };
+
+  const validPlans = subPlans.filter(p => isPlanValid(p));
+
   // Compute cycle assignment when subscription plan changes
   const computeCycleAssignment = (planId: string) => {
     if (!planId || planId === "none") {
@@ -190,7 +218,7 @@ const EnrollmentsPage = () => {
                   <SelectTrigger><SelectValue placeholder="No plan (manual dates)" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">No plan</SelectItem>
-                    {subPlans.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}
+                    {validPlans.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
                 {form.computed_start && (
