@@ -309,13 +309,22 @@ const PlanCyclesPage = () => {
                 )}
                 <div>
                   <Label>Type</Label>
-                  <Select value={cycleForm.plan_type} onValueChange={v => setCycleForm({ ...cycleForm, plan_type: v })}>
+                  <Select value={cycleForm.plan_type} onValueChange={v => setCycleForm({ ...cycleForm, plan_type: v, grace_days: v === "grid" ? 21 : 14 })}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="regular">Regular</SelectItem>
                       <SelectItem value="grid">Grid</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+                <div>
+                  <Label>Grace Days</Label>
+                  <Input type="number" value={cycleForm.grace_days} onChange={e => setCycleForm({ ...cycleForm, grace_days: Number(e.target.value) })} />
+                  {cycleForm.start_date && (
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Registration deadline: {(() => { const d = new Date(cycleForm.start_date); d.setDate(d.getDate() + cycleForm.grace_days); return d.toISOString().split("T")[0]; })()}
+                    </p>
+                  )}
                 </div>
                 <Button className="w-full gradient-primary" onClick={handleSaveCycle}>Save</Button>
               </div>
