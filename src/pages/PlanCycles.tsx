@@ -78,6 +78,13 @@ const PlanCyclesPage = () => {
     });
     if (overlapping) { toast.error("Cycle dates overlap with an existing cycle"); return; }
 
+    const graceDays = cycleForm.grace_days;
+    const registrationDeadline = cycleForm.start_date ? (() => {
+      const d = new Date(cycleForm.start_date);
+      d.setDate(d.getDate() + graceDays);
+      return d.toISOString().split("T")[0];
+    })() : null;
+
     const data = {
       organization_id: 1,
       name: cycleForm.name,
@@ -85,6 +92,8 @@ const PlanCyclesPage = () => {
       end_date: cycleForm.end_date || null,
       plan_type: cycleForm.plan_type,
       duration_days: duration,
+      grace_days: graceDays,
+      registration_deadline: registrationDeadline,
     };
 
     if (editingCycle) {
