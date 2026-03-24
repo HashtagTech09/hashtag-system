@@ -101,18 +101,13 @@ const EnrollmentsPage = () => {
 
     const sequence = subPlanCycles.filter(s => s.subscription_plan_id === plan.id).sort((a, b) => a.sequence_order - b.sequence_order);
 
-    // Walk through calendar cycles matching sequence types
+    // Strict sequential match — no skipping cycles
     const matched: any[] = [];
     let calIdx = startCycleIndex;
     for (const seqEntry of sequence) {
-      while (calIdx < planCycles.length) {
-        if (planCycles[calIdx].plan_type === seqEntry.plan_type) {
-          matched.push(planCycles[calIdx]);
-          calIdx++;
-          break;
-        }
-        calIdx++;
-      }
+      if (calIdx >= planCycles.length || planCycles[calIdx].plan_type !== seqEntry.plan_type) break;
+      matched.push(planCycles[calIdx]);
+      calIdx++;
     }
 
     if (matched.length === sequence.length) {
