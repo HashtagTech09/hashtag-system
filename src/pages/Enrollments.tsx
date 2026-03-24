@@ -218,7 +218,7 @@ const EnrollmentsPage = () => {
                   <SelectTrigger><SelectValue placeholder="No plan (manual dates)" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">No plan</SelectItem>
-                    {subPlans.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}
+                    {validPlans.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
                 {form.computed_start && (
