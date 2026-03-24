@@ -417,33 +417,39 @@ export type Database = {
           created_at: string
           duration_days: number | null
           end_date: string | null
+          grace_days: number
           id: number
           is_active: boolean
           name: string
           organization_id: number
           plan_type: string
+          registration_deadline: string | null
           start_date: string
         }
         Insert: {
           created_at?: string
           duration_days?: number | null
           end_date?: string | null
+          grace_days?: number
           id?: never
           is_active?: boolean
           name: string
           organization_id: number
           plan_type?: string
+          registration_deadline?: string | null
           start_date: string
         }
         Update: {
           created_at?: string
           duration_days?: number | null
           end_date?: string | null
+          grace_days?: number
           id?: never
           is_active?: boolean
           name?: string
           organization_id?: number
           plan_type?: string
+          registration_deadline?: string | null
           start_date?: string
         }
         Relationships: [
