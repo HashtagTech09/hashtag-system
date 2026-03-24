@@ -243,13 +243,14 @@ const PlanCyclesPage = () => {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Start</TableHead>
-                    <TableHead>End</TableHead>
-                    <TableHead>Days</TableHead>
-                    <TableHead>Active</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                     <TableHead>Name</TableHead>
+                     <TableHead>Type</TableHead>
+                     <TableHead>Start</TableHead>
+                     <TableHead>End</TableHead>
+                     <TableHead>Days</TableHead>
+                     <TableHead>Registration</TableHead>
+                     <TableHead>Active</TableHead>
+                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
