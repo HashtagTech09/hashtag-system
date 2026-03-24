@@ -200,6 +200,12 @@ const EnrollmentsPage = () => {
           <DialogContent className="max-w-lg">
             <DialogHeader><DialogTitle>New Enrollment</DialogTitle></DialogHeader>
             <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+              {currentCycleClosed && startCycle && (
+                <div className="p-3 rounded-lg border border-warning/30 bg-warning/10 text-sm">
+                  <p className="text-warning font-medium">Registrations for the current cycle are closed.</p>
+                  <p className="text-muted-foreground mt-1">You are being enrolled starting from <span className="font-medium text-foreground">{startCycle.name}</span>.</p>
+                </div>
+              )}
               <div><Label>Student</Label>
                 <Select value={form.student_id} onValueChange={(v) => setForm({ ...form, student_id: v })}>
                   <SelectTrigger><SelectValue placeholder="Select student" /></SelectTrigger>
