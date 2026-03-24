@@ -77,16 +77,20 @@ const EnrollmentsPage = () => {
   const isPlanValid = (plan: any): boolean => {
     const requiredRegular = plan.total_regular_cycles || 0;
     const requiredGrid = plan.total_grid_cycles || 0;
-    if (requiredRegular === 0 && requiredGrid === 0) return false;
+    const totalRequired = plan.total_cycles || (requiredRegular + requiredGrid);
+    if (totalRequired === 0) return false;
+
+    // Only look at the next `totalRequired` cycles — plan must fit within that window
+    const windowEnd = Math.min(startCycleIndex + totalRequired, planCycles.length);
+    if (windowEnd - startCycleIndex < totalRequired) return false;
 
     let regularAvailable = 0;
     let gridAvailable = 0;
-    for (let i = startCycleIndex; i < planCycles.length; i++) {
+    for (let i = startCycleIndex; i < windowEnd; i++) {
       if (planCycles[i].plan_type === "regular") regularAvailable++;
       else if (planCycles[i].plan_type === "grid") gridAvailable++;
-      if (regularAvailable >= requiredRegular && gridAvailable >= requiredGrid) return true;
     }
-    return false;
+    return regularAvailable >= requiredRegular && gridAvailable >= requiredGrid;
   };
 
   const validPlans = subPlans.filter(p => isPlanValid(p));
