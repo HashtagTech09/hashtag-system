@@ -80,9 +80,15 @@ const EnrollmentsPage = () => {
 
     let calIdx = startCycleIndex;
     for (const seqEntry of sequence) {
-      if (calIdx >= planCycles.length) return false;
-      if (planCycles[calIdx].plan_type !== seqEntry.plan_type) return false;
-      calIdx++;
+      let found = false;
+      while (calIdx < planCycles.length) {
+        const cycle = planCycles[calIdx];
+        if (cycle.plan_type === seqEntry.plan_type) { calIdx++; found = true; break; }
+        // Only skip cycles of a DIFFERENT type; if same type doesn't match, that's a gap
+        if (cycle.plan_type === seqEntry.plan_type) { break; }
+        calIdx++;
+      }
+      if (!found) return false;
     }
     return true;
   };
