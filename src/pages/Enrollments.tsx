@@ -48,29 +48,37 @@ const EnrollmentsPage = () => {
 
   useEffect(() => { fetchData(); }, []);
 
-  // Check if a plan's sequence matches upcoming cycles AND first cycle registration is still open
+  // Find the first cycle with open registration (or next upcoming)
+  const getStartCycleIndex = (): number => {
+    const todayStr = new Date().toISOString().split("T")[0];
+    // First: find a cycle whose registration is still open
+    const openIdx = planCycles.findIndex(c => {
+      if (c.registration_deadline && todayStr > c.registration_deadline) return false;
+      // Must not be fully in the past
+      const endDate = c.end_date || "2099-12-31";
+      return endDate >= todayStr;
+    });
+    if (openIdx !== -1) return openIdx;
+    // Fallback: next upcoming cycle by start_date
+    const futureIdx = planCycles.findIndex(c => c.start_date > todayStr);
+    return futureIdx !== -1 ? futureIdx : 0;
+  };
+
+  const startCycleIndex = planCycles.length > 0 ? getStartCycleIndex() : 0;
+  const startCycle = planCycles[startCycleIndex];
+  const currentCycleClosed = (() => {
+    const todayStr = new Date().toISOString().split("T")[0];
+    const activeCycle = planCycles.find(c => c.is_active);
+    if (!activeCycle) return false;
+    return activeCycle.registration_deadline && todayStr > activeCycle.registration_deadline;
+  })();
+
+  // Check if a plan's sequence matches upcoming cycles starting from the open cycle
   const isPlanValid = (plan: any): boolean => {
     const sequence = subPlanCycles.filter(s => s.subscription_plan_id === plan.id).sort((a, b) => a.sequence_order - b.sequence_order);
     if (sequence.length === 0) return false;
-    const today = new Date();
-    const todayStr = today.toISOString().split("T")[0];
-    let startIdx = planCycles.findIndex(c => c.is_active);
-    if (startIdx === -1) {
-      startIdx = planCycles.findIndex(c => {
-        const s = parseISO(c.start_date);
-        const e = c.end_date ? parseISO(c.end_date) : new Date("2099-12-31");
-        return today >= s && today <= e;
-      });
-    }
-    if (startIdx === -1) startIdx = 0;
 
-    // Check if the first matching cycle's registration deadline has passed
-    const firstCycle = planCycles[startIdx];
-    if (firstCycle?.registration_deadline && todayStr > firstCycle.registration_deadline) {
-      return false;
-    }
-
-    let calIdx = startIdx;
+    let calIdx = startCycleIndex;
     for (const seqEntry of sequence) {
       let found = false;
       while (calIdx < planCycles.length) {
@@ -96,21 +104,9 @@ const EnrollmentsPage = () => {
 
     const sequence = subPlanCycles.filter(s => s.subscription_plan_id === plan.id).sort((a, b) => a.sequence_order - b.sequence_order);
 
-    // Find current active cycle or cycle containing today
-    const today = new Date();
-    let startIdx = planCycles.findIndex(c => c.is_active);
-    if (startIdx === -1) {
-      startIdx = planCycles.findIndex(c => {
-        const s = parseISO(c.start_date);
-        const e = c.end_date ? parseISO(c.end_date) : new Date("2099-12-31");
-        return today >= s && today <= e;
-      });
-    }
-    if (startIdx === -1) startIdx = 0;
-
     // Walk through calendar cycles matching sequence types
     const matched: any[] = [];
-    let calIdx = startIdx;
+    let calIdx = startCycleIndex;
     for (const seqEntry of sequence) {
       while (calIdx < planCycles.length) {
         if (planCycles[calIdx].plan_type === seqEntry.plan_type) {
@@ -204,6 +200,12 @@ const EnrollmentsPage = () => {
           <DialogContent className="max-w-lg">
             <DialogHeader><DialogTitle>New Enrollment</DialogTitle></DialogHeader>
             <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+              {currentCycleClosed && startCycle && (
+                <div className="p-3 rounded-lg border border-warning/30 bg-warning/10 text-sm">
+                  <p className="text-warning font-medium">Registrations for the current cycle are closed.</p>
+                  <p className="text-muted-foreground mt-1">You are being enrolled starting from <span className="font-medium text-foreground">{startCycle.name}</span>.</p>
+                </div>
+              )}
               <div><Label>Student</Label>
                 <Select value={form.student_id} onValueChange={(v) => setForm({ ...form, student_id: v })}>
                   <SelectTrigger><SelectValue placeholder="Select student" /></SelectTrigger>
