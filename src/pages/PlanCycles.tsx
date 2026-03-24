@@ -266,6 +266,20 @@ const PlanCyclesPage = () => {
                       <TableCell className="text-muted-foreground">{c.end_date || "Open"}</TableCell>
                       <TableCell className="text-muted-foreground">{c.duration_days ?? "—"}</TableCell>
                       <TableCell>
+                        {(() => {
+                          const todayStr = new Date().toISOString().split("T")[0];
+                          const isOpen = !c.registration_deadline || todayStr <= c.registration_deadline;
+                          return (
+                            <Badge className={isOpen ? "bg-success/20 text-success" : "bg-destructive/20 text-destructive"} variant="secondary">
+                              {isOpen ? "Open" : "Closed"}
+                            </Badge>
+                          );
+                        })()}
+                        <span className="text-xs text-muted-foreground ml-1">
+                          {c.registration_deadline ? `until ${c.registration_deadline}` : ""}
+                        </span>
+                      </TableCell>
+                      <TableCell>
                         <Switch checked={c.is_active} onCheckedChange={() => toggleCycleActive(c)} />
                       </TableCell>
                       <TableCell className="text-right">
