@@ -106,7 +106,7 @@ const EnrollmentsPage = () => {
 
     // Walk through calendar cycles matching sequence types
     const matched: any[] = [];
-    let calIdx = startIdx;
+    let calIdx = startCycleIndex;
     for (const seqEntry of sequence) {
       while (calIdx < planCycles.length) {
         if (planCycles[calIdx].plan_type === seqEntry.plan_type) {
