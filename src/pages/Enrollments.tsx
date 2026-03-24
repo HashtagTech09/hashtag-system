@@ -80,12 +80,9 @@ const EnrollmentsPage = () => {
 
     let calIdx = startCycleIndex;
     for (const seqEntry of sequence) {
-      let found = false;
-      while (calIdx < planCycles.length) {
-        if (planCycles[calIdx].plan_type === seqEntry.plan_type) { calIdx++; found = true; break; }
-        calIdx++;
-      }
-      if (!found) return false;
+      if (calIdx >= planCycles.length) return false;
+      if (planCycles[calIdx].plan_type !== seqEntry.plan_type) return false;
+      calIdx++;
     }
     return true;
   };
