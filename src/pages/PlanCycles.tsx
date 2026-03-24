@@ -25,7 +25,7 @@ const PlanCyclesPage = () => {
   // Cycle dialog
   const [cycleDialogOpen, setCycleDialogOpen] = useState(false);
   const [editingCycle, setEditingCycle] = useState<any>(null);
-  const [cycleForm, setCycleForm] = useState({ name: "", start_date: "", end_date: "", plan_type: "regular" });
+  const [cycleForm, setCycleForm] = useState({ name: "", start_date: "", end_date: "", plan_type: "regular", grace_days: 14 });
 
   // Sub plan dialog
   const [planDialogOpen, setPlanDialogOpen] = useState(false);
@@ -55,10 +55,10 @@ const PlanCyclesPage = () => {
   const openCycleDialog = (cycle?: any) => {
     if (cycle) {
       setEditingCycle(cycle);
-      setCycleForm({ name: cycle.name, start_date: cycle.start_date, end_date: cycle.end_date || "", plan_type: cycle.plan_type });
+      setCycleForm({ name: cycle.name, start_date: cycle.start_date, end_date: cycle.end_date || "", plan_type: cycle.plan_type, grace_days: cycle.grace_days ?? (cycle.plan_type === "grid" ? 21 : 14) });
     } else {
       setEditingCycle(null);
-      setCycleForm({ name: "", start_date: "", end_date: "", plan_type: "regular" });
+      setCycleForm({ name: "", start_date: "", end_date: "", plan_type: "regular", grace_days: 14 });
     }
     setCycleDialogOpen(true);
   };
@@ -78,6 +78,13 @@ const PlanCyclesPage = () => {
     });
     if (overlapping) { toast.error("Cycle dates overlap with an existing cycle"); return; }
 
+    const graceDays = cycleForm.grace_days;
+    const registrationDeadline = cycleForm.start_date ? (() => {
+      const d = new Date(cycleForm.start_date);
+      d.setDate(d.getDate() + graceDays);
+      return d.toISOString().split("T")[0];
+    })() : null;
+
     const data = {
       organization_id: 1,
       name: cycleForm.name,
@@ -85,6 +92,8 @@ const PlanCyclesPage = () => {
       end_date: cycleForm.end_date || null,
       plan_type: cycleForm.plan_type,
       duration_days: duration,
+      grace_days: graceDays,
+      registration_deadline: registrationDeadline,
     };
 
     if (editingCycle) {
@@ -234,13 +243,14 @@ const PlanCyclesPage = () => {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Start</TableHead>
-                    <TableHead>End</TableHead>
-                    <TableHead>Days</TableHead>
-                    <TableHead>Active</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                     <TableHead>Name</TableHead>
+                     <TableHead>Type</TableHead>
+                     <TableHead>Start</TableHead>
+                     <TableHead>End</TableHead>
+                     <TableHead>Days</TableHead>
+                     <TableHead>Registration</TableHead>
+                     <TableHead>Active</TableHead>
+                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -256,6 +266,20 @@ const PlanCyclesPage = () => {
                       <TableCell className="text-muted-foreground">{c.end_date || "Open"}</TableCell>
                       <TableCell className="text-muted-foreground">{c.duration_days ?? "—"}</TableCell>
                       <TableCell>
+                        {(() => {
+                          const todayStr = new Date().toISOString().split("T")[0];
+                          const isOpen = !c.registration_deadline || todayStr <= c.registration_deadline;
+                          return (
+                            <Badge className={isOpen ? "bg-success/20 text-success" : "bg-destructive/20 text-destructive"} variant="secondary">
+                              {isOpen ? "Open" : "Closed"}
+                            </Badge>
+                          );
+                        })()}
+                        <span className="text-xs text-muted-foreground ml-1">
+                          {c.registration_deadline ? `until ${c.registration_deadline}` : ""}
+                        </span>
+                      </TableCell>
+                      <TableCell>
                         <Switch checked={c.is_active} onCheckedChange={() => toggleCycleActive(c)} />
                       </TableCell>
                       <TableCell className="text-right">
@@ -264,7 +288,7 @@ const PlanCyclesPage = () => {
                       </TableCell>
                     </TableRow>
                   ))}
-                  {cycles.length === 0 && <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">No cycles</TableCell></TableRow>}
+                  {cycles.length === 0 && <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">No cycles</TableCell></TableRow>}
                 </TableBody>
               </Table>
             </CardContent>
@@ -285,13 +309,22 @@ const PlanCyclesPage = () => {
                 )}
                 <div>
                   <Label>Type</Label>
-                  <Select value={cycleForm.plan_type} onValueChange={v => setCycleForm({ ...cycleForm, plan_type: v })}>
+                  <Select value={cycleForm.plan_type} onValueChange={v => setCycleForm({ ...cycleForm, plan_type: v, grace_days: v === "grid" ? 21 : 14 })}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="regular">Regular</SelectItem>
                       <SelectItem value="grid">Grid</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+                <div>
+                  <Label>Grace Days</Label>
+                  <Input type="number" value={cycleForm.grace_days} onChange={e => setCycleForm({ ...cycleForm, grace_days: Number(e.target.value) })} />
+                  {cycleForm.start_date && (
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Registration deadline: {(() => { const d = new Date(cycleForm.start_date); d.setDate(d.getDate() + cycleForm.grace_days); return d.toISOString().split("T")[0]; })()}
+                    </p>
+                  )}
                 </div>
                 <Button className="w-full gradient-primary" onClick={handleSaveCycle}>Save</Button>
               </div>

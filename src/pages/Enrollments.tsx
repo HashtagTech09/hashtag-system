@@ -48,11 +48,12 @@ const EnrollmentsPage = () => {
 
   useEffect(() => { fetchData(); }, []);
 
-  // Check if a plan's sequence matches upcoming cycles
+  // Check if a plan's sequence matches upcoming cycles AND first cycle registration is still open
   const isPlanValid = (plan: any): boolean => {
     const sequence = subPlanCycles.filter(s => s.subscription_plan_id === plan.id).sort((a, b) => a.sequence_order - b.sequence_order);
     if (sequence.length === 0) return false;
     const today = new Date();
+    const todayStr = today.toISOString().split("T")[0];
     let startIdx = planCycles.findIndex(c => c.is_active);
     if (startIdx === -1) {
       startIdx = planCycles.findIndex(c => {
@@ -62,6 +63,13 @@ const EnrollmentsPage = () => {
       });
     }
     if (startIdx === -1) startIdx = 0;
+
+    // Check if the first matching cycle's registration deadline has passed
+    const firstCycle = planCycles[startIdx];
+    if (firstCycle?.registration_deadline && todayStr > firstCycle.registration_deadline) {
+      return false;
+    }
+
     let calIdx = startIdx;
     for (const seqEntry of sequence) {
       let found = false;
