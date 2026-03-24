@@ -55,10 +55,10 @@ const PlanCyclesPage = () => {
   const openCycleDialog = (cycle?: any) => {
     if (cycle) {
       setEditingCycle(cycle);
-      setCycleForm({ name: cycle.name, start_date: cycle.start_date, end_date: cycle.end_date || "", plan_type: cycle.plan_type });
+      setCycleForm({ name: cycle.name, start_date: cycle.start_date, end_date: cycle.end_date || "", plan_type: cycle.plan_type, grace_days: cycle.grace_days ?? (cycle.plan_type === "grid" ? 21 : 14) });
     } else {
       setEditingCycle(null);
-      setCycleForm({ name: "", start_date: "", end_date: "", plan_type: "regular" });
+      setCycleForm({ name: "", start_date: "", end_date: "", plan_type: "regular", grace_days: 14 });
     }
     setCycleDialogOpen(true);
   };
