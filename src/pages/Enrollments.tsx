@@ -75,22 +75,18 @@ const EnrollmentsPage = () => {
 
   // Check if a plan's sequence matches upcoming cycles starting from the open cycle
   const isPlanValid = (plan: any): boolean => {
-    const sequence = subPlanCycles.filter(s => s.subscription_plan_id === plan.id).sort((a, b) => a.sequence_order - b.sequence_order);
-    if (sequence.length === 0) return false;
+    const requiredRegular = plan.total_regular_cycles || 0;
+    const requiredGrid = plan.total_grid_cycles || 0;
+    if (requiredRegular === 0 && requiredGrid === 0) return false;
 
-    let calIdx = startCycleIndex;
-    for (const seqEntry of sequence) {
-      let found = false;
-      while (calIdx < planCycles.length) {
-        const cycle = planCycles[calIdx];
-        if (cycle.plan_type === seqEntry.plan_type) { calIdx++; found = true; break; }
-        // Only skip cycles of a DIFFERENT type; if same type doesn't match, that's a gap
-        if (cycle.plan_type === seqEntry.plan_type) { break; }
-        calIdx++;
-      }
-      if (!found) return false;
+    let regularAvailable = 0;
+    let gridAvailable = 0;
+    for (let i = startCycleIndex; i < planCycles.length; i++) {
+      if (planCycles[i].plan_type === "regular") regularAvailable++;
+      else if (planCycles[i].plan_type === "grid") gridAvailable++;
+      if (regularAvailable >= requiredRegular && gridAvailable >= requiredGrid) return true;
     }
-    return true;
+    return false;
   };
 
   const validPlans = subPlans.filter(p => isPlanValid(p));
