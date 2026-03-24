@@ -25,7 +25,7 @@ const PlanCyclesPage = () => {
   // Cycle dialog
   const [cycleDialogOpen, setCycleDialogOpen] = useState(false);
   const [editingCycle, setEditingCycle] = useState<any>(null);
-  const [cycleForm, setCycleForm] = useState({ name: "", start_date: "", end_date: "", plan_type: "regular" });
+  const [cycleForm, setCycleForm] = useState({ name: "", start_date: "", end_date: "", plan_type: "regular", grace_days: 14 });
 
   // Sub plan dialog
   const [planDialogOpen, setPlanDialogOpen] = useState(false);
