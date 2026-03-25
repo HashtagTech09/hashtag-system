@@ -31,6 +31,7 @@ const EnrollmentsPage = () => {
     student_id: "", batch_ids: [] as string[], payment_mode: "cash",
     subscription_plan_id: "", computed_start: "", computed_end: "", start_cycle_name: "", end_cycle_name: "",
     start_cycle_id: null as number | null, end_cycle_id: null as number | null,
+    regular_cycles: 1, grid_cycles: 0,
   });
 
   const fetchData = async () => {
