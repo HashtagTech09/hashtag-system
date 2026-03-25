@@ -243,7 +243,8 @@ const EnrollmentsPage = () => {
     const totalAmount = breakdown.total;
 
     const { data: payment, error: payError } = await supabase.from("payments").insert({
-      organization_id: 1, student_id: Number(form.student_id), amount: totalAmount,
+      organization_id: 1, student_id: Number(form.student_id), amount: breakdown.subtotal,
+      gst: breakdown.gst, final_amount: totalAmount,
       payment_mode: form.payment_mode, status: "success",
     }).select().single();
 
