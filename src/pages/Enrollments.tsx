@@ -238,19 +238,9 @@ const EnrollmentsPage = () => {
   const handleEnroll = async () => {
     if (!form.student_id || form.batch_ids.length === 0) { toast.error("Select a student and at least one batch"); return; }
 
-    const { data: pricing } = await supabase.from("pricing_plans").select("*").eq("organization_id", 1).eq("batch_count", form.batch_ids.length).single();
+    const breakdown = computeFeeBreakdown();
     const todayStr = new Date().toISOString().split("T")[0];
-
-    const applyRegFee = detectedStatus === "NEW" || detectedStatus === "REV" || (detectedStatus === "REN" && latestEndDate && todayStr > latestEndDate);
-    const regFee = applyRegFee ? 500 : 0;
-    const isLateRenewal = detectedStatus === "REN" && latestEndDate ? todayStr > latestEndDate : false;
-
-    const baseAmount = pricing ? Number(pricing.price) : form.batch_ids.length * 3000;
-    let totalAmount = baseAmount + regFee;
-
-    // Apply drop-in adjustment
-    const dropInAdjustment = eligibleDropIn ? Number(eligibleDropIn.amount) : 0;
-    totalAmount = Math.max(0, totalAmount - dropInAdjustment);
+    const totalAmount = breakdown.total;
 
     const { data: payment, error: payError } = await supabase.from("payments").insert({
       organization_id: 1, student_id: Number(form.student_id), amount: totalAmount,
