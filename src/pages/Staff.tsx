@@ -112,6 +112,10 @@ const UsersPage = () => {
   };
 
   const handleDelete = async (id: number) => {
+    const { error: studentsError } = await supabase
+      .from("students").delete().eq("user_id", id);
+    if (studentsError) { toast.error("Failed to delete linked students"); return; }
+
     const { error: rolesError } = await supabase
       .from("user_roles").delete().eq("user_id", id);
     if (rolesError) { toast.error("Failed to delete user roles"); return; }
