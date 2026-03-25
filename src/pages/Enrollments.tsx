@@ -24,8 +24,10 @@ const EnrollmentsPage = () => {
   const [eligibleDropIn, setEligibleDropIn] = useState<any>(null);
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [detectedStatus, setDetectedStatus] = useState<string>("NEW");
+  const [latestEndDate, setLatestEndDate] = useState<string | null>(null);
   const [form, setForm] = useState({
-    student_id: "", batch_ids: [] as string[], payment_mode: "cash", status_type: "NEW",
+    student_id: "", batch_ids: [] as string[], payment_mode: "cash",
     subscription_plan_id: "", computed_start: "", computed_end: "", start_cycle_name: "", end_cycle_name: "",
     start_cycle_id: null as number | null, end_cycle_id: null as number | null,
   });
@@ -48,6 +50,36 @@ const EnrollmentsPage = () => {
   };
 
   useEffect(() => { fetchData(); }, []);
+
+  // Auto-detect student status based on enrollment history
+  useEffect(() => {
+    const detectStatus = async () => {
+      if (!form.student_id) { setDetectedStatus("NEW"); setLatestEndDate(null); return; }
+      const { data } = await supabase.from("enrollments")
+        .select("end_date")
+        .eq("student_id", Number(form.student_id))
+        .eq("organization_id", 1)
+        .order("end_date", { ascending: false })
+        .limit(1);
+      if (!data || data.length === 0) { setDetectedStatus("NEW"); setLatestEndDate(null); return; }
+      const latest = data[0].end_date;
+      setLatestEndDate(latest);
+      const todayStr = new Date().toISOString().split("T")[0];
+      if (latest >= todayStr) { setDetectedStatus("REN"); }
+      else {
+        // Check grace: if within grace_days of the active cycle, still REN (late)
+        const activeCycle = planCycles.find(c => c.is_active);
+        const graceDays = activeCycle?.grace_days || 14;
+        const latestDate = new Date(latest);
+        const graceEnd = new Date(latestDate);
+        graceEnd.setDate(graceEnd.getDate() + graceDays);
+        const graceEndStr = graceEnd.toISOString().split("T")[0];
+        if (todayStr <= graceEndStr) { setDetectedStatus("REN"); }
+        else { setDetectedStatus("REV"); }
+      }
+    };
+    detectStatus();
+  }, [form.student_id, planCycles]);
 
   // Check for eligible drop-ins when student + batches change
   useEffect(() => {
@@ -169,16 +201,32 @@ const EnrollmentsPage = () => {
     }
   };
 
+  // Compute fee breakdown for display
+  const computeFeeBreakdown = () => {
+    const batchCount = form.batch_ids.length;
+    const batchFee = batchCount * 3000; // Will be overridden by pricing_plans lookup in handleEnroll
+    const todayStr = new Date().toISOString().split("T")[0];
+    const applyRegFee = detectedStatus === "NEW" || detectedStatus === "REV" || (detectedStatus === "REN" && latestEndDate && todayStr > latestEndDate);
+    const regFee = applyRegFee ? 500 : 0;
+    const dropInAdj = eligibleDropIn ? Number(eligibleDropIn.amount) : 0;
+    const isLateRenewal = detectedStatus === "REN" && latestEndDate ? todayStr > latestEndDate : false;
+    return { batchCount, batchFee, regFee, dropInAdj, total: Math.max(0, batchFee + regFee - dropInAdj), applyRegFee: !!applyRegFee, isLateRenewal };
+  };
+
+  const feeBreakdown = computeFeeBreakdown();
+
   const handleEnroll = async () => {
     if (!form.student_id || form.batch_ids.length === 0) { toast.error("Select a student and at least one batch"); return; }
 
     const { data: pricing } = await supabase.from("pricing_plans").select("*").eq("organization_id", 1).eq("batch_count", form.batch_ids.length).single();
-    const { data: settings } = await supabase.from("system_settings").select("*").eq("organization_id", 1);
-    const regFee = Number(settings?.find((s) => s.key === "registration_fee")?.value || 0);
+    const todayStr = new Date().toISOString().split("T")[0];
+
+    const applyRegFee = detectedStatus === "NEW" || detectedStatus === "REV" || (detectedStatus === "REN" && latestEndDate && todayStr > latestEndDate);
+    const regFee = applyRegFee ? 500 : 0;
+    const isLateRenewal = detectedStatus === "REN" && latestEndDate ? todayStr > latestEndDate : false;
 
     const baseAmount = pricing ? Number(pricing.price) : form.batch_ids.length * 3000;
-    const applyRegFee = form.status_type === "NEW" || form.status_type === "REV";
-    let totalAmount = baseAmount + (applyRegFee ? regFee : 0);
+    let totalAmount = baseAmount + regFee;
 
     // Apply drop-in adjustment
     const dropInAdjustment = eligibleDropIn ? Number(eligibleDropIn.amount) : 0;
@@ -197,8 +245,8 @@ const EnrollmentsPage = () => {
 
     const enrollmentRecords = form.batch_ids.map((batchId) => ({
       organization_id: 1, student_id: Number(form.student_id), batch_id: Number(batchId),
-      payment_id: payment.id, status_type: form.status_type,
-      registration_fee_applied: applyRegFee, late_renewal: false,
+      payment_id: payment.id, status_type: detectedStatus,
+      registration_fee_applied: !!applyRegFee, late_renewal: isLateRenewal,
       start_date: startDate, end_date: endDate,
       subscription_plan_id: form.subscription_plan_id ? Number(form.subscription_plan_id) : null,
       start_cycle_id: form.start_cycle_id,
@@ -213,9 +261,11 @@ const EnrollmentsPage = () => {
       await supabase.from("drop_ins").update({ is_adjusted: true, adjusted_at: new Date().toISOString() }).eq("id", eligibleDropIn.id);
     }
 
-    toast.success(`Enrolled successfully! Amount: ₹${totalAmount}${dropInAdjustment > 0 ? ` (Drop-in adjusted: -₹${dropInAdjustment})` : ""}`);
+    toast.success(`Enrolled successfully! Amount: ₹${totalAmount.toLocaleString()}${dropInAdjustment > 0 ? ` (Drop-in adjusted: -₹${dropInAdjustment})` : ""}`);
     setEligibleDropIn(null);
-    setForm({ student_id: "", batch_ids: [], payment_mode: "cash", status_type: "NEW", subscription_plan_id: "", computed_start: "", computed_end: "", start_cycle_name: "", end_cycle_name: "", start_cycle_id: null, end_cycle_id: null });
+    setDetectedStatus("NEW");
+    setLatestEndDate(null);
+    setForm({ student_id: "", batch_ids: [], payment_mode: "cash", subscription_plan_id: "", computed_start: "", computed_end: "", start_cycle_name: "", end_cycle_name: "", start_cycle_id: null, end_cycle_id: null });
     setDialogOpen(false);
     fetchData();
   };
@@ -254,15 +304,14 @@ const EnrollmentsPage = () => {
                   <SelectContent>{students.map((s) => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
-              <div><Label>Enrollment Type</Label>
-                <Select value={form.status_type} onValueChange={(v) => setForm({ ...form, status_type: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="NEW">New Enrollment</SelectItem>
-                    <SelectItem value="REN">Renewal</SelectItem>
-                    <SelectItem value="REV">Revival</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div>
+                <Label>Enrollment Type</Label>
+                <div className="mt-1.5">
+                  <Badge className={`${statusColors[detectedStatus] || ""} text-sm px-3 py-1`} variant="secondary">
+                    {detectedStatus === "NEW" ? "New Enrollment" : detectedStatus === "REN" ? (feeBreakdown.isLateRenewal ? "Renewal (Late)" : "Renewal") : "Revival"}
+                  </Badge>
+                  {form.student_id && <span className="text-xs text-muted-foreground ml-2">Auto-detected</span>}
+                </div>
               </div>
               <div>
                 <Label>Subscription Plan (optional)</Label>
@@ -309,6 +358,15 @@ const EnrollmentsPage = () => {
                   </SelectContent>
                 </Select>
               </div>
+              {form.batch_ids.length > 0 && (
+                <div className="p-3 rounded-lg border border-border bg-muted/30 text-sm space-y-1">
+                  <p className="font-medium text-foreground mb-2">Fee Breakdown</p>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Batch fees ({feeBreakdown.batchCount} batch{feeBreakdown.batchCount > 1 ? "es" : ""})</span><span>₹{feeBreakdown.batchFee.toLocaleString()}</span></div>
+                  {feeBreakdown.regFee > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Registration fee ({detectedStatus}{feeBreakdown.isLateRenewal ? " - Late" : ""})</span><span>₹{feeBreakdown.regFee}</span></div>}
+                  {feeBreakdown.dropInAdj > 0 && <div className="flex justify-between text-success"><span>Drop-in adjustment</span><span>-₹{feeBreakdown.dropInAdj.toLocaleString()}</span></div>}
+                  <div className="flex justify-between font-semibold border-t border-border pt-1 mt-1"><span>Total</span><span>₹{feeBreakdown.total.toLocaleString()}</span></div>
+                </div>
+              )}
               <Button className="w-full gradient-primary" onClick={handleEnroll}>Confirm Enrollment</Button>
             </div>
           </DialogContent>
