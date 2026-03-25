@@ -24,7 +24,7 @@ const BatchesPage = () => {
   const [instructors, setInstructors] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [form, setForm] = useState({ name: "", style: "", level: "", schedule: [] as ScheduleEntry[], studio_id: "", instructor_id: "", capacity: "" });
+  const [form, setForm] = useState({ name: "", style: "", schedule: [] as ScheduleEntry[], studio_id: "", instructor_id: "", capacity: "" });
   const [editId, setEditId] = useState<number | null>(null);
   const [sessionsBatch, setSessionsBatch] = useState<any>(null);
 
@@ -68,7 +68,7 @@ const BatchesPage = () => {
     if (!form.name.trim()) { toast.error("Name is required"); return; }
     const batchCode = generateBatchCode(form.name, form.studio_id);
     const payload = {
-      organization_id: 1, name: form.name, style: form.style || null, level: form.level || null,
+      organization_id: 1, name: form.name, style: form.style || null,
       schedule: form.schedule.length > 0 ? form.schedule : null,
       studio_id: form.studio_id ? Number(form.studio_id) : null,
       instructor_id: form.instructor_id ? Number(form.instructor_id) : null,
@@ -87,7 +87,7 @@ const BatchesPage = () => {
     fetchData();
   };
 
-  const resetForm = () => { setForm({ name: "", style: "", level: "", schedule: [], studio_id: "", instructor_id: "", capacity: "" }); setEditId(null); setDialogOpen(false); };
+  const resetForm = () => { setForm({ name: "", style: "", schedule: [], studio_id: "", instructor_id: "", capacity: "" }); setEditId(null); setDialogOpen(false); };
 
   const handleDelete = async (id: number) => {
     await supabase.from("batches").delete().eq("id", id);
@@ -135,18 +135,25 @@ const BatchesPage = () => {
                 </div>
               )}
               <div><Label>Name *</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
-              <div className="grid grid-cols-2 gap-4">
-                <div><Label>Style</Label><Input placeholder="Hip Hop, Bollywood..." value={form.style} onChange={(e) => setForm({ ...form, style: e.target.value })} /></div>
-                <div><Label>Level</Label>
-                  <Select value={form.level} onValueChange={(v) => setForm({ ...form, level: v })}>
-                    <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="beginner">Beginner</SelectItem>
-                      <SelectItem value="intermediate">Intermediate</SelectItem>
-                      <SelectItem value="advanced">Advanced</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div><Label>Style</Label>
+                <Select value={form.style} onValueChange={(v) => setForm({ ...form, style: v })}>
+                  <SelectTrigger><SelectValue placeholder="Select style" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Jazz Level 1">Jazz Level 1</SelectItem>
+                    <SelectItem value="Jazz Level 2">Jazz Level 2</SelectItem>
+                    <SelectItem value="Jazz Level 3">Jazz Level 3</SelectItem>
+                    <SelectItem value="Jazz Level 4">Jazz Level 4</SelectItem>
+                    <SelectItem value="Ballet Level 1">Ballet Level 1</SelectItem>
+                    <SelectItem value="Ballet Level 2">Ballet Level 2</SelectItem>
+                    <SelectItem value="Ballet Level 3">Ballet Level 3</SelectItem>
+                    <SelectItem value="Modern Level 1">Modern Level 1</SelectItem>
+                    <SelectItem value="Hip Hop Level 1">Hip Hop Level 1</SelectItem>
+                    <SelectItem value="Hip Hop Level 2">Hip Hop Level 2</SelectItem>
+                    <SelectItem value="Hip Hop Level 3">Hip Hop Level 3</SelectItem>
+                    <SelectItem value="Heels Level 1">Heels Level 1</SelectItem>
+                    <SelectItem value="Heels Level 2">Heels Level 2</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <Label>Days & Schedule</Label>
@@ -226,7 +233,7 @@ const BatchesPage = () => {
                       <Button variant="ghost" size="icon" onClick={() => {
                         const sched = getSchedule(batch);
                         setForm({
-                          name: batch.name, style: batch.style || "", level: batch.level || "",
+                          name: batch.name, style: batch.style || "",
                           schedule: sched,
                           studio_id: batch.studio_id ? String(batch.studio_id) : "",
                           instructor_id: batch.instructor_id ? String(batch.instructor_id) : "",
