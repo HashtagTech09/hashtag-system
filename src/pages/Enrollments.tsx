@@ -162,7 +162,7 @@ const EnrollmentsPage = () => {
   // Compute cycle assignment when subscription plan changes
   const computeCycleAssignment = (planId: string) => {
     if (!planId || planId === "none") {
-      setForm(f => ({ ...f, subscription_plan_id: "", computed_start: "", computed_end: "", start_cycle_name: "", end_cycle_name: "", start_cycle_id: null, end_cycle_id: null }));
+      setForm(f => ({ ...f, subscription_plan_id: "", computed_start: "", computed_end: "", start_cycle_name: "", end_cycle_name: "", start_cycle_id: null, end_cycle_id: null, regular_cycles: 1, grid_cycles: 0 }));
       return;
     }
 
