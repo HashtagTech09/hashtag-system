@@ -31,6 +31,7 @@ const EnrollmentsPage = () => {
     student_id: "", batch_ids: [] as string[], payment_mode: "cash",
     subscription_plan_id: "", computed_start: "", computed_end: "", start_cycle_name: "", end_cycle_name: "",
     start_cycle_id: null as number | null, end_cycle_id: null as number | null,
+    regular_cycles: 1, grid_cycles: 0,
   });
 
   const fetchData = async () => {
@@ -161,7 +162,7 @@ const EnrollmentsPage = () => {
   // Compute cycle assignment when subscription plan changes
   const computeCycleAssignment = (planId: string) => {
     if (!planId || planId === "none") {
-      setForm(f => ({ ...f, subscription_plan_id: "", computed_start: "", computed_end: "", start_cycle_name: "", end_cycle_name: "", start_cycle_id: null, end_cycle_id: null }));
+      setForm(f => ({ ...f, subscription_plan_id: "", computed_start: "", computed_end: "", start_cycle_name: "", end_cycle_name: "", start_cycle_id: null, end_cycle_id: null, regular_cycles: 1, grid_cycles: 0 }));
       return;
     }
 
@@ -188,6 +189,8 @@ const EnrollmentsPage = () => {
     if (matched.length === sequence.length) {
       const startCycle = matched[0];
       const endCycle = matched[matched.length - 1];
+      const regularCount = matched.filter(c => c.plan_type === "regular").length;
+      const gridCount = matched.filter(c => c.plan_type === "grid").length;
       setForm(f => ({
         ...f,
         subscription_plan_id: planId,
@@ -197,24 +200,37 @@ const EnrollmentsPage = () => {
         end_cycle_name: endCycle.name,
         start_cycle_id: startCycle.id,
         end_cycle_id: endCycle.id,
+        regular_cycles: regularCount,
+        grid_cycles: gridCount,
       }));
     } else {
       toast.error("Not enough matching cycles in calendar for this plan");
-      setForm(f => ({ ...f, subscription_plan_id: planId, computed_start: "", computed_end: "", start_cycle_name: "", end_cycle_name: "", start_cycle_id: null, end_cycle_id: null }));
+      setForm(f => ({ ...f, subscription_plan_id: planId, computed_start: "", computed_end: "", start_cycle_name: "", end_cycle_name: "", start_cycle_id: null, end_cycle_id: null, regular_cycles: 1, grid_cycles: 0 }));
     }
   };
 
-  // Compute fee breakdown for display
+  const DISCOUNT_TIERS: Record<number, number> = { 1: 0, 2: 0.12, 3: 0.13, 4: 0.14 };
+  const getDiscount = (count: number) => DISCOUNT_TIERS[count] ?? 0.15;
+
   const computeFeeBreakdown = () => {
     const batchCount = form.batch_ids.length;
-    const pricing = pricingPlans.find(p => p.batch_count === batchCount);
-    const batchFee = pricing ? Number(pricing.price) : batchCount * 3000;
+    const perBatchFee = (form.regular_cycles * 3220) + (form.grid_cycles * 7000);
+    const discountPct = getDiscount(batchCount);
+    const discountedPerBatch = Math.round(perBatchFee * (1 - discountPct));
+    const totalBatchFee = discountedPerBatch * batchCount;
+    const discountAmount = (perBatchFee * batchCount) - totalBatchFee;
+
     const todayStr = new Date().toISOString().split("T")[0];
     const applyRegFee = detectedStatus === "NEW" || detectedStatus === "REV" || (detectedStatus === "REN" && latestEndDate && todayStr > latestEndDate);
     const regFee = applyRegFee ? 500 : 0;
     const dropInAdj = eligibleDropIn ? Number(eligibleDropIn.amount) : 0;
     const isLateRenewal = detectedStatus === "REN" && latestEndDate ? todayStr > latestEndDate : false;
-    return { batchCount, batchFee, regFee, dropInAdj, total: Math.max(0, batchFee + regFee - dropInAdj), applyRegFee: !!applyRegFee, isLateRenewal };
+
+    const subtotal = Math.max(0, totalBatchFee + regFee - dropInAdj);
+    const gst = Math.round(subtotal * 0.18);
+    const total = subtotal + gst;
+
+    return { batchCount, perBatchFee, discountPct, discountAmount, totalBatchFee, regFee, dropInAdj, subtotal, gst, total, applyRegFee: !!applyRegFee, isLateRenewal };
   };
 
   const feeBreakdown = computeFeeBreakdown();
@@ -222,19 +238,9 @@ const EnrollmentsPage = () => {
   const handleEnroll = async () => {
     if (!form.student_id || form.batch_ids.length === 0) { toast.error("Select a student and at least one batch"); return; }
 
-    const { data: pricing } = await supabase.from("pricing_plans").select("*").eq("organization_id", 1).eq("batch_count", form.batch_ids.length).single();
+    const breakdown = computeFeeBreakdown();
     const todayStr = new Date().toISOString().split("T")[0];
-
-    const applyRegFee = detectedStatus === "NEW" || detectedStatus === "REV" || (detectedStatus === "REN" && latestEndDate && todayStr > latestEndDate);
-    const regFee = applyRegFee ? 500 : 0;
-    const isLateRenewal = detectedStatus === "REN" && latestEndDate ? todayStr > latestEndDate : false;
-
-    const baseAmount = pricing ? Number(pricing.price) : form.batch_ids.length * 3000;
-    let totalAmount = baseAmount + regFee;
-
-    // Apply drop-in adjustment
-    const dropInAdjustment = eligibleDropIn ? Number(eligibleDropIn.amount) : 0;
-    totalAmount = Math.max(0, totalAmount - dropInAdjustment);
+    const totalAmount = breakdown.total;
 
     const { data: payment, error: payError } = await supabase.from("payments").insert({
       organization_id: 1, student_id: Number(form.student_id), amount: totalAmount,
@@ -250,7 +256,7 @@ const EnrollmentsPage = () => {
     const enrollmentRecords = form.batch_ids.map((batchId) => ({
       organization_id: 1, student_id: Number(form.student_id), batch_id: Number(batchId),
       payment_id: payment.id, status_type: detectedStatus,
-      registration_fee_applied: !!applyRegFee, late_renewal: isLateRenewal,
+      registration_fee_applied: breakdown.applyRegFee, late_renewal: breakdown.isLateRenewal,
       start_date: startDate, end_date: endDate,
       subscription_plan_id: form.subscription_plan_id ? Number(form.subscription_plan_id) : null,
       start_cycle_id: form.start_cycle_id,
@@ -265,11 +271,11 @@ const EnrollmentsPage = () => {
       await supabase.from("drop_ins").update({ is_adjusted: true, adjusted_at: new Date().toISOString() }).eq("id", eligibleDropIn.id);
     }
 
-    toast.success(`Enrolled successfully! Amount: ₹${totalAmount.toLocaleString()}${dropInAdjustment > 0 ? ` (Drop-in adjusted: -₹${dropInAdjustment})` : ""}`);
+    toast.success(`Enrolled successfully! Amount: ₹${totalAmount.toLocaleString()}${breakdown.dropInAdj > 0 ? ` (Drop-in adjusted: -₹${breakdown.dropInAdj})` : ""}`);
     setEligibleDropIn(null);
     setDetectedStatus("NEW");
     setLatestEndDate(null);
-    setForm({ student_id: "", batch_ids: [], payment_mode: "cash", subscription_plan_id: "", computed_start: "", computed_end: "", start_cycle_name: "", end_cycle_name: "", start_cycle_id: null, end_cycle_id: null });
+    setForm({ student_id: "", batch_ids: [], payment_mode: "cash", subscription_plan_id: "", computed_start: "", computed_end: "", start_cycle_name: "", end_cycle_name: "", start_cycle_id: null, end_cycle_id: null, regular_cycles: 1, grid_cycles: 0 });
     setDialogOpen(false);
     fetchData();
   };
@@ -365,9 +371,13 @@ const EnrollmentsPage = () => {
               {form.batch_ids.length > 0 && (
                 <div className="p-3 rounded-lg border border-border bg-muted/30 text-sm space-y-1">
                   <p className="font-medium text-foreground mb-2">Fee Breakdown</p>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Batch fees ({feeBreakdown.batchCount} batch{feeBreakdown.batchCount > 1 ? "es" : ""})</span><span>₹{feeBreakdown.batchFee.toLocaleString()}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Per batch ({form.regular_cycles}R × ₹3,220 + {form.grid_cycles}G × ₹7,000)</span><span>₹{feeBreakdown.perBatchFee.toLocaleString()}</span></div>
+                  {feeBreakdown.discountPct > 0 && <div className="flex justify-between text-success"><span>Discount ({Math.round(feeBreakdown.discountPct * 100)}% for {feeBreakdown.batchCount} batches)</span><span>-₹{feeBreakdown.discountAmount.toLocaleString()}</span></div>}
+                  <div className="flex justify-between"><span className="text-muted-foreground">Batch total ({feeBreakdown.batchCount} batch{feeBreakdown.batchCount > 1 ? "es" : ""})</span><span>₹{feeBreakdown.totalBatchFee.toLocaleString()}</span></div>
                   {feeBreakdown.regFee > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Registration fee ({detectedStatus}{feeBreakdown.isLateRenewal ? " - Late" : ""})</span><span>₹{feeBreakdown.regFee}</span></div>}
                   {feeBreakdown.dropInAdj > 0 && <div className="flex justify-between text-success"><span>Drop-in adjustment</span><span>-₹{feeBreakdown.dropInAdj.toLocaleString()}</span></div>}
+                  <div className="flex justify-between border-t border-border pt-1 mt-1"><span className="text-muted-foreground">Subtotal</span><span>₹{feeBreakdown.subtotal.toLocaleString()}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">GST (18%)</span><span>₹{feeBreakdown.gst.toLocaleString()}</span></div>
                   <div className="flex justify-between font-semibold border-t border-border pt-1 mt-1"><span>Total</span><span>₹{feeBreakdown.total.toLocaleString()}</span></div>
                 </div>
               )}
