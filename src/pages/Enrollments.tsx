@@ -178,7 +178,11 @@ const EnrollmentsPage = () => {
 
     const baseAmount = pricing ? Number(pricing.price) : form.batch_ids.length * 3000;
     const applyRegFee = form.status_type === "NEW" || form.status_type === "REV";
-    const totalAmount = baseAmount + (applyRegFee ? regFee : 0);
+    let totalAmount = baseAmount + (applyRegFee ? regFee : 0);
+
+    // Apply drop-in adjustment
+    const dropInAdjustment = eligibleDropIn ? Number(eligibleDropIn.amount) : 0;
+    totalAmount = Math.max(0, totalAmount - dropInAdjustment);
 
     const { data: payment, error: payError } = await supabase.from("payments").insert({
       organization_id: 1, student_id: Number(form.student_id), amount: totalAmount,
@@ -204,7 +208,13 @@ const EnrollmentsPage = () => {
     const { error } = await supabase.from("enrollments").insert(enrollmentRecords);
     if (error) { toast.error("Enrollment failed"); return; }
 
-    toast.success(`Enrolled successfully! Amount: ₹${totalAmount}`);
+    // Mark drop-in as adjusted
+    if (eligibleDropIn) {
+      await supabase.from("drop_ins").update({ is_adjusted: true, adjusted_at: new Date().toISOString() }).eq("id", eligibleDropIn.id);
+    }
+
+    toast.success(`Enrolled successfully! Amount: ₹${totalAmount}${dropInAdjustment > 0 ? ` (Drop-in adjusted: -₹${dropInAdjustment})` : ""}`);
+    setEligibleDropIn(null);
     setForm({ student_id: "", batch_ids: [], payment_mode: "cash", status_type: "NEW", subscription_plan_id: "", computed_start: "", computed_end: "", start_cycle_name: "", end_cycle_name: "", start_cycle_id: null, end_cycle_id: null });
     setDialogOpen(false);
     fetchData();
