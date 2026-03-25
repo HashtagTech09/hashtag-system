@@ -21,6 +21,7 @@ const EnrollmentsPage = () => {
   const [subPlans, setSubPlans] = useState<any[]>([]);
   const [subPlanCycles, setSubPlanCycles] = useState<any[]>([]);
   const [planCycles, setPlanCycles] = useState<any[]>([]);
+  const [eligibleDropIn, setEligibleDropIn] = useState<any>(null);
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState({
@@ -48,6 +49,33 @@ const EnrollmentsPage = () => {
 
   useEffect(() => { fetchData(); }, []);
 
+  // Check for eligible drop-ins when student + batches change
+  useEffect(() => {
+    const checkDropIns = async () => {
+      if (!form.student_id || form.batch_ids.length === 0) { setEligibleDropIn(null); return; }
+      const todayStr = new Date().toISOString().split("T")[0];
+      const selectedStyles = batches.filter(b => form.batch_ids.includes(String(b.id))).map(b => b.style).filter(Boolean);
+      if (selectedStyles.length === 0) { setEligibleDropIn(null); return; }
+
+      const { data } = await supabase.from("drop_ins")
+        .select("*, batch_sessions(session_date, style, start_time, end_time, batches(name))")
+        .eq("student_id", Number(form.student_id))
+        .eq("is_adjusted", false)
+        .eq("organization_id", 1)
+        .order("created_at", { ascending: false });
+
+      if (!data || data.length === 0) { setEligibleDropIn(null); return; }
+
+      // Find most recent eligible: session_date >= today AND style matches
+      const eligible = data.find(d => {
+        const sess = d.batch_sessions;
+        if (!sess) return false;
+        return sess.session_date >= todayStr && selectedStyles.includes(sess.style);
+      });
+      setEligibleDropIn(eligible || null);
+    };
+    checkDropIns();
+  }, [form.student_id, form.batch_ids, batches]);
   // Find the first cycle with open registration (or next upcoming)
   const getStartCycleIndex = (): number => {
     const todayStr = new Date().toISOString().split("T")[0];
@@ -150,7 +178,11 @@ const EnrollmentsPage = () => {
 
     const baseAmount = pricing ? Number(pricing.price) : form.batch_ids.length * 3000;
     const applyRegFee = form.status_type === "NEW" || form.status_type === "REV";
-    const totalAmount = baseAmount + (applyRegFee ? regFee : 0);
+    let totalAmount = baseAmount + (applyRegFee ? regFee : 0);
+
+    // Apply drop-in adjustment
+    const dropInAdjustment = eligibleDropIn ? Number(eligibleDropIn.amount) : 0;
+    totalAmount = Math.max(0, totalAmount - dropInAdjustment);
 
     const { data: payment, error: payError } = await supabase.from("payments").insert({
       organization_id: 1, student_id: Number(form.student_id), amount: totalAmount,
@@ -176,7 +208,13 @@ const EnrollmentsPage = () => {
     const { error } = await supabase.from("enrollments").insert(enrollmentRecords);
     if (error) { toast.error("Enrollment failed"); return; }
 
-    toast.success(`Enrolled successfully! Amount: ₹${totalAmount}`);
+    // Mark drop-in as adjusted
+    if (eligibleDropIn) {
+      await supabase.from("drop_ins").update({ is_adjusted: true, adjusted_at: new Date().toISOString() }).eq("id", eligibleDropIn.id);
+    }
+
+    toast.success(`Enrolled successfully! Amount: ₹${totalAmount}${dropInAdjustment > 0 ? ` (Drop-in adjusted: -₹${dropInAdjustment})` : ""}`);
+    setEligibleDropIn(null);
     setForm({ student_id: "", batch_ids: [], payment_mode: "cash", status_type: "NEW", subscription_plan_id: "", computed_start: "", computed_end: "", start_cycle_name: "", end_cycle_name: "", start_cycle_id: null, end_cycle_id: null });
     setDialogOpen(false);
     fetchData();
@@ -252,6 +290,15 @@ const EnrollmentsPage = () => {
                   ))}
                 </div>
               </div>
+              {eligibleDropIn && (
+                <div className="p-3 rounded-lg border border-success/30 bg-success/10 text-sm">
+                  <p className="text-success font-medium">Drop-in available for adjustment</p>
+                  <p className="text-muted-foreground mt-1">
+                    Session: {eligibleDropIn.batch_sessions?.session_date} • Style: {eligibleDropIn.batch_sessions?.style} • Amount: <span className="font-medium text-foreground">₹{Number(eligibleDropIn.amount).toLocaleString()}</span>
+                  </p>
+                  <p className="text-muted-foreground mt-1">This amount will be deducted from the enrollment fee.</p>
+                </div>
+              )}
               <div><Label>Payment Mode</Label>
                 <Select value={form.payment_mode} onValueChange={(v) => setForm({ ...form, payment_mode: v })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>

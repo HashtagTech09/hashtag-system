@@ -15,6 +15,7 @@ import PaymentsPage from "./pages/Payments";
 import AttendancePage from "./pages/Attendance";
 import SettingsPage from "./pages/Settings";
 import PlanCyclesPage from "./pages/PlanCycles";
+import DropInsPage from "./pages/DropIns";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -43,6 +44,7 @@ const AppRoutes = () => (
     <Route path="/batches" element={<ProtectedRoute><BatchesPage /></ProtectedRoute>} />
     <Route path="/plan-cycles" element={<ProtectedRoute><PlanCyclesPage /></ProtectedRoute>} />
     <Route path="/enrollments" element={<ProtectedRoute><EnrollmentsPage /></ProtectedRoute>} />
+    <Route path="/drop-ins" element={<ProtectedRoute><DropInsPage /></ProtectedRoute>} />
     <Route path="/payments" element={<ProtectedRoute><PaymentsPage /></ProtectedRoute>} />
     <Route path="/attendance" element={<ProtectedRoute><AttendancePage /></ProtectedRoute>} />
     <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
