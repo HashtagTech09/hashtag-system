@@ -51,6 +51,36 @@ const EnrollmentsPage = () => {
 
   useEffect(() => { fetchData(); }, []);
 
+  // Auto-detect student status based on enrollment history
+  useEffect(() => {
+    const detectStatus = async () => {
+      if (!form.student_id) { setDetectedStatus("NEW"); setLatestEndDate(null); return; }
+      const { data } = await supabase.from("enrollments")
+        .select("end_date")
+        .eq("student_id", Number(form.student_id))
+        .eq("organization_id", 1)
+        .order("end_date", { ascending: false })
+        .limit(1);
+      if (!data || data.length === 0) { setDetectedStatus("NEW"); setLatestEndDate(null); return; }
+      const latest = data[0].end_date;
+      setLatestEndDate(latest);
+      const todayStr = new Date().toISOString().split("T")[0];
+      if (latest >= todayStr) { setDetectedStatus("REN"); }
+      else {
+        // Check grace: if within grace_days of the active cycle, still REN (late)
+        const activeCycle = planCycles.find(c => c.is_active);
+        const graceDays = activeCycle?.grace_days || 14;
+        const latestDate = new Date(latest);
+        const graceEnd = new Date(latestDate);
+        graceEnd.setDate(graceEnd.getDate() + graceDays);
+        const graceEndStr = graceEnd.toISOString().split("T")[0];
+        if (todayStr <= graceEndStr) { setDetectedStatus("REN"); }
+        else { setDetectedStatus("REV"); }
+      }
+    };
+    detectStatus();
+  }, [form.student_id, planCycles]);
+
   // Check for eligible drop-ins when student + batches change
   useEffect(() => {
     const checkDropIns = async () => {
