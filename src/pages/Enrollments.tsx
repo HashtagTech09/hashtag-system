@@ -358,6 +358,15 @@ const EnrollmentsPage = () => {
                   </SelectContent>
                 </Select>
               </div>
+              {form.batch_ids.length > 0 && (
+                <div className="p-3 rounded-lg border border-border bg-muted/30 text-sm space-y-1">
+                  <p className="font-medium text-foreground mb-2">Fee Breakdown</p>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Batch fees ({feeBreakdown.batchCount} batch{feeBreakdown.batchCount > 1 ? "es" : ""})</span><span>₹{feeBreakdown.batchFee.toLocaleString()}</span></div>
+                  {feeBreakdown.regFee > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Registration fee ({detectedStatus}{feeBreakdown.isLateRenewal ? " - Late" : ""})</span><span>₹{feeBreakdown.regFee}</span></div>}
+                  {feeBreakdown.dropInAdj > 0 && <div className="flex justify-between text-success"><span>Drop-in adjustment</span><span>-₹{feeBreakdown.dropInAdj.toLocaleString()}</span></div>}
+                  <div className="flex justify-between font-semibold border-t border-border pt-1 mt-1"><span>Total</span><span>₹{feeBreakdown.total.toLocaleString()}</span></div>
+                </div>
+              )}
               <Button className="w-full gradient-primary" onClick={handleEnroll}>Confirm Enrollment</Button>
             </div>
           </DialogContent>
