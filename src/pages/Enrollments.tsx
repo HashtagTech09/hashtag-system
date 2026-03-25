@@ -22,6 +22,7 @@ const EnrollmentsPage = () => {
   const [subPlanCycles, setSubPlanCycles] = useState<any[]>([]);
   const [planCycles, setPlanCycles] = useState<any[]>([]);
   const [eligibleDropIn, setEligibleDropIn] = useState<any>(null);
+  const [pricingPlans, setPricingPlans] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [detectedStatus, setDetectedStatus] = useState<string>("NEW");
@@ -33,13 +34,14 @@ const EnrollmentsPage = () => {
   });
 
   const fetchData = async () => {
-    const [enrollRes, studentRes, batchRes, planRes, seqRes, cycleRes] = await Promise.all([
+    const [enrollRes, studentRes, batchRes, planRes, seqRes, cycleRes, pricingRes] = await Promise.all([
       supabase.from("enrollments").select("*, students(name, phone, users(phone)), batches(name), subscription_plans(name), start_cycle:plan_cycles!enrollments_start_cycle_id_fkey(name), end_cycle:plan_cycles!enrollments_end_cycle_id_fkey(name)").eq("organization_id", 1).order("created_at", { ascending: false }),
       supabase.from("students").select("*").eq("organization_id", 1).order("name"),
       supabase.from("batches").select("*").eq("organization_id", 1).order("name"),
       supabase.from("subscription_plans").select("*").eq("organization_id", 1).eq("is_active", true).order("id"),
       supabase.from("subscription_plan_cycles").select("*").order("sequence_order"),
       supabase.from("plan_cycles").select("*").eq("organization_id", 1).order("start_date"),
+      supabase.from("pricing_plans").select("*").eq("organization_id", 1).order("batch_count"),
     ]);
     setEnrollments(enrollRes.data || []);
     setStudents(studentRes.data || []);
@@ -47,6 +49,7 @@ const EnrollmentsPage = () => {
     setSubPlans(planRes.data || []);
     setSubPlanCycles(seqRes.data || []);
     setPlanCycles(cycleRes.data || []);
+    setPricingPlans(pricingRes.data || []);
   };
 
   useEffect(() => { fetchData(); }, []);
@@ -204,7 +207,8 @@ const EnrollmentsPage = () => {
   // Compute fee breakdown for display
   const computeFeeBreakdown = () => {
     const batchCount = form.batch_ids.length;
-    const batchFee = batchCount * 3000; // Will be overridden by pricing_plans lookup in handleEnroll
+    const pricing = pricingPlans.find(p => p.batch_count === batchCount);
+    const batchFee = pricing ? Number(pricing.price) : batchCount * 3000;
     const todayStr = new Date().toISOString().split("T")[0];
     const applyRegFee = detectedStatus === "NEW" || detectedStatus === "REV" || (detectedStatus === "REN" && latestEndDate && todayStr > latestEndDate);
     const regFee = applyRegFee ? 500 : 0;
