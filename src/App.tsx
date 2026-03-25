@@ -15,6 +15,7 @@ import PaymentsPage from "./pages/Payments";
 import AttendancePage from "./pages/Attendance";
 import SettingsPage from "./pages/Settings";
 import PlanCyclesPage from "./pages/PlanCycles";
+import DropInsPage from "./pages/DropIns";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
