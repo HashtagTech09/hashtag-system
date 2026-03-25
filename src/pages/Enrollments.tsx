@@ -209,17 +209,28 @@ const EnrollmentsPage = () => {
     }
   };
 
-  // Compute fee breakdown for display
+  const DISCOUNT_TIERS: Record<number, number> = { 1: 0, 2: 0.12, 3: 0.13, 4: 0.14 };
+  const getDiscount = (count: number) => DISCOUNT_TIERS[count] ?? 0.15;
+
   const computeFeeBreakdown = () => {
     const batchCount = form.batch_ids.length;
-    const pricing = pricingPlans.find(p => p.batch_count === batchCount);
-    const batchFee = pricing ? Number(pricing.price) : batchCount * 3000;
+    const perBatchFee = (form.regular_cycles * 3220) + (form.grid_cycles * 7000);
+    const discountPct = getDiscount(batchCount);
+    const discountedPerBatch = Math.round(perBatchFee * (1 - discountPct));
+    const totalBatchFee = discountedPerBatch * batchCount;
+    const discountAmount = (perBatchFee * batchCount) - totalBatchFee;
+
     const todayStr = new Date().toISOString().split("T")[0];
     const applyRegFee = detectedStatus === "NEW" || detectedStatus === "REV" || (detectedStatus === "REN" && latestEndDate && todayStr > latestEndDate);
     const regFee = applyRegFee ? 500 : 0;
     const dropInAdj = eligibleDropIn ? Number(eligibleDropIn.amount) : 0;
     const isLateRenewal = detectedStatus === "REN" && latestEndDate ? todayStr > latestEndDate : false;
-    return { batchCount, batchFee, regFee, dropInAdj, total: Math.max(0, batchFee + regFee - dropInAdj), applyRegFee: !!applyRegFee, isLateRenewal };
+
+    const subtotal = Math.max(0, totalBatchFee + regFee - dropInAdj);
+    const gst = Math.round(subtotal * 0.18);
+    const total = subtotal + gst;
+
+    return { batchCount, perBatchFee, discountPct, discountAmount, totalBatchFee, regFee, dropInAdj, subtotal, gst, total, applyRegFee: !!applyRegFee, isLateRenewal };
   };
 
   const feeBreakdown = computeFeeBreakdown();
