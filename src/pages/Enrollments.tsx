@@ -290,6 +290,15 @@ const EnrollmentsPage = () => {
                   ))}
                 </div>
               </div>
+              {eligibleDropIn && (
+                <div className="p-3 rounded-lg border border-success/30 bg-success/10 text-sm">
+                  <p className="text-success font-medium">Drop-in available for adjustment</p>
+                  <p className="text-muted-foreground mt-1">
+                    Session: {eligibleDropIn.batch_sessions?.session_date} • Style: {eligibleDropIn.batch_sessions?.style} • Amount: <span className="font-medium text-foreground">₹{Number(eligibleDropIn.amount).toLocaleString()}</span>
+                  </p>
+                  <p className="text-muted-foreground mt-1">This amount will be deducted from the enrollment fee.</p>
+                </div>
+              )}
               <div><Label>Payment Mode</Label>
                 <Select value={form.payment_mode} onValueChange={(v) => setForm({ ...form, payment_mode: v })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
