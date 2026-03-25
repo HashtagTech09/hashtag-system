@@ -1,25 +1,28 @@
 
 
-# Fix User Deletion
+# Fix User Deletion — Handle Students Dependency
 
 ## Problem
-The `handleDelete` function in `Staff.tsx` silently fails because:
-1. It doesn't check the error response from the delete call
-2. Related records in `user_roles` (and potentially `students`) reference the user — even without declared foreign keys, the database may have implicit constraints or the delete may silently fail
+Deleting a user fails because the `students` table has records referencing `user_id` (not-null constraint). The current code only cleans up `user_roles` but not `students`.
 
 ## Fix
 
 ### `src/pages/Staff.tsx` — Update `handleDelete`
-1. Delete related `user_roles` records first (where `user_id = id`)
-2. Then delete the user
-3. Check for errors on both calls and show appropriate toast messages
+Add a step to delete related `students` records before deleting `user_roles` and the user:
 
 ```typescript
 const handleDelete = async (id: number) => {
+  // 1. Delete related students
+  const { error: studentsError } = await supabase
+    .from("students").delete().eq("user_id", id);
+  if (studentsError) { toast.error("Failed to delete linked students"); return; }
+
+  // 2. Delete related user_roles
   const { error: rolesError } = await supabase
     .from("user_roles").delete().eq("user_id", id);
   if (rolesError) { toast.error("Failed to delete user roles"); return; }
 
+  // 3. Delete the user
   const { error } = await supabase.from("users").delete().eq("id", id);
   if (error) { toast.error(error.message); return; }
 
@@ -28,5 +31,5 @@ const handleDelete = async (id: number) => {
 };
 ```
 
-This ensures related `user_roles` are cleaned up before the user record is removed, and any errors are surfaced to the admin.
+This is a single-file change — no migrations needed.
 
