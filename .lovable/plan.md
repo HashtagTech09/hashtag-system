@@ -1,79 +1,55 @@
-
-
-# Drop-in System with Session-Based Style Tracking
+# Fee System with Status-Based ₹500 Registration Charge
 
 ## Overview
-Rebuild the drop-in system to be session-based, with style snapshots on batch_sessions for accurate fee adjustment during enrollment.
 
-## 1. Database Changes
+Replace the current manual status_type selection with auto-detection based on enrollment history. Apply ₹500 registration fee conditionally: always for NEW/REV, only after expiry for REN. Add a fee breakdown display before confirmation.
 
-### Alter `batch_sessions` — add `style` column
-```sql
-ALTER TABLE batch_sessions ADD COLUMN style text;
+## Changes
+
+### 1. Auto-detect student status (`Enrollments.tsx`)
+
+When a student is selected, query their enrollment history:
+
+- **No enrollments** → `NEW`
+- **Has enrollment with `end_date >= today**` → `REN` (active)
+- **All enrollments** `end_date < today< end_date + grace days` → `REN` (Late , charge 500)
+- **All enrollments `end_date < today**` → `REV` (lapsed)
+
+Remove the manual status_type dropdown — compute it automatically. Store the latest enrollment's `end_date` for REN fee logic.
+
+### 2. Registration fee logic
+
 ```
-Backfill existing rows: `UPDATE batch_sessions bs SET style = b.style FROM batches b WHERE bs.batch_id = b.id;`
-
-### Drop and recreate `drop_ins` table
-The existing `drop_ins` table uses `batch_id` + `class_date`. Replace with session-based design:
-
-```sql
-DROP TABLE IF EXISTS drop_ins;
-
-CREATE TABLE drop_ins (
-  id bigint generated always as identity primary key,
-  organization_id bigint NOT NULL,
-  student_id bigint NOT NULL,
-  batch_session_id bigint NOT NULL REFERENCES batch_sessions(id),
-  amount numeric NOT NULL,
-  payment_id bigint,
-  is_adjusted boolean NOT NULL DEFAULT false,
-  adjusted_at timestamptz,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
+if (status === "NEW" || status === "REV") → regFee = ₹500
+if (status === "REN") → regFee = (today > latest_end_date) ? ₹500 : ₹0
 ```
-RLS: authenticated full CRUD (matching existing pattern).
 
-## 2. Session Generation — Snapshot Style
+Registration fee applied once per transaction (not per batch).
 
-### `BatchSessionsDialog.tsx`
-In `handleGenerate`, add `style: batch.style` to each row inserted into `batch_sessions`. This captures the style at generation time.
+### 3. Fee breakdown display
 
-## 3. Drop-in Booking Page (`src/pages/DropIns.tsx` — new/rewrite)
+Before the "Confirm Enrollment" button, show a summary card:
 
-### Flow
-1. Select student (searchable dropdown)
-2. Select batch → fetch upcoming `batch_sessions` (status = scheduled, date >= today)
-3. Select a specific session (shows date, time, style)
-4. Enter amount (default from `system_settings` drop-in fee)
-5. Save: create payment + drop_in record with `batch_session_id`
 
-### List View
-- Show all drop-ins with student name, session date, style, amount, adjusted status
-- Join through `batch_sessions` for date/style display
+| Line Item              | Amount     |
+| ---------------------- | ---------- |
+| Batch fees (N batches) | ₹X,XXX     |
+| Registration fee (NEW) | ₹500       |
+| Drop-in adjustment     | -₹XXX      |
+| **Total**              | **₹X,XXX** |
 
-## 4. Enrollment Adjustment Integration (`src/pages/Enrollments.tsx`)
 
-### During enrollment
-When a student is selected and batches are chosen:
+### 4. Implementation details
 
-1. Query `drop_ins` where `student_id` matches, `is_adjusted = false`
-2. Join with `batch_sessions` to get `session_date` and `style`
-3. Filter eligible drop-ins:
-   - `current_time <= session_date at 23:59:59` (same-day or future)
-   - `batch_sessions.style` matches any selected batch's style
-4. If eligible drop-in found (use most recent):
-   - Show banner: "Drop-in available for adjustment" with session date, style, amount
-   - Auto-deduct from total: `final_fee = plan_fee - drop_in.amount`
-5. After successful enrollment payment:
-   - Update `drop_ins` set `is_adjusted = true`, `adjusted_at = now()`
+- Add `useEffect` on `form.student_id` change to query `enrollments` for that student, determine status and latest `end_date`
+- Store computed `status_type` and `latestEndDate` in component state
+- Update `handleEnroll` to use auto-detected status for fee calculation
+- Keep status_type as read-only badge in the form (not editable)
+- REN late_renewal flag: set `true` if `today > latest_end_date`
 
-## 5. Summary of Deliverables
+### File: `src/pages/Enrollments.tsx`
 
-| # | Change | File(s) |
-|---|--------|---------|
-| 1 | Add `style` column to `batch_sessions`, backfill | Migration |
-| 2 | Recreate `drop_ins` table (session-based) + RLS | Migration |
-| 3 | Snapshot `batch.style` during session generation | `BatchSessionsDialog.tsx` |
-| 4 | Rewrite Drop-ins page with session-based booking | `src/pages/DropIns.tsx` |
-| 5 | Add adjustment logic during enrollment | `src/pages/Enrollments.tsx` |
-
+- Add student status auto-detection effect
+- Replace status dropdown with computed read-only badge
+- Update `handleEnroll` fee logic for REN expiry check
+- Add fee breakdown UI section before confirm button
