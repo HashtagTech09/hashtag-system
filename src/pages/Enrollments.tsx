@@ -21,6 +21,7 @@ const EnrollmentsPage = () => {
   const [subPlans, setSubPlans] = useState<any[]>([]);
   const [subPlanCycles, setSubPlanCycles] = useState<any[]>([]);
   const [planCycles, setPlanCycles] = useState<any[]>([]);
+  const [eligibleDropIn, setEligibleDropIn] = useState<any>(null);
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState({
