@@ -271,11 +271,11 @@ const EnrollmentsPage = () => {
       await supabase.from("drop_ins").update({ is_adjusted: true, adjusted_at: new Date().toISOString() }).eq("id", eligibleDropIn.id);
     }
 
-    toast.success(`Enrolled successfully! Amount: ₹${totalAmount.toLocaleString()}${dropInAdjustment > 0 ? ` (Drop-in adjusted: -₹${dropInAdjustment})` : ""}`);
+    toast.success(`Enrolled successfully! Amount: ₹${totalAmount.toLocaleString()}${breakdown.dropInAdj > 0 ? ` (Drop-in adjusted: -₹${breakdown.dropInAdj})` : ""}`);
     setEligibleDropIn(null);
     setDetectedStatus("NEW");
     setLatestEndDate(null);
-    setForm({ student_id: "", batch_ids: [], payment_mode: "cash", subscription_plan_id: "", computed_start: "", computed_end: "", start_cycle_name: "", end_cycle_name: "", start_cycle_id: null, end_cycle_id: null });
+    setForm({ student_id: "", batch_ids: [], payment_mode: "cash", subscription_plan_id: "", computed_start: "", computed_end: "", start_cycle_name: "", end_cycle_name: "", start_cycle_id: null, end_cycle_id: null, regular_cycles: 1, grid_cycles: 0 });
     setDialogOpen(false);
     fetchData();
   };
