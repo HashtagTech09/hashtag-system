@@ -78,6 +78,7 @@ export type Database = {
           session_date: string
           start_time: string
           status: string
+          style: string | null
         }
         Insert: {
           available_slots?: number | null
@@ -90,6 +91,7 @@ export type Database = {
           session_date: string
           start_time: string
           status?: string
+          style?: string | null
         }
         Update: {
           available_slots?: number | null
@@ -102,6 +104,7 @@ export type Database = {
           session_date?: string
           start_time?: string
           status?: string
+          style?: string | null
         }
         Relationships: [
           {
@@ -186,44 +189,44 @@ export type Database = {
       }
       drop_ins: {
         Row: {
-          adjustable_until: string | null
-          adjusted: boolean | null
+          adjusted_at: string | null
           amount: number
-          batch_id: number
-          class_date: string
+          batch_session_id: number
           created_at: string
           id: number
+          is_adjusted: boolean
           organization_id: number
+          payment_id: number | null
           student_id: number
         }
         Insert: {
-          adjustable_until?: string | null
-          adjusted?: boolean | null
+          adjusted_at?: string | null
           amount: number
-          batch_id: number
-          class_date: string
+          batch_session_id: number
           created_at?: string
           id?: never
+          is_adjusted?: boolean
           organization_id: number
+          payment_id?: number | null
           student_id: number
         }
         Update: {
-          adjustable_until?: string | null
-          adjusted?: boolean | null
+          adjusted_at?: string | null
           amount?: number
-          batch_id?: number
-          class_date?: string
+          batch_session_id?: number
           created_at?: string
           id?: never
+          is_adjusted?: boolean
           organization_id?: number
+          payment_id?: number | null
           student_id?: number
         }
         Relationships: [
           {
-            foreignKeyName: "drop_ins_batch_id_fkey"
-            columns: ["batch_id"]
+            foreignKeyName: "drop_ins_batch_session_id_fkey"
+            columns: ["batch_session_id"]
             isOneToOne: false
-            referencedRelation: "batches"
+            referencedRelation: "batch_sessions"
             referencedColumns: ["id"]
           },
           {
@@ -231,6 +234,13 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "drop_ins_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
             referencedColumns: ["id"]
           },
           {
