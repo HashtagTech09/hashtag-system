@@ -98,6 +98,7 @@ export default function BatchSessionsDialog({ open, onOpenChange, batch }: Props
       day: p.day,
       start_time: p.start_time,
       end_time: p.end_time,
+      style: batch.style || null,
     }));
     const { error } = await supabase.from("batch_sessions").upsert(rows, { onConflict: "batch_id,session_date,start_time" });
     setLoading(false);
