@@ -304,15 +304,14 @@ const EnrollmentsPage = () => {
                   <SelectContent>{students.map((s) => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
-              <div><Label>Enrollment Type</Label>
-                <Select value={form.status_type} onValueChange={(v) => setForm({ ...form, status_type: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="NEW">New Enrollment</SelectItem>
-                    <SelectItem value="REN">Renewal</SelectItem>
-                    <SelectItem value="REV">Revival</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div>
+                <Label>Enrollment Type</Label>
+                <div className="mt-1.5">
+                  <Badge className={`${statusColors[detectedStatus] || ""} text-sm px-3 py-1`} variant="secondary">
+                    {detectedStatus === "NEW" ? "New Enrollment" : detectedStatus === "REN" ? (feeBreakdown.isLateRenewal ? "Renewal (Late)" : "Renewal") : "Revival"}
+                  </Badge>
+                  {form.student_id && <span className="text-xs text-muted-foreground ml-2">Auto-detected</span>}
+                </div>
               </div>
               <div>
                 <Label>Subscription Plan (optional)</Label>
