@@ -201,16 +201,32 @@ const EnrollmentsPage = () => {
     }
   };
 
+  // Compute fee breakdown for display
+  const computeFeeBreakdown = () => {
+    const batchCount = form.batch_ids.length;
+    const batchFee = batchCount * 3000; // Will be overridden by pricing_plans lookup in handleEnroll
+    const todayStr = new Date().toISOString().split("T")[0];
+    const applyRegFee = detectedStatus === "NEW" || detectedStatus === "REV" || (detectedStatus === "REN" && latestEndDate && todayStr > latestEndDate);
+    const regFee = applyRegFee ? 500 : 0;
+    const dropInAdj = eligibleDropIn ? Number(eligibleDropIn.amount) : 0;
+    const isLateRenewal = detectedStatus === "REN" && latestEndDate ? todayStr > latestEndDate : false;
+    return { batchCount, batchFee, regFee, dropInAdj, total: Math.max(0, batchFee + regFee - dropInAdj), applyRegFee: !!applyRegFee, isLateRenewal };
+  };
+
+  const feeBreakdown = computeFeeBreakdown();
+
   const handleEnroll = async () => {
     if (!form.student_id || form.batch_ids.length === 0) { toast.error("Select a student and at least one batch"); return; }
 
     const { data: pricing } = await supabase.from("pricing_plans").select("*").eq("organization_id", 1).eq("batch_count", form.batch_ids.length).single();
-    const { data: settings } = await supabase.from("system_settings").select("*").eq("organization_id", 1);
-    const regFee = Number(settings?.find((s) => s.key === "registration_fee")?.value || 0);
+    const todayStr = new Date().toISOString().split("T")[0];
+
+    const applyRegFee = detectedStatus === "NEW" || detectedStatus === "REV" || (detectedStatus === "REN" && latestEndDate && todayStr > latestEndDate);
+    const regFee = applyRegFee ? 500 : 0;
+    const isLateRenewal = detectedStatus === "REN" && latestEndDate ? todayStr > latestEndDate : false;
 
     const baseAmount = pricing ? Number(pricing.price) : form.batch_ids.length * 3000;
-    const applyRegFee = form.status_type === "NEW" || form.status_type === "REV";
-    let totalAmount = baseAmount + (applyRegFee ? regFee : 0);
+    let totalAmount = baseAmount + regFee;
 
     // Apply drop-in adjustment
     const dropInAdjustment = eligibleDropIn ? Number(eligibleDropIn.amount) : 0;
@@ -229,8 +245,8 @@ const EnrollmentsPage = () => {
 
     const enrollmentRecords = form.batch_ids.map((batchId) => ({
       organization_id: 1, student_id: Number(form.student_id), batch_id: Number(batchId),
-      payment_id: payment.id, status_type: form.status_type,
-      registration_fee_applied: applyRegFee, late_renewal: false,
+      payment_id: payment.id, status_type: detectedStatus,
+      registration_fee_applied: !!applyRegFee, late_renewal: isLateRenewal,
       start_date: startDate, end_date: endDate,
       subscription_plan_id: form.subscription_plan_id ? Number(form.subscription_plan_id) : null,
       start_cycle_id: form.start_cycle_id,
@@ -245,9 +261,11 @@ const EnrollmentsPage = () => {
       await supabase.from("drop_ins").update({ is_adjusted: true, adjusted_at: new Date().toISOString() }).eq("id", eligibleDropIn.id);
     }
 
-    toast.success(`Enrolled successfully! Amount: ₹${totalAmount}${dropInAdjustment > 0 ? ` (Drop-in adjusted: -₹${dropInAdjustment})` : ""}`);
+    toast.success(`Enrolled successfully! Amount: ₹${totalAmount.toLocaleString()}${dropInAdjustment > 0 ? ` (Drop-in adjusted: -₹${dropInAdjustment})` : ""}`);
     setEligibleDropIn(null);
-    setForm({ student_id: "", batch_ids: [], payment_mode: "cash", status_type: "NEW", subscription_plan_id: "", computed_start: "", computed_end: "", start_cycle_name: "", end_cycle_name: "", start_cycle_id: null, end_cycle_id: null });
+    setDetectedStatus("NEW");
+    setLatestEndDate(null);
+    setForm({ student_id: "", batch_ids: [], payment_mode: "cash", subscription_plan_id: "", computed_start: "", computed_end: "", start_cycle_name: "", end_cycle_name: "", start_cycle_id: null, end_cycle_id: null });
     setDialogOpen(false);
     fetchData();
   };
