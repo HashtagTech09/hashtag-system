@@ -207,7 +207,8 @@ const EnrollmentsPage = () => {
   // Compute fee breakdown for display
   const computeFeeBreakdown = () => {
     const batchCount = form.batch_ids.length;
-    const batchFee = batchCount * 3000; // Will be overridden by pricing_plans lookup in handleEnroll
+    const pricing = pricingPlans.find(p => p.batch_count === batchCount);
+    const batchFee = pricing ? Number(pricing.price) : batchCount * 3000;
     const todayStr = new Date().toISOString().split("T")[0];
     const applyRegFee = detectedStatus === "NEW" || detectedStatus === "REV" || (detectedStatus === "REN" && latestEndDate && todayStr > latestEndDate);
     const regFee = applyRegFee ? 500 : 0;
