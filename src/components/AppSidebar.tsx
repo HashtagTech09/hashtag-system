@@ -40,6 +40,7 @@ const mainItems = [
 
 const operationItems = [
   { title: "Enrollments", url: "/enrollments", icon: ClipboardList },
+  { title: "Drop-ins", url: "/drop-ins", icon: Zap },
   { title: "Payments", url: "/payments", icon: CreditCard },
   { title: "Attendance", url: "/attendance", icon: UserCheck },
   { title: "Settings", url: "/settings", icon: Settings },
