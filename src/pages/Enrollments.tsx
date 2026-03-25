@@ -24,8 +24,10 @@ const EnrollmentsPage = () => {
   const [eligibleDropIn, setEligibleDropIn] = useState<any>(null);
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [detectedStatus, setDetectedStatus] = useState<string>("NEW");
+  const [latestEndDate, setLatestEndDate] = useState<string | null>(null);
   const [form, setForm] = useState({
-    student_id: "", batch_ids: [] as string[], payment_mode: "cash", status_type: "NEW",
+    student_id: "", batch_ids: [] as string[], payment_mode: "cash",
     subscription_plan_id: "", computed_start: "", computed_end: "", start_cycle_name: "", end_cycle_name: "",
     start_cycle_id: null as number | null, end_cycle_id: null as number | null,
   });
