@@ -1,0 +1,1 @@
+ALTER TABLE public.payments ADD COLUMN gst numeric DEFAULT null, ADD COLUMN final_amount numeric DEFAULT null;

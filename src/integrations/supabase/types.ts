@@ -375,8 +375,10 @@ export type Database = {
         Row: {
           amount: number
           created_at: string
+          final_amount: number | null
           gateway_order_id: string | null
           gateway_payment_id: string | null
+          gst: number | null
           id: number
           organization_id: number
           payment_mode: string | null
@@ -386,8 +388,10 @@ export type Database = {
         Insert: {
           amount: number
           created_at?: string
+          final_amount?: number | null
           gateway_order_id?: string | null
           gateway_payment_id?: string | null
+          gst?: number | null
           id?: never
           organization_id: number
           payment_mode?: string | null
@@ -397,8 +401,10 @@ export type Database = {
         Update: {
           amount?: number
           created_at?: string
+          final_amount?: number | null
           gateway_order_id?: string | null
           gateway_payment_id?: string | null
+          gst?: number | null
           id?: never
           organization_id?: number
           payment_mode?: string | null
