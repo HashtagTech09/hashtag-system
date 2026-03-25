@@ -49,6 +49,33 @@ const EnrollmentsPage = () => {
 
   useEffect(() => { fetchData(); }, []);
 
+  // Check for eligible drop-ins when student + batches change
+  useEffect(() => {
+    const checkDropIns = async () => {
+      if (!form.student_id || form.batch_ids.length === 0) { setEligibleDropIn(null); return; }
+      const todayStr = new Date().toISOString().split("T")[0];
+      const selectedStyles = batches.filter(b => form.batch_ids.includes(String(b.id))).map(b => b.style).filter(Boolean);
+      if (selectedStyles.length === 0) { setEligibleDropIn(null); return; }
+
+      const { data } = await supabase.from("drop_ins")
+        .select("*, batch_sessions(session_date, style, start_time, end_time, batches(name))")
+        .eq("student_id", Number(form.student_id))
+        .eq("is_adjusted", false)
+        .eq("organization_id", 1)
+        .order("created_at", { ascending: false });
+
+      if (!data || data.length === 0) { setEligibleDropIn(null); return; }
+
+      // Find most recent eligible: session_date >= today AND style matches
+      const eligible = data.find(d => {
+        const sess = d.batch_sessions;
+        if (!sess) return false;
+        return sess.session_date >= todayStr && selectedStyles.includes(sess.style);
+      });
+      setEligibleDropIn(eligible || null);
+    };
+    checkDropIns();
+  }, [form.student_id, form.batch_ids, batches]);
   // Find the first cycle with open registration (or next upcoming)
   const getStartCycleIndex = (): number => {
     const todayStr = new Date().toISOString().split("T")[0];
