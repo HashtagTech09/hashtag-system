@@ -189,6 +189,8 @@ const EnrollmentsPage = () => {
     if (matched.length === sequence.length) {
       const startCycle = matched[0];
       const endCycle = matched[matched.length - 1];
+      const regularCount = matched.filter(c => c.plan_type === "regular").length;
+      const gridCount = matched.filter(c => c.plan_type === "grid").length;
       setForm(f => ({
         ...f,
         subscription_plan_id: planId,
@@ -198,10 +200,12 @@ const EnrollmentsPage = () => {
         end_cycle_name: endCycle.name,
         start_cycle_id: startCycle.id,
         end_cycle_id: endCycle.id,
+        regular_cycles: regularCount,
+        grid_cycles: gridCount,
       }));
     } else {
       toast.error("Not enough matching cycles in calendar for this plan");
-      setForm(f => ({ ...f, subscription_plan_id: planId, computed_start: "", computed_end: "", start_cycle_name: "", end_cycle_name: "", start_cycle_id: null, end_cycle_id: null }));
+      setForm(f => ({ ...f, subscription_plan_id: planId, computed_start: "", computed_end: "", start_cycle_name: "", end_cycle_name: "", start_cycle_id: null, end_cycle_id: null, regular_cycles: 1, grid_cycles: 0 }));
     }
   };
 
