@@ -256,7 +256,7 @@ const EnrollmentsPage = () => {
     const enrollmentRecords = form.batch_ids.map((batchId) => ({
       organization_id: 1, student_id: Number(form.student_id), batch_id: Number(batchId),
       payment_id: payment.id, status_type: detectedStatus,
-      registration_fee_applied: !!applyRegFee, late_renewal: isLateRenewal,
+      registration_fee_applied: breakdown.applyRegFee, late_renewal: breakdown.isLateRenewal,
       start_date: startDate, end_date: endDate,
       subscription_plan_id: form.subscription_plan_id ? Number(form.subscription_plan_id) : null,
       start_cycle_id: form.start_cycle_id,
