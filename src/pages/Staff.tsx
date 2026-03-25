@@ -112,7 +112,13 @@ const UsersPage = () => {
   };
 
   const handleDelete = async (id: number) => {
-    await supabase.from("users").delete().eq("id", id);
+    const { error: rolesError } = await supabase
+      .from("user_roles").delete().eq("user_id", id);
+    if (rolesError) { toast.error("Failed to delete user roles"); return; }
+
+    const { error } = await supabase.from("users").delete().eq("id", id);
+    if (error) { toast.error(error.message); return; }
+
     toast.success("User deleted");
     fetchData();
   };
