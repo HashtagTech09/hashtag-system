@@ -32,6 +32,7 @@ const EnrollmentsPage = () => {
   const [addBatchDropIn, setAddBatchDropIn] = useState<any>(null);
   const [detectedStatus, setDetectedStatus] = useState<string>("NEW");
   const [latestEndDate, setLatestEndDate] = useState<string | null>(null);
+  const [previousBatchIds, setPreviousBatchIds] = useState<number[]>([]);
   const [form, setForm] = useState({
     student_id: "", batch_ids: [] as string[], payment_mode: "cash",
     subscription_plan_id: "", computed_start: "", computed_end: "", start_cycle_name: "", end_cycle_name: "",
@@ -63,16 +64,24 @@ const EnrollmentsPage = () => {
   // Auto-detect student status based on enrollment history
   useEffect(() => {
     const detectStatus = async () => {
-      if (!form.student_id) { setDetectedStatus("NEW"); setLatestEndDate(null); return; }
+      if (!form.student_id) { setDetectedStatus("NEW"); setLatestEndDate(null); setPreviousBatchIds([]); return; }
       const { data } = await supabase.from("enrollments")
         .select("end_date")
         .eq("student_id", Number(form.student_id))
         .eq("organization_id", 1)
         .order("end_date", { ascending: false })
         .limit(1);
-      if (!data || data.length === 0) { setDetectedStatus("NEW"); setLatestEndDate(null); return; }
+      if (!data || data.length === 0) { setDetectedStatus("NEW"); setLatestEndDate(null); setPreviousBatchIds([]); return; }
       const latest = data[0].end_date;
       setLatestEndDate(latest);
+
+      // Fetch all batch_ids from the most recent enrollment set (same end_date)
+      const { data: prevEnrollments } = await supabase.from("enrollments")
+        .select("batch_id")
+        .eq("student_id", Number(form.student_id))
+        .eq("organization_id", 1)
+        .eq("end_date", latest);
+      setPreviousBatchIds(prevEnrollments?.map(e => e.batch_id) || []);
       const todayStr = new Date().toISOString().split("T")[0];
       if (latest >= todayStr) { setDetectedStatus("REN"); }
       else {
@@ -259,15 +268,24 @@ const EnrollmentsPage = () => {
     const startDate = form.computed_start || today.toISOString().split("T")[0];
     const endDate = form.computed_end || (() => { const d = new Date(today); d.setMonth(d.getMonth() + 1); return d.toISOString().split("T")[0]; })();
 
-    const enrollmentRecords = form.batch_ids.map((batchId) => ({
-      organization_id: 1, student_id: Number(form.student_id), batch_id: Number(batchId),
-      payment_id: payment.id, status_type: detectedStatus,
-      registration_fee_applied: breakdown.applyRegFee, late_renewal: breakdown.isLateRenewal,
-      start_date: startDate, end_date: endDate,
-      subscription_plan_id: form.subscription_plan_id ? Number(form.subscription_plan_id) : null,
-      start_cycle_id: form.start_cycle_id,
-      end_cycle_id: form.end_cycle_id,
-    }));
+    const enrollmentRecords = form.batch_ids.map((batchId) => {
+      let prevBatchId: number | null = null;
+      if (detectedStatus === "REN" || detectedStatus === "REV") {
+        // If the same batch exists in previous enrollments, use it; otherwise use the first previous batch
+        const numBatchId = Number(batchId);
+        prevBatchId = previousBatchIds.includes(numBatchId) ? numBatchId : (previousBatchIds[0] ?? null);
+      }
+      return {
+        organization_id: 1, student_id: Number(form.student_id), batch_id: Number(batchId),
+        payment_id: payment.id, status_type: detectedStatus,
+        registration_fee_applied: breakdown.applyRegFee, late_renewal: breakdown.isLateRenewal,
+        start_date: startDate, end_date: endDate,
+        subscription_plan_id: form.subscription_plan_id ? Number(form.subscription_plan_id) : null,
+        start_cycle_id: form.start_cycle_id,
+        end_cycle_id: form.end_cycle_id,
+        previous_batch_id: prevBatchId,
+      };
+    });
 
     const { error } = await supabase.from("enrollments").insert(enrollmentRecords);
     if (error) { toast.error("Enrollment failed"); return; }
@@ -402,6 +420,7 @@ const EnrollmentsPage = () => {
       subscription_plan_id: existingEnrollment.subscription_plan_id,
       start_cycle_id: existingEnrollment.start_cycle_id,
       end_cycle_id: existingEnrollment.end_cycle_id,
+      previous_batch_id: null,
     }));
 
     const { error } = await supabase.from("enrollments").insert(enrollmentRecords);
