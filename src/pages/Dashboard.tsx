@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import AdminLayout from "@/components/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { GraduationCap, Layers, CreditCard, UserCheck } from "lucide-react";
+import { todayIST } from "@/lib/dateUtils";
 
 const Dashboard = () => {
   const [stats, setStats] = useState({ students: 0, batches: 0, enrollments: 0, todayAttendance: 0 });
@@ -13,7 +14,7 @@ const Dashboard = () => {
         supabase.from("students").select("id", { count: "exact", head: true }).eq("organization_id", 1),
         supabase.from("batches").select("id", { count: "exact", head: true }).eq("organization_id", 1),
         supabase.from("enrollments").select("id", { count: "exact", head: true }).eq("organization_id", 1),
-        supabase.from("attendance").select("id", { count: "exact", head: true }).eq("organization_id", 1).eq("date", new Date().toISOString().split("T")[0]),
+        supabase.from("attendance").select("id", { count: "exact", head: true }).eq("organization_id", 1).eq("date", todayIST()),
       ]);
       setStats({
         students: students.count || 0,
