@@ -8,13 +8,14 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Check, X } from "lucide-react";
 import { getDisplayPhone } from "@/lib/studentUtils";
+import { todayIST } from "@/lib/dateUtils";
 
 const AttendancePage = () => {
   const [batches, setBatches] = useState<any[]>([]);
   const [selectedBatch, setSelectedBatch] = useState<string>("");
   const [students, setStudents] = useState<any[]>([]);
   const [attendance, setAttendance] = useState<Record<number, string>>({});
-  const [date] = useState(new Date().toISOString().split("T")[0]);
+  const [date] = useState(todayIST());
 
   useEffect(() => {
     const fetchBatches = async () => {
