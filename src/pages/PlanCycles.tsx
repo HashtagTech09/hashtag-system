@@ -267,7 +267,7 @@ const PlanCyclesPage = () => {
                       <TableCell className="text-muted-foreground">{c.duration_days ?? "—"}</TableCell>
                       <TableCell>
                         {(() => {
-                          const todayStr = new Date().toISOString().split("T")[0];
+                          const todayStr = todayIST();
                           const isOpen = !c.registration_deadline || todayStr <= c.registration_deadline;
                           return (
                             <Badge className={isOpen ? "bg-success/20 text-success" : "bg-destructive/20 text-destructive"} variant="secondary">
