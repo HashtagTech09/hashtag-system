@@ -64,7 +64,7 @@ const EnrollmentsPage = () => {
   // Auto-detect student status based on enrollment history
   useEffect(() => {
     const detectStatus = async () => {
-      if (!form.student_id) { setDetectedStatus("NEW"); setLatestEndDate(null); return; }
+      if (!form.student_id) { setDetectedStatus("NEW"); setLatestEndDate(null); setPreviousBatchIds([]); return; }
       const { data } = await supabase.from("enrollments")
         .select("end_date")
         .eq("student_id", Number(form.student_id))
