@@ -1,72 +1,60 @@
-# Dashboard Revamp
+
+
+# Dashboard Layout Revamp
 
 ## Overview
+Reorganize dashboard into grouped rows with expandable batch-wise views, card-based date breakdown, and separated revenue section. Change accent to `#ff007f`.
 
-Replace the current placeholder dashboard with a comprehensive analytics view filtered by studio (or all studios). Uses company terminology: "Dreams" = enrollments.
-
-## Layout
+## Layout Structure
 
 ```text
-┌─────────────────────────────────────────────────┐
-│ [Studio Filter: All / Studio1 / Studio2 / ...]  │
-├─────────────────────────────────────────────────┤
-│ KPI Cards Row                                   │
-│ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────┐│
-│ │Total     │ │Head      │ │New Dreams│ │REV   ││
-│ │Dreams    │ │Count     │ │vs Target │ │Dreams││
-│ │vs Target │ │(students)│ │          │ │      ││
-│ └──────────┘ └──────────┘ └──────────┘ └──────┘│
-│ ┌──────────┐ ┌──────────┐                       │
-│ │REN Dreams│ │Total     │                       │
-│ │vs Renew- │ │Renewable │                       │
-│ │able      │ │          │                       │
-│ └──────────┘ └──────────┘                       │
-├─────────────────────────────────────────────────┤
-│ Batch-wise Dreams (Expandable)                  │
-│ Batch Name | Enrolled | Capacity (35)  | %Fill  │
-├─────────────────────────────────────────────────┤
-│ Date-wise Breakdown Table                       │
-│ Date | NEW | REN | REV | Drop-In | DI Adjusted │
-│      | Gross | GST | Total | Cash | Razorpay    │
-└─────────────────────────────────────────────────┘
+Row 1: Total Dreams (expandable → batch-wise) | Head Count
+Row 2: New Dreams (expandable → batch-wise NEW) | REV Dreams (expandable → batch-wise REV)
+Row 3: REN Rate (expandable → batch-wise REN) | REN Dreams vs Renewable
+Row 4: Date-wise cards (each date = a card with NEW/REN/REV/Drop-In counts)
+Row 5: Drop-In card (Total Drop-Ins vs DI Adjusted)
+Row 6: Revenue section (Gross, GST, Total, Cash vs Razorpay breakdown)
 ```
 
-## Data Queries (all filtered by active cycle + optional studio)
+## Changes — `src/pages/Dashboard.tsx`
 
-1. **Active cycle**: Find current `plan_cycle` where `is_active = true`
-2. **Total Dreams**: Count enrollments in active cycle, compare to a target (stored in `system_settings` as `dream_target_{studio_id}` or overall)
-3. **Head Count**: Count distinct `student_id` from enrollments in active cycle
-4. **New Dreams**: Count enrollments where `status_type = 'NEW'`
-5. **REV Dreams**: Count enrollments where `status_type = 'REV'`
-6. **REN Dreams vs Renewable**:
-  - REN count: enrollments where `status_type = 'REN'`
-  - Renewable count: students whose previous enrollment `end_date` falls within the active cycle period (expired or in grace)
-7. **Batch-wise**: Group enrollments by `batch_id`, show count vs capacity (35)
-8. **Date-wise**: Group by `created_at::date`, pivot by `status_type`, join `payments` for amounts by mode
-9. **Studio filter**: When a studio is selected, filter batches by `studio_id`, then filter enrollments by those `batch_id`s
+### 1. Fix accent color
+Change `const ACCENT = "#ff07ff"` → `"#ff007f"`
 
-## File Changes
+### 2. Replace KPI grid with 3 grouped rows
+- **Row 1** (2 cards, `grid-cols-2`):
+  - **Total Dreams** card — collapsible, expands to show batch-wise table (batch name + enrolled + capacity + fill%)
+  - **Head Count** card — simple display
+- **Row 2** (2 cards, `grid-cols-2`):
+  - **New Dreams** card — collapsible, expands to batch-wise NEW count per batch
+  - **REV Dreams** card — collapsible, expands to batch-wise REV count per batch
+- **Row 3** (2 cards, `grid-cols-2`):
+  - **REN Rate** card — shows `X%` (renDreams/renewableCount), collapsible → batch-wise REN count per batch
+  - **REN Dreams** card — shows `renDreams / renewableCount renewable`
 
-### `src/pages/Dashboard.tsx` — Full rewrite
+Each expandable card uses `Collapsible` with a `ChevronDown` toggle. Batch-wise tables inside show per-batch counts filtered by the relevant status.
 
-- Studio filter dropdown at top (fetches from `studios` table)
-- KPI cards section with actual/target display
-- Collapsible batch-wise enrollment table
-- Date-wise breakdown table with payment details
+### 3. Remove standalone charts and old batch-wise collapsible
+Delete the pie chart, bar chart, and the separate batch-wise collapsible section. The batch data is now inline within the expandable KPI cards.
 
-### Database: Add target settings
+### 4. Date-wise breakdown as cards
+Replace the date-wise table with a grid of cards (one per date). Each card shows:
+- Date as title
+- NEW / REN / REV / Drop-In counts as labeled values
 
-Use `system_settings` to store targets per studio per cycle:
+### 5. Drop-In card
+A single card showing:
+- Total Drop-Ins vs DI Adjusted count
+- Highlight adjusted count in accent
 
-- Key format: `dream_target`, `new_dream_target`, value is the number
-- For now, hardcode sensible defaults or allow inline editing later
+### 6. Revenue section
+A separate section titled "Revenue" with:
+- Summary card: Gross, GST, Total (highlighted)
+- Payment mode card: Cash vs Razorpay totals
+- Optionally a small date-wise revenue table below
 
-## Technical Details
+### Computed data additions
+- `batchStatusData`: for each batch, compute counts of NEW, REN, REV separately (used in expandable views)
 
-- All queries scoped to `organization_id = 1` and the active cycle's date range
-- Studio filter: "All" shows org-wide aggregates; specific studio filters `batches.studio_id`
-- Batch capacity hardcoded to 35 per the requirement
-- Payment breakdown: join `payments` via `enrollments.payment_id`, group by `payment_mode` (cash/razorpay)
-- Drop-in data: query `drop_ins` table, separate adjusted vs unadjusted
-- No new database tables needed — all data exists
-- Add graphs wherever suitable and use #ff07f to highlight important metic 
+## No database or migration changes needed.
+
