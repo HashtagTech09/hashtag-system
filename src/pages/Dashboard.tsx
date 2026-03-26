@@ -6,8 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Progress } from "@/components/ui/progress";
-import { GraduationCap, Users, Sparkles, RotateCcw, RefreshCw, ChevronDown, TrendingUp } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
+import { ChevronDown } from "lucide-react";
 
 interface Studio { id: number; name: string; code: string | null; }
 interface Batch { id: number; name: string; studio_id: number | null; capacity: number | null; }
@@ -28,7 +27,7 @@ interface PlanCycle {
   is_active: boolean; grace_days: number; plan_type: string;
 }
 
-const ACCENT = "#ff07ff";
+const ACCENT = "#ff007f";
 
 const Dashboard = () => {
   const [studios, setStudios] = useState<Studio[]>([]);
@@ -40,10 +39,14 @@ const Dashboard = () => {
   const [dropInPayments, setDropInPayments] = useState<Payment[]>([]);
   const [activeCycle, setActiveCycle] = useState<PlanCycle | null>(null);
   const [renewableCount, setRenewableCount] = useState(0);
-  const [batchOpen, setBatchOpen] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // Fetch studios and active cycle
+  // Expandable states
+  const [totalOpen, setTotalOpen] = useState(false);
+  const [newOpen, setNewOpen] = useState(false);
+  const [revOpen, setRevOpen] = useState(false);
+  const [renOpen, setRenOpen] = useState(false);
+
   useEffect(() => {
     const init = async () => {
       const [studioRes, cycleRes] = await Promise.all([
@@ -58,12 +61,10 @@ const Dashboard = () => {
     init();
   }, []);
 
-  // Fetch data when active cycle or studio changes
   useEffect(() => {
     if (!activeCycle) return;
     const fetchData = async () => {
       setLoading(true);
-      // Fetch batches
       let batchQuery = supabase.from("batches").select("id, name, studio_id, capacity").eq("organization_id", 1);
       if (selectedStudio !== "all") {
         batchQuery = batchQuery.eq("studio_id", parseInt(selectedStudio));
@@ -79,7 +80,6 @@ const Dashboard = () => {
         return;
       }
 
-      // Fetch enrollments in active cycle (start_cycle_id or end_cycle_id matches, or date range overlap)
       const enrollRes = await supabase
         .from("enrollments")
         .select("id, student_id, batch_id, status_type, start_date, end_date, payment_id, created_at, start_cycle_id, end_cycle_id")
@@ -90,7 +90,6 @@ const Dashboard = () => {
       const enrollList = (enrollRes.data || []) as Enrollment[];
       setEnrollments(enrollList);
 
-      // Fetch payments for these enrollments
       const paymentIds = enrollList.map(e => e.payment_id).filter(Boolean) as number[];
       if (paymentIds.length > 0) {
         const payRes = await supabase.from("payments").select("id, amount, gst, final_amount, payment_mode").in("id", paymentIds);
@@ -99,46 +98,34 @@ const Dashboard = () => {
         setPayments([]);
       }
 
-      // Fetch drop-ins in the cycle date range
       const sessionRes = await supabase
-        .from("batch_sessions")
-        .select("id")
-        .eq("organization_id", 1)
+        .from("batch_sessions").select("id").eq("organization_id", 1)
         .in("batch_id", batchIds)
         .gte("session_date", activeCycle.start_date)
         .lte("session_date", activeCycle.end_date || "2099-12-31");
       const sessionIds = (sessionRes.data || []).map(s => s.id);
 
       if (sessionIds.length > 0) {
-        const diRes = await supabase
-          .from("drop_ins")
+        const diRes = await supabase.from("drop_ins")
           .select("id, amount, is_adjusted, payment_id, created_at")
-          .eq("organization_id", 1)
-          .in("batch_session_id", sessionIds);
+          .eq("organization_id", 1).in("batch_session_id", sessionIds);
         const diList = (diRes.data || []) as DropIn[];
         setDropIns(diList);
-
         const diPayIds = diList.map(d => d.payment_id).filter(Boolean) as number[];
         if (diPayIds.length > 0) {
           const diPayRes = await supabase.from("payments").select("id, amount, gst, final_amount, payment_mode").in("id", diPayIds);
           setDropInPayments((diPayRes.data || []) as Payment[]);
-        } else {
-          setDropInPayments([]);
-        }
+        } else { setDropInPayments([]); }
       } else {
         setDropIns([]); setDropInPayments([]);
       }
 
-      // Renewable count: students whose previous enrollment ended within cycle range or grace
-      const prevCycleEnd = activeCycle.start_date; // Previous cycle ended before this one started
       const graceDate = new Date(activeCycle.start_date);
-      graceDate.setDate(graceDate.getDate() - 1); // day before current cycle
+      graceDate.setDate(graceDate.getDate() - 1);
       const graceLookback = new Date(graceDate);
       graceLookback.setDate(graceLookback.getDate() - (activeCycle.grace_days || 14));
 
-      let renewableQuery = supabase
-        .from("enrollments")
-        .select("student_id, batch_id")
+      let renewableQuery = supabase.from("enrollments").select("student_id, batch_id")
         .eq("organization_id", 1)
         .gte("end_date", graceLookback.toISOString().split("T")[0])
         .lt("end_date", activeCycle.start_date);
@@ -148,30 +135,42 @@ const Dashboard = () => {
       const renewableRes = await renewableQuery;
       const uniqueRenewable = new Set((renewableRes.data || []).map((r: any) => r.student_id));
       setRenewableCount(uniqueRenewable.size);
-
       setLoading(false);
     };
     fetchData();
   }, [activeCycle, selectedStudio]);
 
-  // Computed metrics
   const totalDreams = enrollments.length;
   const headCount = new Set(enrollments.map(e => e.student_id)).size;
   const newDreams = enrollments.filter(e => e.status_type === "NEW").length;
   const revDreams = enrollments.filter(e => e.status_type === "REV").length;
   const renDreams = enrollments.filter(e => e.status_type === "REN").length;
+  const renRate = renewableCount > 0 ? Math.round((renDreams / renewableCount) * 100) : 0;
 
-  // Batch-wise data
+  // Batch-wise data (total + per status)
   const batchData = useMemo(() => {
-    const map = new Map<number, number>();
-    enrollments.forEach(e => map.set(e.batch_id, (map.get(e.batch_id) || 0) + 1));
+    const totalMap = new Map<number, number>();
+    const newMap = new Map<number, number>();
+    const revMap = new Map<number, number>();
+    const renMap = new Map<number, number>();
+    enrollments.forEach(e => {
+      totalMap.set(e.batch_id, (totalMap.get(e.batch_id) || 0) + 1);
+      if (e.status_type === "NEW") newMap.set(e.batch_id, (newMap.get(e.batch_id) || 0) + 1);
+      if (e.status_type === "REV") revMap.set(e.batch_id, (revMap.get(e.batch_id) || 0) + 1);
+      if (e.status_type === "REN") renMap.set(e.batch_id, (renMap.get(e.batch_id) || 0) + 1);
+    });
     return batches
-      .map(b => ({ name: b.name, enrolled: map.get(b.id) || 0, capacity: b.capacity || 35 }))
-      .filter(b => b.enrolled > 0)
-      .sort((a, b) => b.enrolled - a.enrolled);
+      .map(b => ({
+        id: b.id, name: b.name, capacity: b.capacity || 35,
+        total: totalMap.get(b.id) || 0,
+        NEW: newMap.get(b.id) || 0,
+        REV: revMap.get(b.id) || 0,
+        REN: renMap.get(b.id) || 0,
+      }))
+      .filter(b => b.total > 0)
+      .sort((a, b) => b.total - a.total);
   }, [enrollments, batches]);
 
-  // Payment lookup
   const paymentMap = useMemo(() => {
     const m = new Map<number, Payment>();
     payments.forEach(p => m.set(p.id, p));
@@ -185,19 +184,16 @@ const Dashboard = () => {
       date: string; NEW: number; REN: number; REV: number; dropIn: number; diAdjusted: number;
       gross: number; gst: number; total: number; cash: number; razorpay: number;
     }>();
-
     const getOrCreate = (date: string) => {
       if (!map.has(date)) map.set(date, { date, NEW: 0, REN: 0, REV: 0, dropIn: 0, diAdjusted: 0, gross: 0, gst: 0, total: 0, cash: 0, razorpay: 0 });
       return map.get(date)!;
     };
-
     enrollments.forEach(e => {
       const date = e.created_at.split("T")[0];
       const row = getOrCreate(date);
       if (e.status_type === "NEW") row.NEW++;
       else if (e.status_type === "REN") row.REN++;
       else if (e.status_type === "REV") row.REV++;
-
       if (e.payment_id) {
         const p = paymentMap.get(e.payment_id);
         if (p) {
@@ -210,13 +206,11 @@ const Dashboard = () => {
         }
       }
     });
-
     dropIns.forEach(d => {
       const date = d.created_at.split("T")[0];
       const row = getOrCreate(date);
       row.dropIn++;
       if (d.is_adjusted) row.diAdjusted++;
-
       if (d.payment_id) {
         const p = paymentMap.get(d.payment_id);
         if (p) {
@@ -229,11 +223,9 @@ const Dashboard = () => {
         }
       }
     });
-
     return Array.from(map.values()).sort((a, b) => b.date.localeCompare(a.date));
   }, [enrollments, dropIns, paymentMap]);
 
-  // Totals for date-wise
   const dateTotals = useMemo(() => {
     return dateWise.reduce((acc, r) => ({
       NEW: acc.NEW + r.NEW, REN: acc.REN + r.REN, REV: acc.REV + r.REV,
@@ -243,23 +235,81 @@ const Dashboard = () => {
     }), { NEW: 0, REN: 0, REV: 0, dropIn: 0, diAdjusted: 0, gross: 0, gst: 0, total: 0, cash: 0, razorpay: 0 });
   }, [dateWise]);
 
-  // Chart data for status distribution
-  const statusChartData = [
-    { name: "NEW", value: newDreams, fill: ACCENT },
-    { name: "REN", value: renDreams, fill: "hsl(var(--success))" },
-    { name: "REV", value: revDreams, fill: "hsl(var(--warning))" },
-  ].filter(d => d.value > 0);
-
-  const kpiCards = [
-    { title: "Total Dreams", value: totalDreams, icon: GraduationCap, subtitle: `Active cycle: ${activeCycle?.name || "—"}` },
-    { title: "Head Count", value: headCount, icon: Users, subtitle: "Unique students" },
-    { title: "New Dreams", value: newDreams, icon: Sparkles, subtitle: "First-time enrollments" },
-    { title: "REV Dreams", value: revDreams, icon: RotateCcw, subtitle: "Revival enrollments" },
-    { title: "REN Dreams", value: renDreams, icon: RefreshCw, subtitle: `Renewable: ${renewableCount}`, highlight: true },
-    { title: "REN Rate", value: renewableCount > 0 ? `${Math.round((renDreams / renewableCount) * 100)}%` : "—", icon: TrendingUp, subtitle: `${renDreams} / ${renewableCount} renewable`, highlight: true },
-  ];
+  const totalDropIns = dropIns.length;
+  const totalDiAdjusted = dropIns.filter(d => d.is_adjusted).length;
 
   const fmt = (n: number) => n.toLocaleString("en-IN");
+
+  const BatchTable = ({ data, valueKey }: { data: typeof batchData; valueKey: "total" | "NEW" | "REV" | "REN" }) => (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Batch</TableHead>
+          <TableHead className="text-right">Count</TableHead>
+          <TableHead className="text-right">Capacity</TableHead>
+          <TableHead className="w-[160px]">Fill</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {data.filter(b => b[valueKey] > 0).map(b => {
+          const pct = Math.min(Math.round((b[valueKey] / b.capacity) * 100), 100);
+          return (
+            <TableRow key={b.id}>
+              <TableCell className="font-medium text-xs">{b.name}</TableCell>
+              <TableCell className="text-right text-xs">{b[valueKey]}</TableCell>
+              <TableCell className="text-right text-xs">{b.capacity}</TableCell>
+              <TableCell>
+                <div className="flex items-center gap-2">
+                  <Progress value={pct} className="h-1.5 flex-1" />
+                  <span className="text-[10px] text-muted-foreground w-8 text-right">{pct}%</span>
+                </div>
+              </TableCell>
+            </TableRow>
+          );
+        })}
+      </TableBody>
+    </Table>
+  );
+
+  const ExpandableCard = ({
+    title, value, subtitle, open, onOpenChange, children, highlight = false,
+  }: {
+    title: string; value: string | number; subtitle?: string;
+    open: boolean; onOpenChange: (v: boolean) => void;
+    children: React.ReactNode; highlight?: boolean;
+  }) => (
+    <Collapsible open={open} onOpenChange={onOpenChange}>
+      <Card className="glass-card">
+        <CollapsibleTrigger className="w-full text-left">
+          <CardHeader className="flex flex-row items-center justify-between pb-1 pt-4 px-4">
+            <CardTitle className="text-xs font-medium text-muted-foreground">{title}</CardTitle>
+            <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
+          </CardHeader>
+          <CardContent className="px-4 pb-3">
+            <div className="text-2xl font-bold" style={highlight ? { color: ACCENT } : undefined}>{value}</div>
+            {subtitle && <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>}
+          </CardContent>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <CardContent className="pt-0 px-4 pb-4 border-t border-border">{children}</CardContent>
+        </CollapsibleContent>
+      </Card>
+    </Collapsible>
+  );
+
+  const SimpleCard = ({ title, value, subtitle, highlight = false }: {
+    title: string; value: string | number; subtitle?: string; highlight?: boolean;
+  }) => (
+    <Card className="glass-card">
+      <CardHeader className="pb-1 pt-4 px-4">
+        <CardTitle className="text-xs font-medium text-muted-foreground">{title}</CardTitle>
+      </CardHeader>
+      <CardContent className="px-4 pb-4">
+        <div className="text-2xl font-bold" style={highlight ? { color: ACCENT } : undefined}>{value}</div>
+        {subtitle && <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>}
+      </CardContent>
+    </Card>
+  );
 
   return (
     <AdminLayout title="Dashboard">
@@ -287,178 +337,139 @@ const Dashboard = () => {
       {loading ? (
         <div className="text-muted-foreground text-center py-20">Loading dashboard…</div>
       ) : (
-        <>
-          {/* KPI Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
-            {kpiCards.map(card => (
-              <Card key={card.title} className="glass-card">
-                <CardHeader className="flex flex-row items-center justify-between pb-1 pt-4 px-4">
-                  <CardTitle className="text-xs font-medium text-muted-foreground">{card.title}</CardTitle>
-                  <card.icon className="h-4 w-4 text-primary" />
-                </CardHeader>
-                <CardContent className="px-4 pb-4">
-                  <div className="text-2xl font-bold" style={card.highlight ? { color: ACCENT } : undefined}>
-                    {card.value}
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">{card.subtitle}</p>
-                </CardContent>
-              </Card>
-            ))}
+        <div className="space-y-4">
+          {/* Row 1: Total Dreams (expandable) | Head Count */}
+          <div className="grid grid-cols-2 gap-4">
+            <ExpandableCard
+              title="Total Dreams" value={totalDreams}
+              subtitle={`Active cycle: ${activeCycle?.name || "—"}`}
+              open={totalOpen} onOpenChange={setTotalOpen} highlight
+            >
+              <BatchTable data={batchData} valueKey="total" />
+            </ExpandableCard>
+            <SimpleCard title="Head Count" value={headCount} subtitle="Unique students" />
           </div>
 
-          {/* Charts Row */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-            {/* Status Distribution Pie */}
-            {statusChartData.length > 0 && (
-              <Card className="glass-card">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm">Dream Status Distribution</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={200}>
-                    <PieChart>
-                      <Pie data={statusChartData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70} label={({ name, value }) => `${name}: ${value}`}>
-                        {statusChartData.map((entry, i) => (
-                          <Cell key={i} fill={entry.fill} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Batch Fill Bar Chart */}
-            {batchData.length > 0 && (
-              <Card className="glass-card">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm">Batch Fill Rate</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={200}>
-                    <BarChart data={batchData.slice(0, 10)} layout="vertical">
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                      <XAxis type="number" domain={[0, 35]} stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                      <YAxis type="category" dataKey="name" width={120} stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                      <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }} />
-                      <Bar dataKey="enrolled" fill={ACCENT} radius={[0, 4, 4, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-            )}
+          {/* Row 2: New Dreams (expandable) | REV Dreams (expandable) */}
+          <div className="grid grid-cols-2 gap-4">
+            <ExpandableCard
+              title="New Dreams" value={newDreams}
+              subtitle="First-time enrollments"
+              open={newOpen} onOpenChange={setNewOpen}
+            >
+              <BatchTable data={batchData} valueKey="NEW" />
+            </ExpandableCard>
+            <ExpandableCard
+              title="REV Dreams" value={revDreams}
+              subtitle="Revival enrollments"
+              open={revOpen} onOpenChange={setRevOpen}
+            >
+              <BatchTable data={batchData} valueKey="REV" />
+            </ExpandableCard>
           </div>
 
-          {/* Batch-wise Expandable */}
-          <Collapsible open={batchOpen} onOpenChange={setBatchOpen} className="mb-6">
-            <Card className="glass-card">
-              <CollapsibleTrigger className="w-full">
-                <CardHeader className="flex flex-row items-center justify-between cursor-pointer">
-                  <CardTitle className="text-sm">Batch-wise Dreams ({batchData.length} batches)</CardTitle>
-                  <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${batchOpen ? "rotate-180" : ""}`} />
-                </CardHeader>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <CardContent className="pt-0">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Batch</TableHead>
-                        <TableHead className="text-right">Enrolled</TableHead>
-                        <TableHead className="text-right">Capacity</TableHead>
-                        <TableHead className="w-[200px]">Fill</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {batchData.map(b => {
-                        const pct = Math.min(Math.round((b.enrolled / b.capacity) * 100), 100);
-                        return (
-                          <TableRow key={b.name}>
-                            <TableCell className="font-medium">{b.name}</TableCell>
-                            <TableCell className="text-right">{b.enrolled}</TableCell>
-                            <TableCell className="text-right">{b.capacity}</TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                <Progress value={pct} className="h-2 flex-1" />
-                                <span className="text-xs text-muted-foreground w-10 text-right">{pct}%</span>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </CollapsibleContent>
-            </Card>
-          </Collapsible>
+          {/* Row 3: REN Rate (expandable) | REN Dreams */}
+          <div className="grid grid-cols-2 gap-4">
+            <ExpandableCard
+              title="REN Rate" value={renewableCount > 0 ? `${renRate}%` : "—"}
+              subtitle={`${renDreams} / ${renewableCount} renewable`}
+              open={renOpen} onOpenChange={setRenOpen} highlight
+            >
+              <BatchTable data={batchData} valueKey="REN" />
+            </ExpandableCard>
+            <SimpleCard
+              title="REN Dreams" value={renDreams}
+              subtitle={`${renewableCount} renewable`} highlight
+            />
+          </div>
 
-          {/* Date-wise Breakdown */}
-          <Card className="glass-card">
-            <CardHeader>
-              <CardTitle className="text-sm">Date-wise Breakdown</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead className="text-right">NEW</TableHead>
-                      <TableHead className="text-right">REN</TableHead>
-                      <TableHead className="text-right">REV</TableHead>
-                      <TableHead className="text-right">Drop-In</TableHead>
-                      <TableHead className="text-right">DI Adj.</TableHead>
-                      <TableHead className="text-right">Gross</TableHead>
-                      <TableHead className="text-right">GST</TableHead>
-                      <TableHead className="text-right" style={{ color: ACCENT }}>Total</TableHead>
-                      <TableHead className="text-right">Cash</TableHead>
-                      <TableHead className="text-right">Razorpay</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {dateWise.map(row => (
-                      <TableRow key={row.date}>
-                        <TableCell className="font-medium whitespace-nowrap">{row.date}</TableCell>
-                        <TableCell className="text-right">{row.NEW || "—"}</TableCell>
-                        <TableCell className="text-right">{row.REN || "—"}</TableCell>
-                        <TableCell className="text-right">{row.REV || "—"}</TableCell>
-                        <TableCell className="text-right">{row.dropIn || "—"}</TableCell>
-                        <TableCell className="text-right">{row.diAdjusted || "—"}</TableCell>
-                        <TableCell className="text-right">₹{fmt(row.gross)}</TableCell>
-                        <TableCell className="text-right">₹{fmt(row.gst)}</TableCell>
-                        <TableCell className="text-right font-semibold" style={{ color: ACCENT }}>₹{fmt(row.total)}</TableCell>
-                        <TableCell className="text-right">₹{fmt(row.cash)}</TableCell>
-                        <TableCell className="text-right">₹{fmt(row.razorpay)}</TableCell>
-                      </TableRow>
-                    ))}
-                    {dateWise.length > 0 && (
-                      <TableRow className="border-t-2 font-semibold">
-                        <TableCell>Total</TableCell>
-                        <TableCell className="text-right">{dateTotals.NEW}</TableCell>
-                        <TableCell className="text-right">{dateTotals.REN}</TableCell>
-                        <TableCell className="text-right">{dateTotals.REV}</TableCell>
-                        <TableCell className="text-right">{dateTotals.dropIn}</TableCell>
-                        <TableCell className="text-right">{dateTotals.diAdjusted}</TableCell>
-                        <TableCell className="text-right">₹{fmt(dateTotals.gross)}</TableCell>
-                        <TableCell className="text-right">₹{fmt(dateTotals.gst)}</TableCell>
-                        <TableCell className="text-right" style={{ color: ACCENT }}>₹{fmt(dateTotals.total)}</TableCell>
-                        <TableCell className="text-right">₹{fmt(dateTotals.cash)}</TableCell>
-                        <TableCell className="text-right">₹{fmt(dateTotals.razorpay)}</TableCell>
-                      </TableRow>
-                    )}
-                    {dateWise.length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={11} className="text-center text-muted-foreground py-8">No data for this cycle</TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
+          {/* Row 4: Date-wise cards */}
+          <div>
+            <h3 className="text-sm font-semibold text-foreground mb-3">Date-wise Breakdown</h3>
+            {dateWise.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No data for this cycle</p>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                {dateWise.map(row => (
+                  <Card key={row.date} className="glass-card">
+                    <CardHeader className="pb-1 pt-3 px-3">
+                      <CardTitle className="text-xs font-semibold">{row.date}</CardTitle>
+                    </CardHeader>
+                    <CardContent className="px-3 pb-3 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                      <span className="text-muted-foreground">NEW</span><span className="text-right font-medium">{row.NEW || "—"}</span>
+                      <span className="text-muted-foreground">REN</span><span className="text-right font-medium">{row.REN || "—"}</span>
+                      <span className="text-muted-foreground">REV</span><span className="text-right font-medium">{row.REV || "—"}</span>
+                      <span className="text-muted-foreground">Drop-In</span><span className="text-right font-medium">{row.dropIn || "—"}</span>
+                    </CardContent>
+                  </Card>
+                ))}
               </div>
-            </CardContent>
-          </Card>
-        </>
+            )}
+          </div>
+
+          {/* Row 5: Drop-In card */}
+          <div className="grid grid-cols-2 gap-4">
+            <Card className="glass-card">
+              <CardHeader className="pb-1 pt-4 px-4">
+                <CardTitle className="text-xs font-medium text-muted-foreground">Drop-Ins</CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-4">
+                <div className="flex items-baseline gap-3">
+                  <div>
+                    <span className="text-2xl font-bold">{totalDropIns}</span>
+                    <span className="text-xs text-muted-foreground ml-1">total</span>
+                  </div>
+                  <span className="text-muted-foreground">vs</span>
+                  <div>
+                    <span className="text-2xl font-bold" style={{ color: ACCENT }}>{totalDiAdjusted}</span>
+                    <span className="text-xs text-muted-foreground ml-1">adjusted</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Row 6: Revenue */}
+          <div>
+            <h3 className="text-sm font-semibold text-foreground mb-3">Revenue</h3>
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+              <Card className="glass-card">
+                <CardHeader className="pb-1 pt-4 px-4">
+                  <CardTitle className="text-xs font-medium text-muted-foreground">Summary</CardTitle>
+                </CardHeader>
+                <CardContent className="px-4 pb-4 space-y-1">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Gross</span>
+                    <span className="font-medium">₹{fmt(dateTotals.gross)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">GST</span>
+                    <span className="font-medium">₹{fmt(dateTotals.gst)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm border-t border-border pt-1">
+                    <span className="font-semibold">Total</span>
+                    <span className="font-bold" style={{ color: ACCENT }}>₹{fmt(dateTotals.total)}</span>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="glass-card">
+                <CardHeader className="pb-1 pt-4 px-4">
+                  <CardTitle className="text-xs font-medium text-muted-foreground">Payment Mode</CardTitle>
+                </CardHeader>
+                <CardContent className="px-4 pb-4 space-y-1">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Cash</span>
+                    <span className="font-medium">₹{fmt(dateTotals.cash)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Razorpay</span>
+                    <span className="font-medium">₹{fmt(dateTotals.razorpay)}</span>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </div>
       )}
     </AdminLayout>
   );
