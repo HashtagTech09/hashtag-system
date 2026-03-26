@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, PackagePlus } from "lucide-react";
 import { toast } from "sonner";
 import { getDisplayPhone } from "@/lib/studentUtils";
 import { parseISO } from "date-fns";
@@ -25,6 +25,11 @@ const EnrollmentsPage = () => {
   const [pricingPlans, setPricingPlans] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [addBatchOpen, setAddBatchOpen] = useState(false);
+  const [addBatchForm, setAddBatchForm] = useState({ student_id: "", new_batch_ids: [] as string[], payment_mode: "cash" });
+  const [existingBatches, setExistingBatches] = useState<any[]>([]);
+  const [existingEnrollment, setExistingEnrollment] = useState<any>(null);
+  const [addBatchDropIn, setAddBatchDropIn] = useState<any>(null);
   const [detectedStatus, setDetectedStatus] = useState<string>("NEW");
   const [latestEndDate, setLatestEndDate] = useState<string | null>(null);
   const [form, setForm] = useState({
@@ -285,6 +290,140 @@ const EnrollmentsPage = () => {
     setForm((f) => ({ ...f, batch_ids: f.batch_ids.includes(id) ? f.batch_ids.filter((b) => b !== id) : [...f.batch_ids, id] }));
   };
 
+  // --- Add Batch Logic ---
+  const fetchExistingEnrollments = async (studentId: string) => {
+    if (!studentId) { setExistingBatches([]); setExistingEnrollment(null); return; }
+    const todayStr = new Date().toISOString().split("T")[0];
+    const { data } = await supabase.from("enrollments")
+      .select("*, batches(name, id)")
+      .eq("student_id", Number(studentId))
+      .eq("organization_id", 1)
+      .order("end_date", { ascending: false });
+
+    if (!data || data.length === 0) { setExistingBatches([]); setExistingEnrollment(null); return; }
+
+    // Find enrollments that are active or within grace
+    const activeCycle = planCycles.find(c => c.is_active);
+    const graceDays = activeCycle?.grace_days || 14;
+
+    const activeEnrollments = data.filter(e => {
+      if (e.end_date >= todayStr) return true;
+      const endD = new Date(e.end_date);
+      endD.setDate(endD.getDate() + graceDays);
+      return todayStr <= endD.toISOString().split("T")[0];
+    });
+
+    if (activeEnrollments.length === 0) { setExistingBatches([]); setExistingEnrollment(null); return; }
+
+    const uniqueBatchIds = [...new Set(activeEnrollments.map(e => e.batch_id))];
+    const existingBatchList = uniqueBatchIds.map(bid => {
+      const enrollment = activeEnrollments.find(e => e.batch_id === bid);
+      return { batch_id: bid, batch_name: enrollment?.batches?.name || `Batch ${bid}` };
+    });
+    setExistingBatches(existingBatchList);
+    setExistingEnrollment(activeEnrollments[0]); // reference enrollment for dates/plan
+  };
+
+  // Check drop-ins for add-batch
+  useEffect(() => {
+    const checkAddBatchDropIns = async () => {
+      if (!addBatchForm.student_id || addBatchForm.new_batch_ids.length === 0) { setAddBatchDropIn(null); return; }
+      const todayStr = new Date().toISOString().split("T")[0];
+      const selectedStyles = batches.filter(b => addBatchForm.new_batch_ids.includes(String(b.id))).map(b => b.style).filter(Boolean);
+      if (selectedStyles.length === 0) { setAddBatchDropIn(null); return; }
+      const { data } = await supabase.from("drop_ins")
+        .select("*, batch_sessions(session_date, style, start_time, end_time, batches(name))")
+        .eq("student_id", Number(addBatchForm.student_id))
+        .eq("is_adjusted", false)
+        .eq("organization_id", 1)
+        .order("created_at", { ascending: false });
+      if (!data || data.length === 0) { setAddBatchDropIn(null); return; }
+      const eligible = data.find(d => {
+        const sess = d.batch_sessions;
+        if (!sess) return false;
+        return sess.session_date >= todayStr && selectedStyles.includes(sess.style);
+      });
+      setAddBatchDropIn(eligible || null);
+    };
+    checkAddBatchDropIns();
+  }, [addBatchForm.student_id, addBatchForm.new_batch_ids, batches]);
+
+  const computeAddBatchFee = () => {
+    if (!existingEnrollment || addBatchForm.new_batch_ids.length === 0) return null;
+
+    // Determine cycle composition from existing enrollment
+    const refEnrollment = existingEnrollment;
+    let regularCycles = 1, gridCycles = 0;
+    if (refEnrollment.subscription_plan_id) {
+      const plan = subPlans.find(p => p.id === refEnrollment.subscription_plan_id);
+      if (plan) {
+        const sequence = subPlanCycles.filter(s => s.subscription_plan_id === plan.id);
+        regularCycles = sequence.filter(s => s.plan_type === "regular").length || 1;
+        gridCycles = sequence.filter(s => s.plan_type === "grid").length;
+      }
+    }
+
+    const totalBatchCount = existingBatches.length + addBatchForm.new_batch_ids.length;
+    const newBatchCount = addBatchForm.new_batch_ids.length;
+    const perBatchFee = (regularCycles * 3220) + (gridCycles * 7000);
+    const discountPct = getDiscount(totalBatchCount);
+    const discountedPerBatch = Math.round(perBatchFee * (1 - discountPct));
+    const totalNewFee = discountedPerBatch * newBatchCount;
+    const discountAmount = (perBatchFee * newBatchCount) - totalNewFee;
+
+    const dropInAdj = addBatchDropIn ? Number(addBatchDropIn.amount) : 0;
+    const subtotal = Math.max(0, totalNewFee - dropInAdj);
+    const gst = Math.round(subtotal * 0.18);
+    const total = subtotal + gst;
+
+    return { totalBatchCount, newBatchCount, perBatchFee, discountPct, discountAmount, totalNewFee, dropInAdj, subtotal, gst, total, regularCycles, gridCycles };
+  };
+
+  const addBatchFee = computeAddBatchFee();
+
+  const handleAddBatch = async () => {
+    if (!addBatchForm.student_id || addBatchForm.new_batch_ids.length === 0 || !existingEnrollment || !addBatchFee) {
+      toast.error("Select a student and at least one new batch"); return;
+    }
+
+    const { data: payment, error: payError } = await supabase.from("payments").insert({
+      organization_id: 1, student_id: Number(addBatchForm.student_id),
+      amount: addBatchFee.subtotal, gst: addBatchFee.gst, final_amount: addBatchFee.total,
+      payment_mode: addBatchForm.payment_mode, status: "success",
+    }).select().single();
+
+    if (payError) { toast.error("Payment failed"); return; }
+
+    const enrollmentRecords = addBatchForm.new_batch_ids.map(batchId => ({
+      organization_id: 1, student_id: Number(addBatchForm.student_id), batch_id: Number(batchId),
+      payment_id: payment.id, status_type: "REN",
+      registration_fee_applied: false, late_renewal: false,
+      start_date: existingEnrollment.start_date, end_date: existingEnrollment.end_date,
+      subscription_plan_id: existingEnrollment.subscription_plan_id,
+      start_cycle_id: existingEnrollment.start_cycle_id,
+      end_cycle_id: existingEnrollment.end_cycle_id,
+    }));
+
+    const { error } = await supabase.from("enrollments").insert(enrollmentRecords);
+    if (error) { toast.error("Enrollment failed"); return; }
+
+    if (addBatchDropIn) {
+      await supabase.from("drop_ins").update({ is_adjusted: true, adjusted_at: new Date().toISOString() }).eq("id", addBatchDropIn.id);
+    }
+
+    toast.success(`Added ${addBatchForm.new_batch_ids.length} batch(es)! Amount: ₹${addBatchFee.total.toLocaleString()}${addBatchFee.dropInAdj > 0 ? ` (Drop-in adjusted: -₹${addBatchFee.dropInAdj})` : ""}`);
+    setAddBatchForm({ student_id: "", new_batch_ids: [], payment_mode: "cash" });
+    setExistingBatches([]);
+    setExistingEnrollment(null);
+    setAddBatchDropIn(null);
+    setAddBatchOpen(false);
+    fetchData();
+  };
+
+  const toggleAddBatch = (id: string) => {
+    setAddBatchForm(f => ({ ...f, new_batch_ids: f.new_batch_ids.includes(id) ? f.new_batch_ids.filter(b => b !== id) : [...f.new_batch_ids, id] }));
+  };
+
   const statusColors: Record<string, string> = { NEW: "bg-success/20 text-success", REN: "bg-primary/20 text-primary", REV: "bg-warning/20 text-warning" };
 
   const filtered = enrollments.filter((e) => e.students?.name?.toLowerCase().includes(search.toLowerCase()));
@@ -383,6 +522,99 @@ const EnrollmentsPage = () => {
                 </div>
               )}
               <Button className="w-full gradient-primary" onClick={handleEnroll}>Confirm Enrollment</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+        <Dialog open={addBatchOpen} onOpenChange={(open) => {
+          setAddBatchOpen(open);
+          if (!open) { setAddBatchForm({ student_id: "", new_batch_ids: [], payment_mode: "cash" }); setExistingBatches([]); setExistingEnrollment(null); setAddBatchDropIn(null); }
+        }}>
+          <DialogTrigger asChild>
+            <Button variant="outline"><PackagePlus className="h-4 w-4 mr-2" />Add Batch</Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-lg">
+            <DialogHeader><DialogTitle>Add Batch to Existing Enrollment</DialogTitle></DialogHeader>
+            <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+              <div><Label>Student</Label>
+                <Select value={addBatchForm.student_id} onValueChange={(v) => { setAddBatchForm(f => ({ ...f, student_id: v, new_batch_ids: [] })); fetchExistingEnrollments(v); }}>
+                  <SelectTrigger><SelectValue placeholder="Select student" /></SelectTrigger>
+                  <SelectContent>{students.map((s) => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+
+              {addBatchForm.student_id && existingBatches.length === 0 && (
+                <div className="p-3 rounded-lg border border-warning/30 bg-warning/10 text-sm">
+                  <p className="text-warning font-medium">No active enrollment found for this student.</p>
+                  <p className="text-muted-foreground mt-1">The student must have an active enrollment (or within grace period) to add batches.</p>
+                </div>
+              )}
+
+              {existingBatches.length > 0 && (
+                <>
+                  <div>
+                    <Label>Current Batches</Label>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {existingBatches.map(eb => (
+                        <Badge key={eb.batch_id} variant="secondary" className="opacity-60 cursor-not-allowed">{eb.batch_name}</Badge>
+                      ))}
+                    </div>
+                  </div>
+
+                  {existingEnrollment && (
+                    <div className="p-2 rounded border border-border text-sm text-muted-foreground">
+                      Enrollment: {existingEnrollment.start_date} → {existingEnrollment.end_date}
+                      {existingEnrollment.subscription_plans?.name && ` • ${existingEnrollment.subscription_plans.name}`}
+                    </div>
+                  )}
+
+                  <div>
+                    <Label>Select Additional Batches</Label>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {batches.filter(b => !existingBatches.some(eb => eb.batch_id === b.id)).map(b => (
+                        <Badge key={b.id} variant={addBatchForm.new_batch_ids.includes(String(b.id)) ? "default" : "outline"} className={`cursor-pointer ${addBatchForm.new_batch_ids.includes(String(b.id)) ? "gradient-primary" : ""}`} onClick={() => toggleAddBatch(String(b.id))}>{b.name}</Badge>
+                      ))}
+                    </div>
+                  </div>
+
+                  {addBatchDropIn && (
+                    <div className="p-3 rounded-lg border border-success/30 bg-success/10 text-sm">
+                      <p className="text-success font-medium">Drop-in available for adjustment</p>
+                      <p className="text-muted-foreground mt-1">
+                        Session: {addBatchDropIn.batch_sessions?.session_date} • Style: {addBatchDropIn.batch_sessions?.style} • Amount: <span className="font-medium text-foreground">₹{Number(addBatchDropIn.amount).toLocaleString()}</span>
+                      </p>
+                      <p className="text-muted-foreground mt-1">This amount will be deducted from the fee.</p>
+                    </div>
+                  )}
+
+                  <div><Label>Payment Mode</Label>
+                    <Select value={addBatchForm.payment_mode} onValueChange={(v) => setAddBatchForm(f => ({ ...f, payment_mode: v }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="cash">Cash</SelectItem>
+                        <SelectItem value="upi">UPI</SelectItem>
+                        <SelectItem value="online">Online</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {addBatchFee && addBatchForm.new_batch_ids.length > 0 && (
+                    <div className="p-3 rounded-lg border border-border bg-muted/30 text-sm space-y-1">
+                      <p className="font-medium text-foreground mb-2">Fee Breakdown</p>
+                      <div className="flex justify-between"><span className="text-muted-foreground">Per batch ({addBatchFee.regularCycles}R × ₹3,220 + {addBatchFee.gridCycles}G × ₹7,000)</span><span>₹{addBatchFee.perBatchFee.toLocaleString()}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground">Existing batches</span><span>{existingBatches.length}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground">New batches</span><span>{addBatchFee.newBatchCount}</span></div>
+                      {addBatchFee.discountPct > 0 && <div className="flex justify-between text-success"><span>Discount ({Math.round(addBatchFee.discountPct * 100)}% for {addBatchFee.totalBatchCount} total batches)</span><span>-₹{addBatchFee.discountAmount.toLocaleString()}</span></div>}
+                      <div className="flex justify-between"><span className="text-muted-foreground">New batch total</span><span>₹{addBatchFee.totalNewFee.toLocaleString()}</span></div>
+                      {addBatchFee.dropInAdj > 0 && <div className="flex justify-between text-success"><span>Drop-in adjustment</span><span>-₹{addBatchFee.dropInAdj.toLocaleString()}</span></div>}
+                      <div className="flex justify-between border-t border-border pt-1 mt-1"><span className="text-muted-foreground">Subtotal</span><span>₹{addBatchFee.subtotal.toLocaleString()}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground">GST (18%)</span><span>₹{addBatchFee.gst.toLocaleString()}</span></div>
+                      <div className="flex justify-between font-semibold border-t border-border pt-1 mt-1"><span>Total</span><span>₹{addBatchFee.total.toLocaleString()}</span></div>
+                    </div>
+                  )}
+
+                  <Button className="w-full gradient-primary" onClick={handleAddBatch} disabled={addBatchForm.new_batch_ids.length === 0}>Add Batch{addBatchForm.new_batch_ids.length > 1 ? "es" : ""}</Button>
+                </>
+              )}
             </div>
           </DialogContent>
         </Dialog>
