@@ -1,38 +1,45 @@
 
 
-# Fix User Deletion — Handle Batches Instructor FK
+# Add Batch (Add-On) Feature for Existing Enrollments
 
-## Problem
-Deleting a user fails when they are assigned as an instructor on batches. The `batches.instructor_id` has a foreign key to `users.id`.
+## Overview
+Allow students who already enrolled in a cycle to add more batches at the multi-batch discount rate, as long as the enrollment period is still within the grace period. The discount tier is based on total batches (existing + new).
 
-## Fix
+## How It Works
+1. **New "Add Batch" dialog** — separate from the "New Enrollment" dialog
+2. User selects a student → system fetches their **active enrollments** (where `end_date >= today` or within grace period of the active cycle)
+3. Shows which batches the student is already enrolled in (non-selectable, greyed out)
+4. User picks additional batches to add
+5. **Discount is calculated based on total batch count** (existing + new). For example: student has 1 batch, adds 1 more → 2-batch discount (12%) applied to the new batch's cycle fee
+6. No registration fee (already paid). Drop-in adjustment still eligible
+7. **Fee breakdown** shows: per-batch fee, discount tier (based on total count), GST, total
+8. On confirm: creates new enrollment records + payment record, inheriting the same `subscription_plan_id`, `start_cycle_id`, `end_cycle_id`, `start_date`, `end_date` from the existing enrollment
 
-### `src/pages/Staff.tsx` — Update `handleDelete`
-Before deleting students and user_roles, set `instructor_id = null` on any batches where this user is the instructor:
+## Changes to `src/pages/Enrollments.tsx`
 
-```typescript
-const handleDelete = async (id: number) => {
-  // 1. Unlink from batches
-  await supabase.from("batches").update({ instructor_id: null }).eq("instructor_id", id);
+### New State
+- `addBatchOpen` — dialog visibility
+- `addBatchForm` — `{ student_id, new_batch_ids[], payment_mode }`
+- `existingBatches` — fetched from active enrollments for the selected student
+- `existingEnrollment` — reference enrollment (for dates/plan/cycles)
 
-  // 2. Delete related students
-  const { error: studentsError } = await supabase
-    .from("students").delete().eq("user_id", id);
-  if (studentsError) { toast.error("Failed to delete linked students"); return; }
+### New Logic
+- `fetchExistingEnrollments(studentId)` — query enrollments where student's enrollment period covers the current active cycle (or within grace)
+- `computeAddBatchFee()` — uses same `DISCOUNT_TIERS` and cycle pricing, but:
+  - `totalBatchCount = existingBatches.length + newBatchIds.length`
+  - Discount % = `getDiscount(totalBatchCount)`
+  - Charges only for the **new** batches at the discounted per-batch rate
+  - No registration fee
+  - 18% GST on subtotal
+- `handleAddBatch()` — creates payment + enrollment records for new batches only
 
-  // 3. Delete related user_roles
-  const { error: rolesError } = await supabase
-    .from("user_roles").delete().eq("user_id", id);
-  if (rolesError) { toast.error("Failed to delete user roles"); return; }
+### New UI
+- "Add Batch" button next to "New Enrollment" button
+- Dialog with: student selector → shows existing batches (disabled) → pick new batches → fee breakdown → confirm
 
-  // 4. Delete the user
-  const { error } = await supabase.from("users").delete().eq("id", id);
-  if (error) { toast.error(error.message); return; }
+### Grace Period Check
+Reuse the same logic: a student qualifies if their existing enrollment's `end_date` is either ≥ today, or expired but within the active cycle's grace period.
 
-  toast.success("User deleted");
-  fetchData();
-};
-```
-
-Single-file change to `src/pages/Staff.tsx`.
+## No Database Changes
+All existing tables support this — enrollments, payments, batches are reused as-is.
 
