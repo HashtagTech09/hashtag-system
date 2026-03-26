@@ -1,45 +1,45 @@
 
 
-# Add Batch (Add-On) Feature for Existing Enrollments
+# Add `previous_batch_id` to Enrollments
 
-## Overview
-Allow students who already enrolled in a cycle to add more batches at the multi-batch discount rate, as long as the enrollment period is still within the grace period. The discount tier is based on total batches (existing + new).
+## Purpose
+Track which batch a student was previously enrolled in, enabling renewal/revival rate calculations per batch. Even if a student switches batches, the **previous batch** gets credit for the renewal/revival.
 
-## How It Works
-1. **New "Add Batch" dialog** — separate from the "New Enrollment" dialog
-2. User selects a student → system fetches their **active enrollments** (where `end_date >= today` or within grace period of the active cycle)
-3. Shows which batches the student is already enrolled in (non-selectable, greyed out)
-4. User picks additional batches to add
-5. **Discount is calculated based on total batch count** (existing + new). For example: student has 1 batch, adds 1 more → 2-batch discount (12%) applied to the new batch's cycle fee
-6. No registration fee (already paid). Drop-in adjustment still eligible
-7. **Fee breakdown** shows: per-batch fee, discount tier (based on total count), GST, total
-8. On confirm: creates new enrollment records + payment record, inheriting the same `subscription_plan_id`, `start_cycle_id`, `end_cycle_id`, `start_date`, `end_date` from the existing enrollment
+## Database Migration
+Add a nullable `previous_batch_id` column to the `enrollments` table:
 
-## Changes to `src/pages/Enrollments.tsx`
+```sql
+ALTER TABLE public.enrollments ADD COLUMN previous_batch_id bigint;
+```
 
-### New State
-- `addBatchOpen` — dialog visibility
-- `addBatchForm` — `{ student_id, new_batch_ids[], payment_mode }`
-- `existingBatches` — fetched from active enrollments for the selected student
-- `existingEnrollment` — reference enrollment (for dates/plan/cycles)
+No foreign key needed (consistent with existing pattern — no FKs on this table).
 
-### New Logic
-- `fetchExistingEnrollments(studentId)` — query enrollments where student's enrollment period covers the current active cycle (or within grace)
-- `computeAddBatchFee()` — uses same `DISCOUNT_TIERS` and cycle pricing, but:
-  - `totalBatchCount = existingBatches.length + newBatchIds.length`
-  - Discount % = `getDiscount(totalBatchCount)`
-  - Charges only for the **new** batches at the discounted per-batch rate
-  - No registration fee
-  - 18% GST on subtotal
-- `handleAddBatch()` — creates payment + enrollment records for new batches only
+## Code Changes — `src/pages/Enrollments.tsx`
 
-### New UI
-- "Add Batch" button next to "New Enrollment" button
-- Dialog with: student selector → shows existing batches (disabled) → pick new batches → fee breakdown → confirm
+### 1. Fetch previous batch IDs during status detection
+When detecting REN/REV status (the `detectStatus` effect around line 64), also fetch the `batch_id` values from the student's most recent enrollment set. Store them in new state `previousBatchIds`:
 
-### Grace Period Check
-Reuse the same logic: a student qualifies if their existing enrollment's `end_date` is either ≥ today, or expired but within the active cycle's grace period.
+```ts
+const [previousBatchIds, setPreviousBatchIds] = useState<number[]>([]);
+```
 
-## No Database Changes
-All existing tables support this — enrollments, payments, batches are reused as-is.
+Query: fetch all enrollments for the student with the latest `end_date` to get the batch IDs they were last enrolled in.
+
+### 2. Set `previous_batch_id` on new enrollment records
+
+**New Enrollment (`handleEnroll`, ~line 262)**:
+- If `detectedStatus` is `"NEW"` → set `previous_batch_id: null`
+- If `detectedStatus` is `"REN"` or `"REV"` → for each new batch, pick the matching previous batch if it exists in `previousBatchIds`, otherwise use the first previous batch ID (or null if none)
+
+Logic: map each new `batch_id` — if it matches a previous batch, use that. Otherwise assign the first previous batch ID so the old batch still gets renewal credit.
+
+**Add Batch (`handleAddBatch`, ~line 397)**:
+- These are always `"REN"` status. The `previous_batch_id` should be `null` since the student is adding a new batch (not renewing from a previous one). Or optionally set to the same batch if it existed before — but since add-batch only allows **new** batches not already enrolled, `previous_batch_id` should be `null`.
+
+### 3. Display (optional)
+No UI changes needed now — this is primarily a data-tracking column for analytics.
+
+## Summary
+- 1 migration: add `previous_batch_id` column
+- 1 file edit: `src/pages/Enrollments.tsx` — fetch previous batches on status detect, include in enrollment insert records
 
