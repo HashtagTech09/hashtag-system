@@ -1,0 +1,1 @@
+ALTER TABLE public.enrollments ADD COLUMN previous_batch_id bigint;

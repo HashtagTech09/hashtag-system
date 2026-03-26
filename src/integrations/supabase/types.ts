@@ -262,6 +262,7 @@ export type Database = {
           late_renewal: boolean | null
           organization_id: number
           payment_id: number | null
+          previous_batch_id: number | null
           registration_fee_applied: boolean | null
           start_cycle_id: number | null
           start_date: string
@@ -278,6 +279,7 @@ export type Database = {
           late_renewal?: boolean | null
           organization_id: number
           payment_id?: number | null
+          previous_batch_id?: number | null
           registration_fee_applied?: boolean | null
           start_cycle_id?: number | null
           start_date: string
@@ -294,6 +296,7 @@ export type Database = {
           late_renewal?: boolean | null
           organization_id?: number
           payment_id?: number | null
+          previous_batch_id?: number | null
           registration_fee_applied?: boolean | null
           start_cycle_id?: number | null
           start_date?: string
