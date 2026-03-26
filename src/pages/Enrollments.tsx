@@ -525,6 +525,99 @@ const EnrollmentsPage = () => {
             </div>
           </DialogContent>
         </Dialog>
+        <Dialog open={addBatchOpen} onOpenChange={(open) => {
+          setAddBatchOpen(open);
+          if (!open) { setAddBatchForm({ student_id: "", new_batch_ids: [], payment_mode: "cash" }); setExistingBatches([]); setExistingEnrollment(null); setAddBatchDropIn(null); }
+        }}>
+          <DialogTrigger asChild>
+            <Button variant="outline"><PackagePlus className="h-4 w-4 mr-2" />Add Batch</Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-lg">
+            <DialogHeader><DialogTitle>Add Batch to Existing Enrollment</DialogTitle></DialogHeader>
+            <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+              <div><Label>Student</Label>
+                <Select value={addBatchForm.student_id} onValueChange={(v) => { setAddBatchForm(f => ({ ...f, student_id: v, new_batch_ids: [] })); fetchExistingEnrollments(v); }}>
+                  <SelectTrigger><SelectValue placeholder="Select student" /></SelectTrigger>
+                  <SelectContent>{students.map((s) => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+
+              {addBatchForm.student_id && existingBatches.length === 0 && (
+                <div className="p-3 rounded-lg border border-warning/30 bg-warning/10 text-sm">
+                  <p className="text-warning font-medium">No active enrollment found for this student.</p>
+                  <p className="text-muted-foreground mt-1">The student must have an active enrollment (or within grace period) to add batches.</p>
+                </div>
+              )}
+
+              {existingBatches.length > 0 && (
+                <>
+                  <div>
+                    <Label>Current Batches</Label>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {existingBatches.map(eb => (
+                        <Badge key={eb.batch_id} variant="secondary" className="opacity-60 cursor-not-allowed">{eb.batch_name}</Badge>
+                      ))}
+                    </div>
+                  </div>
+
+                  {existingEnrollment && (
+                    <div className="p-2 rounded border border-border text-sm text-muted-foreground">
+                      Enrollment: {existingEnrollment.start_date} → {existingEnrollment.end_date}
+                      {existingEnrollment.subscription_plans?.name && ` • ${existingEnrollment.subscription_plans.name}`}
+                    </div>
+                  )}
+
+                  <div>
+                    <Label>Select Additional Batches</Label>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {batches.filter(b => !existingBatches.some(eb => eb.batch_id === b.id)).map(b => (
+                        <Badge key={b.id} variant={addBatchForm.new_batch_ids.includes(String(b.id)) ? "default" : "outline"} className={`cursor-pointer ${addBatchForm.new_batch_ids.includes(String(b.id)) ? "gradient-primary" : ""}`} onClick={() => toggleAddBatch(String(b.id))}>{b.name}</Badge>
+                      ))}
+                    </div>
+                  </div>
+
+                  {addBatchDropIn && (
+                    <div className="p-3 rounded-lg border border-success/30 bg-success/10 text-sm">
+                      <p className="text-success font-medium">Drop-in available for adjustment</p>
+                      <p className="text-muted-foreground mt-1">
+                        Session: {addBatchDropIn.batch_sessions?.session_date} • Style: {addBatchDropIn.batch_sessions?.style} • Amount: <span className="font-medium text-foreground">₹{Number(addBatchDropIn.amount).toLocaleString()}</span>
+                      </p>
+                      <p className="text-muted-foreground mt-1">This amount will be deducted from the fee.</p>
+                    </div>
+                  )}
+
+                  <div><Label>Payment Mode</Label>
+                    <Select value={addBatchForm.payment_mode} onValueChange={(v) => setAddBatchForm(f => ({ ...f, payment_mode: v }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="cash">Cash</SelectItem>
+                        <SelectItem value="upi">UPI</SelectItem>
+                        <SelectItem value="online">Online</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {addBatchFee && addBatchForm.new_batch_ids.length > 0 && (
+                    <div className="p-3 rounded-lg border border-border bg-muted/30 text-sm space-y-1">
+                      <p className="font-medium text-foreground mb-2">Fee Breakdown</p>
+                      <div className="flex justify-between"><span className="text-muted-foreground">Per batch ({addBatchFee.regularCycles}R × ₹3,220 + {addBatchFee.gridCycles}G × ₹7,000)</span><span>₹{addBatchFee.perBatchFee.toLocaleString()}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground">Existing batches</span><span>{existingBatches.length}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground">New batches</span><span>{addBatchFee.newBatchCount}</span></div>
+                      {addBatchFee.discountPct > 0 && <div className="flex justify-between text-success"><span>Discount ({Math.round(addBatchFee.discountPct * 100)}% for {addBatchFee.totalBatchCount} total batches)</span><span>-₹{addBatchFee.discountAmount.toLocaleString()}</span></div>}
+                      <div className="flex justify-between"><span className="text-muted-foreground">New batch total</span><span>₹{addBatchFee.totalNewFee.toLocaleString()}</span></div>
+                      {addBatchFee.dropInAdj > 0 && <div className="flex justify-between text-success"><span>Drop-in adjustment</span><span>-₹{addBatchFee.dropInAdj.toLocaleString()}</span></div>}
+                      <div className="flex justify-between border-t border-border pt-1 mt-1"><span className="text-muted-foreground">Subtotal</span><span>₹{addBatchFee.subtotal.toLocaleString()}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground">GST (18%)</span><span>₹{addBatchFee.gst.toLocaleString()}</span></div>
+                      <div className="flex justify-between font-semibold border-t border-border pt-1 mt-1"><span>Total</span><span>₹{addBatchFee.total.toLocaleString()}</span></div>
+                    </div>
+                  )}
+
+                  <Button className="w-full gradient-primary" onClick={handleAddBatch} disabled={addBatchForm.new_batch_ids.length === 0}>Add Batch{addBatchForm.new_batch_ids.length > 1 ? "es" : ""}</Button>
+                </>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <Card className="glass-card">
