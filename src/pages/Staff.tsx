@@ -112,14 +112,23 @@ const UsersPage = () => {
   };
 
   const handleDelete = async (id: number) => {
+    // 1. Unlink from batches (instructor)
+    await supabase.from("batches").update({ instructor_id: null }).eq("instructor_id", id);
+    // 2. Unlink from studios
+    await supabase.from("studios").update({ dreamcatcher_id: null }).eq("dreamcatcher_id", id);
+    await supabase.from("studios").update({ wingperson_id: null }).eq("wingperson_id", id);
+
+    // 3. Delete related students
     const { error: studentsError } = await supabase
       .from("students").delete().eq("user_id", id);
     if (studentsError) { toast.error("Failed to delete linked students"); return; }
 
+    // 4. Delete related user_roles
     const { error: rolesError } = await supabase
       .from("user_roles").delete().eq("user_id", id);
     if (rolesError) { toast.error("Failed to delete user roles"); return; }
 
+    // 5. Delete the user
     const { error } = await supabase.from("users").delete().eq("id", id);
     if (error) { toast.error(error.message); return; }
 
