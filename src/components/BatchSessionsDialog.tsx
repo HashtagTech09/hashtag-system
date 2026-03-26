@@ -12,7 +12,6 @@ import { Input } from "@/components/ui/input";
 import { CalendarIcon, Loader2, MoreHorizontal, Trash2, XCircle, Sun, Ban, CheckCircle, Users } from "lucide-react";
 import SessionCalendarView from "@/components/SessionCalendarView";
 import { format, eachDayOfInterval, getDay } from "date-fns";
-import { todayIST } from "@/lib/dateUtils";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -54,7 +53,7 @@ export default function BatchSessionsDialog({ open, onOpenChange, batch }: Props
   }, [open, batch]);
 
   const fetchSessions = async () => {
-    const today = todayIST();
+    const today = formatDate(new Date(), "yyyy-MM-dd");
 
     // Opportunistically mark past scheduled sessions as completed
     await supabase
