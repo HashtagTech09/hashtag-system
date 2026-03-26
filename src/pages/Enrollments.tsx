@@ -25,6 +25,11 @@ const EnrollmentsPage = () => {
   const [pricingPlans, setPricingPlans] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [addBatchOpen, setAddBatchOpen] = useState(false);
+  const [addBatchForm, setAddBatchForm] = useState({ student_id: "", new_batch_ids: [] as string[], payment_mode: "cash" });
+  const [existingBatches, setExistingBatches] = useState<any[]>([]);
+  const [existingEnrollment, setExistingEnrollment] = useState<any>(null);
+  const [addBatchDropIn, setAddBatchDropIn] = useState<any>(null);
   const [detectedStatus, setDetectedStatus] = useState<string>("NEW");
   const [latestEndDate, setLatestEndDate] = useState<string | null>(null);
   const [form, setForm] = useState({
