@@ -14,6 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import { Plus, Pencil, Trash2, Calendar as CalendarIcon, X } from "lucide-react";
 import { toast } from "sonner";
 import { differenceInDays, format, parseISO, eachDayOfInterval, isSameDay } from "date-fns";
+import { todayIST } from "@/lib/dateUtils";
 import { Calendar } from "@/components/ui/calendar";
 
 const PlanCyclesPage = () => {
