@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import AdminLayout from "@/components/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,7 +7,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Progress } from "@/components/ui/progress";
-import { ChevronDown } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ChevronDown, CalendarIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface Studio { id: number; name: string; code: string | null; }
 interface Batch { id: number; name: string; studio_id: number | null; capacity: number | null; }
@@ -46,6 +51,7 @@ const Dashboard = () => {
   const [newOpen, setNewOpen] = useState(false);
   const [revOpen, setRevOpen] = useState(false);
   const [renOpen, setRenOpen] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
 
   useEffect(() => {
     const init = async () => {
@@ -383,28 +389,57 @@ const Dashboard = () => {
             />
           </div>
 
-          {/* Row 4: Date-wise cards */}
+          {/* Row 4: Date-wise Breakdown with date picker */}
           <div>
-            <h3 className="text-sm font-semibold text-foreground mb-3">Date-wise Breakdown</h3>
-            {dateWise.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No data for this cycle</p>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                {dateWise.map(row => (
-                  <Card key={row.date} className="glass-card">
-                    <CardHeader className="pb-1 pt-3 px-3">
-                      <CardTitle className="text-xs font-semibold">{row.date}</CardTitle>
-                    </CardHeader>
-                    <CardContent className="px-3 pb-3 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
-                      <span className="text-muted-foreground">NEW</span><span className="text-right font-medium">{row.NEW || "—"}</span>
-                      <span className="text-muted-foreground">REN</span><span className="text-right font-medium">{row.REN || "—"}</span>
-                      <span className="text-muted-foreground">REV</span><span className="text-right font-medium">{row.REV || "—"}</span>
-                      <span className="text-muted-foreground">Drop-In</span><span className="text-right font-medium">{row.dropIn || "—"}</span>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
+            <div className="flex items-center gap-3 mb-3">
+              <h3 className="text-sm font-semibold text-foreground">Date-wise Breakdown</h3>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className={cn("w-[200px] justify-start text-left font-normal", !selectedDate && "text-muted-foreground")}>
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {selectedDate ? format(selectedDate, "PPP") : "Pick a date"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={selectedDate}
+                    onSelect={(d) => d && setSelectedDate(d)}
+                    initialFocus
+                    className={cn("p-3 pointer-events-auto")}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+            {(() => {
+              const dateStr = format(selectedDate, "yyyy-MM-dd");
+              const row = dateWise.find(r => r.date === dateStr);
+              return (
+                <Card className="glass-card">
+                  <CardHeader className="pb-1 pt-4 px-4">
+                    <CardTitle className="text-xs font-medium text-muted-foreground">{format(selectedDate, "dd MMM yyyy")}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-4 grid grid-cols-4 gap-4 text-center">
+                    <div>
+                      <div className="text-2xl font-bold">{row?.NEW || 0}</div>
+                      <div className="text-xs text-muted-foreground">NEW</div>
+                    </div>
+                    <div>
+                      <div className="text-2xl font-bold">{row?.REN || 0}</div>
+                      <div className="text-xs text-muted-foreground">REN</div>
+                    </div>
+                    <div>
+                      <div className="text-2xl font-bold">{row?.REV || 0}</div>
+                      <div className="text-xs text-muted-foreground">REV</div>
+                    </div>
+                    <div>
+                      <div className="text-2xl font-bold" style={{ color: ACCENT }}>{row?.dropIn || 0}</div>
+                      <div className="text-xs text-muted-foreground">Drop-In</div>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })()}
           </div>
 
           {/* Row 5: Drop-In card */}
