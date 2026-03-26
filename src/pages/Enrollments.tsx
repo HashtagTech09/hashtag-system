@@ -290,6 +290,140 @@ const EnrollmentsPage = () => {
     setForm((f) => ({ ...f, batch_ids: f.batch_ids.includes(id) ? f.batch_ids.filter((b) => b !== id) : [...f.batch_ids, id] }));
   };
 
+  // --- Add Batch Logic ---
+  const fetchExistingEnrollments = async (studentId: string) => {
+    if (!studentId) { setExistingBatches([]); setExistingEnrollment(null); return; }
+    const todayStr = new Date().toISOString().split("T")[0];
+    const { data } = await supabase.from("enrollments")
+      .select("*, batches(name, id)")
+      .eq("student_id", Number(studentId))
+      .eq("organization_id", 1)
+      .order("end_date", { ascending: false });
+
+    if (!data || data.length === 0) { setExistingBatches([]); setExistingEnrollment(null); return; }
+
+    // Find enrollments that are active or within grace
+    const activeCycle = planCycles.find(c => c.is_active);
+    const graceDays = activeCycle?.grace_days || 14;
+
+    const activeEnrollments = data.filter(e => {
+      if (e.end_date >= todayStr) return true;
+      const endD = new Date(e.end_date);
+      endD.setDate(endD.getDate() + graceDays);
+      return todayStr <= endD.toISOString().split("T")[0];
+    });
+
+    if (activeEnrollments.length === 0) { setExistingBatches([]); setExistingEnrollment(null); return; }
+
+    const uniqueBatchIds = [...new Set(activeEnrollments.map(e => e.batch_id))];
+    const existingBatchList = uniqueBatchIds.map(bid => {
+      const enrollment = activeEnrollments.find(e => e.batch_id === bid);
+      return { batch_id: bid, batch_name: enrollment?.batches?.name || `Batch ${bid}` };
+    });
+    setExistingBatches(existingBatchList);
+    setExistingEnrollment(activeEnrollments[0]); // reference enrollment for dates/plan
+  };
+
+  // Check drop-ins for add-batch
+  useEffect(() => {
+    const checkAddBatchDropIns = async () => {
+      if (!addBatchForm.student_id || addBatchForm.new_batch_ids.length === 0) { setAddBatchDropIn(null); return; }
+      const todayStr = new Date().toISOString().split("T")[0];
+      const selectedStyles = batches.filter(b => addBatchForm.new_batch_ids.includes(String(b.id))).map(b => b.style).filter(Boolean);
+      if (selectedStyles.length === 0) { setAddBatchDropIn(null); return; }
+      const { data } = await supabase.from("drop_ins")
+        .select("*, batch_sessions(session_date, style, start_time, end_time, batches(name))")
+        .eq("student_id", Number(addBatchForm.student_id))
+        .eq("is_adjusted", false)
+        .eq("organization_id", 1)
+        .order("created_at", { ascending: false });
+      if (!data || data.length === 0) { setAddBatchDropIn(null); return; }
+      const eligible = data.find(d => {
+        const sess = d.batch_sessions;
+        if (!sess) return false;
+        return sess.session_date >= todayStr && selectedStyles.includes(sess.style);
+      });
+      setAddBatchDropIn(eligible || null);
+    };
+    checkAddBatchDropIns();
+  }, [addBatchForm.student_id, addBatchForm.new_batch_ids, batches]);
+
+  const computeAddBatchFee = () => {
+    if (!existingEnrollment || addBatchForm.new_batch_ids.length === 0) return null;
+
+    // Determine cycle composition from existing enrollment
+    const refEnrollment = existingEnrollment;
+    let regularCycles = 1, gridCycles = 0;
+    if (refEnrollment.subscription_plan_id) {
+      const plan = subPlans.find(p => p.id === refEnrollment.subscription_plan_id);
+      if (plan) {
+        const sequence = subPlanCycles.filter(s => s.subscription_plan_id === plan.id);
+        regularCycles = sequence.filter(s => s.plan_type === "regular").length || 1;
+        gridCycles = sequence.filter(s => s.plan_type === "grid").length;
+      }
+    }
+
+    const totalBatchCount = existingBatches.length + addBatchForm.new_batch_ids.length;
+    const newBatchCount = addBatchForm.new_batch_ids.length;
+    const perBatchFee = (regularCycles * 3220) + (gridCycles * 7000);
+    const discountPct = getDiscount(totalBatchCount);
+    const discountedPerBatch = Math.round(perBatchFee * (1 - discountPct));
+    const totalNewFee = discountedPerBatch * newBatchCount;
+    const discountAmount = (perBatchFee * newBatchCount) - totalNewFee;
+
+    const dropInAdj = addBatchDropIn ? Number(addBatchDropIn.amount) : 0;
+    const subtotal = Math.max(0, totalNewFee - dropInAdj);
+    const gst = Math.round(subtotal * 0.18);
+    const total = subtotal + gst;
+
+    return { totalBatchCount, newBatchCount, perBatchFee, discountPct, discountAmount, totalNewFee, dropInAdj, subtotal, gst, total, regularCycles, gridCycles };
+  };
+
+  const addBatchFee = computeAddBatchFee();
+
+  const handleAddBatch = async () => {
+    if (!addBatchForm.student_id || addBatchForm.new_batch_ids.length === 0 || !existingEnrollment || !addBatchFee) {
+      toast.error("Select a student and at least one new batch"); return;
+    }
+
+    const { data: payment, error: payError } = await supabase.from("payments").insert({
+      organization_id: 1, student_id: Number(addBatchForm.student_id),
+      amount: addBatchFee.subtotal, gst: addBatchFee.gst, final_amount: addBatchFee.total,
+      payment_mode: addBatchForm.payment_mode, status: "success",
+    }).select().single();
+
+    if (payError) { toast.error("Payment failed"); return; }
+
+    const enrollmentRecords = addBatchForm.new_batch_ids.map(batchId => ({
+      organization_id: 1, student_id: Number(addBatchForm.student_id), batch_id: Number(batchId),
+      payment_id: payment.id, status_type: "REN",
+      registration_fee_applied: false, late_renewal: false,
+      start_date: existingEnrollment.start_date, end_date: existingEnrollment.end_date,
+      subscription_plan_id: existingEnrollment.subscription_plan_id,
+      start_cycle_id: existingEnrollment.start_cycle_id,
+      end_cycle_id: existingEnrollment.end_cycle_id,
+    }));
+
+    const { error } = await supabase.from("enrollments").insert(enrollmentRecords);
+    if (error) { toast.error("Enrollment failed"); return; }
+
+    if (addBatchDropIn) {
+      await supabase.from("drop_ins").update({ is_adjusted: true, adjusted_at: new Date().toISOString() }).eq("id", addBatchDropIn.id);
+    }
+
+    toast.success(`Added ${addBatchForm.new_batch_ids.length} batch(es)! Amount: ₹${addBatchFee.total.toLocaleString()}${addBatchFee.dropInAdj > 0 ? ` (Drop-in adjusted: -₹${addBatchFee.dropInAdj})` : ""}`);
+    setAddBatchForm({ student_id: "", new_batch_ids: [], payment_mode: "cash" });
+    setExistingBatches([]);
+    setExistingEnrollment(null);
+    setAddBatchDropIn(null);
+    setAddBatchOpen(false);
+    fetchData();
+  };
+
+  const toggleAddBatch = (id: string) => {
+    setAddBatchForm(f => ({ ...f, new_batch_ids: f.new_batch_ids.includes(id) ? f.new_batch_ids.filter(b => b !== id) : [...f.new_batch_ids, id] }));
+  };
+
   const statusColors: Record<string, string> = { NEW: "bg-success/20 text-success", REN: "bg-primary/20 text-primary", REV: "bg-warning/20 text-warning" };
 
   const filtered = enrollments.filter((e) => e.students?.name?.toLowerCase().includes(search.toLowerCase()));
