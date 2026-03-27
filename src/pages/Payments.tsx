@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { toISTDateString } from "@/lib/dateUtils";
 import { supabase } from "@/integrations/supabase/client";
 import AdminLayout from "@/components/AdminLayout";
 import { Card, CardContent } from "@/components/ui/card";
@@ -54,7 +55,7 @@ const PaymentsPage = () => {
                   <TableCell className="font-display">₹{Number(p.amount).toLocaleString()}</TableCell>
                   <TableCell className="text-muted-foreground capitalize">{p.payment_mode || "—"}</TableCell>
                   <TableCell><Badge className={statusColors[p.status] || ""} variant="secondary">{p.status}</Badge></TableCell>
-                  <TableCell className="hidden md:table-cell text-muted-foreground">{new Date(p.created_at).toLocaleDateString()}</TableCell>
+                  <TableCell className="hidden md:table-cell text-muted-foreground">{toISTDateString(p.created_at)}</TableCell>
                 </TableRow>
               ))}
               {filtered.length === 0 && <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No payments found</TableCell></TableRow>}

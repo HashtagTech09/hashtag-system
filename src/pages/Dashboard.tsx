@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { format } from "date-fns";
+import { nowIST, toISTDateString } from "@/lib/dateUtils";
 import { supabase } from "@/integrations/supabase/client";
 import AdminLayout from "@/components/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -52,7 +53,7 @@ const Dashboard = () => {
   const [newOpen, setNewOpen] = useState(false);
   const [revOpen, setRevOpen] = useState(false);
   const [renOpen, setRenOpen] = useState(false);
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date>(nowIST());
   const [missedThreshold, setMissedThreshold] = useState(3);
   const [attendanceRecords, setAttendanceRecords] = useState<{ student_id: number; batch_id: number }[]>([]);
   const [studentNames, setStudentNames] = useState<Map<number, { name: string; phone: string | null }>>(new Map());
@@ -227,7 +228,7 @@ const Dashboard = () => {
       return map.get(date)!;
     };
     enrollments.forEach(e => {
-      const date = e.created_at.split("T")[0];
+      const date = toISTDateString(e.created_at);
       const row = getOrCreate(date);
       if (e.status_type === "NEW") row.NEW++;
       else if (e.status_type === "REN") row.REN++;
@@ -245,7 +246,7 @@ const Dashboard = () => {
       }
     });
     dropIns.forEach(d => {
-      const date = d.created_at.split("T")[0];
+      const date = toISTDateString(d.created_at);
       const row = getOrCreate(date);
       row.dropIn++;
       if (d.is_adjusted) row.diAdjusted++;
