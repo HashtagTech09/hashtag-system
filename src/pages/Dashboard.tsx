@@ -228,7 +228,7 @@ const Dashboard = () => {
       return map.get(date)!;
     };
     enrollments.forEach(e => {
-      const date = e.created_at.split("T")[0];
+      const date = toISTDateString(e.created_at);
       const row = getOrCreate(date);
       if (e.status_type === "NEW") row.NEW++;
       else if (e.status_type === "REN") row.REN++;
@@ -246,7 +246,7 @@ const Dashboard = () => {
       }
     });
     dropIns.forEach(d => {
-      const date = d.created_at.split("T")[0];
+      const date = toISTDateString(d.created_at);
       const row = getOrCreate(date);
       row.dropIn++;
       if (d.is_adjusted) row.diAdjusted++;
