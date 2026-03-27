@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ChevronDown, CalendarIcon } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 interface Studio { id: number; name: string; code: string | null; }
@@ -52,6 +53,9 @@ const Dashboard = () => {
   const [revOpen, setRevOpen] = useState(false);
   const [renOpen, setRenOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [missedThreshold, setMissedThreshold] = useState(3);
+  const [attendanceRecords, setAttendanceRecords] = useState<{ student_id: number; batch_id: number }[]>([]);
+  const [studentNames, setStudentNames] = useState<Map<number, { name: string; phone: string | null }>>(new Map());
 
   useEffect(() => {
     const init = async () => {
@@ -141,6 +145,34 @@ const Dashboard = () => {
       const renewableRes = await renewableQuery;
       const uniqueRenewable = new Set((renewableRes.data || []).map((r: any) => r.student_id));
       setRenewableCount(uniqueRenewable.size);
+
+      // Fetch attendance absences within active cycle
+      const absenceRes = await supabase
+        .from("attendance")
+        .select("student_id, batch_id")
+        .eq("organization_id", 1)
+        .eq("status", "absent")
+        .gte("date", activeCycle.start_date)
+        .lte("date", activeCycle.end_date || "2099-12-31");
+      const absences = (absenceRes.data || []) as { student_id: number; batch_id: number }[];
+      
+      // Filter by studio batches if needed
+      const filteredAbsences = batchIds.length > 0 && selectedStudio !== "all"
+        ? absences.filter(a => batchIds.includes(a.batch_id))
+        : absences;
+      setAttendanceRecords(filteredAbsences);
+
+      // Fetch student names for absent students
+      const absentStudentIds = [...new Set(filteredAbsences.map(a => a.student_id))];
+      if (absentStudentIds.length > 0) {
+        const studRes = await supabase.from("students").select("id, name, phone").in("id", absentStudentIds);
+        const nameMap = new Map<number, { name: string; phone: string | null }>();
+        (studRes.data || []).forEach((s: any) => nameMap.set(s.id, { name: s.name, phone: s.phone }));
+        setStudentNames(nameMap);
+      } else {
+        setStudentNames(new Map());
+      }
+
       setLoading(false);
     };
     fetchData();
@@ -240,6 +272,19 @@ const Dashboard = () => {
       cash: acc.cash + r.cash, razorpay: acc.razorpay + r.razorpay,
     }), { NEW: 0, REN: 0, REV: 0, dropIn: 0, diAdjusted: 0, gross: 0, gst: 0, total: 0, cash: 0, razorpay: 0 });
   }, [dateWise]);
+
+  // Attendance report: group by student+batch, count absences
+  const attendanceReport = useMemo(() => {
+    const map = new Map<string, { student_id: number; batch_id: number; count: number }>();
+    attendanceRecords.forEach(a => {
+      const key = `${a.student_id}-${a.batch_id}`;
+      if (!map.has(key)) map.set(key, { student_id: a.student_id, batch_id: a.batch_id, count: 0 });
+      map.get(key)!.count++;
+    });
+    return Array.from(map.values())
+      .filter(r => r.count >= missedThreshold)
+      .sort((a, b) => b.count - a.count);
+  }, [attendanceRecords, missedThreshold]);
 
   const totalDropIns = dropIns.length;
   const totalDiAdjusted = dropIns.filter(d => d.is_adjusted).length;
@@ -503,6 +548,56 @@ const Dashboard = () => {
                 </CardContent>
               </Card>
             </div>
+          </div>
+
+          {/* Row 7: Attendance Report */}
+          <div>
+            <div className="flex items-center gap-3 mb-3">
+              <h3 className="text-sm font-semibold text-foreground">Attendance Report</h3>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-muted-foreground">Missed</span>
+                <Input
+                  type="number"
+                  min={1}
+                  value={missedThreshold}
+                  onChange={e => setMissedThreshold(Math.max(1, parseInt(e.target.value) || 1))}
+                  className="w-16 h-8 text-sm"
+                />
+                <span className="text-xs text-muted-foreground">+ classes</span>
+              </div>
+            </div>
+            <Card className="glass-card">
+              <CardContent className="px-4 py-3">
+                {attendanceReport.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">No students with {missedThreshold}+ absences</p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Student</TableHead>
+                        <TableHead>Phone</TableHead>
+                        <TableHead>Batch</TableHead>
+                        <TableHead className="text-right">Absences</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {attendanceReport.map(r => {
+                        const student = studentNames.get(r.student_id);
+                        const batch = batches.find(b => b.id === r.batch_id);
+                        return (
+                          <TableRow key={`${r.student_id}-${r.batch_id}`}>
+                            <TableCell className="font-medium text-sm">{student?.name || `#${r.student_id}`}</TableCell>
+                            <TableCell className="text-sm text-muted-foreground">{student?.phone || "—"}</TableCell>
+                            <TableCell className="text-sm">{batch?.name || `#${r.batch_id}`}</TableCell>
+                            <TableCell className="text-right font-bold text-sm" style={{ color: ACCENT }}>{r.count}</TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
           </div>
         </div>
       )}
