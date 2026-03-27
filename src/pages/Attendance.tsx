@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { todayIST } from "@/lib/dateUtils";
 import { supabase } from "@/integrations/supabase/client";
 import AdminLayout from "@/components/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,7 +15,7 @@ const AttendancePage = () => {
   const [selectedBatch, setSelectedBatch] = useState<string>("");
   const [students, setStudents] = useState<any[]>([]);
   const [attendance, setAttendance] = useState<Record<number, string>>({});
-  const [date] = useState(new Date().toISOString().split("T")[0]);
+  const [date] = useState(todayIST());
 
   useEffect(() => {
     const fetchBatches = async () => {
