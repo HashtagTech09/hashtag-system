@@ -228,7 +228,7 @@ const EnrollmentsPage = () => {
 
   const computeFeeBreakdown = () => {
     const batchCount = form.batch_ids.length;
-    const perBatchFee = (form.regular_cycles * 3220) + (form.grid_cycles * 7000);
+    const perBatchFee = (form.regular_cycles * 3767) + (form.grid_cycles * 5300);
     const discountPct = getDiscount(batchCount);
     const discountedPerBatch = Math.round(perBatchFee * (1 - discountPct));
     const totalBatchFee = discountedPerBatch * batchCount;
@@ -383,7 +383,7 @@ const EnrollmentsPage = () => {
 
     const totalBatchCount = existingBatches.length + addBatchForm.new_batch_ids.length;
     const newBatchCount = addBatchForm.new_batch_ids.length;
-    const perBatchFee = (regularCycles * 3220) + (gridCycles * 7000);
+    const perBatchFee = (regularCycles * 3767) + (gridCycles * 5300);
     const discountPct = getDiscount(totalBatchCount);
     const discountedPerBatch = Math.round(perBatchFee * (1 - discountPct));
     const totalNewFee = discountedPerBatch * newBatchCount;
