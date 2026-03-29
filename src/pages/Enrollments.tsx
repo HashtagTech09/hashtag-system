@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { todayIST } from "@/lib/dateUtils";
 import { supabase } from "@/integrations/supabase/client";
 import AdminLayout from "@/components/AdminLayout";
 import { Card, CardContent } from "@/components/ui/card";
@@ -128,7 +129,7 @@ const EnrollmentsPage = () => {
   }, [form.student_id, form.batch_ids, batches]);
   // Find the first cycle with open registration (or next upcoming)
   const getStartCycleIndex = (): number => {
-    const todayStr = new Date().toISOString().split("T")[0];
+    const todayStr = todayIST();
     // First: find a cycle whose registration is still open
     const openIdx = planCycles.findIndex(c => {
       if (c.registration_deadline && todayStr > c.registration_deadline) return false;
@@ -145,7 +146,7 @@ const EnrollmentsPage = () => {
   const startCycleIndex = planCycles.length > 0 ? getStartCycleIndex() : 0;
   const startCycle = planCycles[startCycleIndex];
   const currentCycleClosed = (() => {
-    const todayStr = new Date().toISOString().split("T")[0];
+    const todayStr = todayIST();
     const activeCycle = planCycles.find(c => c.is_active);
     if (!activeCycle) return false;
     return activeCycle.registration_deadline && todayStr > activeCycle.registration_deadline;
