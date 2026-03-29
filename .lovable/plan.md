@@ -1,46 +1,59 @@
 
 
-# Fix Enrollment Plan Selection and Fee Display
+# Fix Plan Validation Logic and Add Per-Plan Fee Preview
 
 ## Problem
-1. When the enrollment dialog opens, the form state is never reset — stale `subscription_plan_id`, `batch_ids`, `student_id` persist from prior interactions.
-2. The auto-select `useEffect` at line 177 has an incomplete dependency array (`[dialogOpen, validPlans.length]`), causing `computeCycleAssignment` to run with stale closures over `subPlans`, `subPlanCycles`, and `planCycles`.
-3. When reopening the dialog with a previously selected plan, the condition `!form.subscription_plan_id` is false, so auto-select never fires.
 
-## Fix — `src/pages/Enrollments.tsx`
+### 1. `isPlanValid` is too restrictive
+The current logic only looks at a strict window of exactly `totalRequired` consecutive cycles. For example, plan "2 Regular + 1 Grid" (total_cycles=3) only checks cycles[2..4] = March(R), April(R), May(R) — finds no grid cycle and marks it invalid.
 
-### 1. Reset form on dialog open
-Change `onOpenChange={setDialogOpen}` (line 464) to reset the form when opening:
+But `computeCycleAssignment` uses a different strategy: it walks forward and **skips** non-matching cycle types. So plan 6 would successfully match March(R), April(R), then skip May(R) to find Grid'26(G). The validation and assignment logic are inconsistent.
+
+**Result**: Plans like "2 Regular + 1 Grid" don't appear in the dropdown even though they can be assigned.
+
+### 2. No per-plan fee preview
+There's no way to see what each plan costs before selecting it. The fee breakdown only shows after selecting batches + plan.
+
+## Fix
+
+### 1. Rewrite `isPlanValid` to mirror `computeCycleAssignment` logic
+Instead of a strict window, walk through calendar cycles the same way assignment does — skip non-matching types:
+
 ```ts
-onOpenChange={(open) => {
-  setDialogOpen(open);
-  if (open) {
-    setForm({
-      student_id: "", batch_ids: [], payment_mode: "cash",
-      subscription_plan_id: "", computed_start: "", computed_end: "",
-      start_cycle_name: "", end_cycle_name: "",
-      start_cycle_id: null, end_cycle_id: null,
-      regular_cycles: 1, grid_cycles: 0,
-    });
-    setEligibleDropIn(null);
-    setDetectedStatus("NEW");
-    setLatestEndDate(null);
-    setPreviousBatchIds([]);
+const isPlanValid = (plan: any): boolean => {
+  const sequence = subPlanCycles
+    .filter(s => s.subscription_plan_id === plan.id)
+    .sort((a, b) => a.sequence_order - b.sequence_order);
+  if (sequence.length === 0) return false;
+
+  let calIdx = startCycleIndex;
+  for (const seqEntry of sequence) {
+    let found = false;
+    while (calIdx < planCycles.length) {
+      if (planCycles[calIdx].plan_type === seqEntry.plan_type) {
+        calIdx++;
+        found = true;
+        break;
+      }
+      calIdx++;
+    }
+    if (!found) return false;
   }
-}}
+  return true;
+};
 ```
 
-### 2. Fix auto-select useEffect dependencies
-Update the effect (line 176-181) to depend on the actual data arrays, not just `.length`, and reference `validPlans` correctly:
-```ts
-useEffect(() => {
-  if (dialogOpen && validPlans.length > 0 && (!form.subscription_plan_id || form.subscription_plan_id === "none")) {
-    computeCycleAssignment(String(validPlans[0].id));
-  }
-}, [dialogOpen, validPlans, form.subscription_plan_id, subPlans, subPlanCycles, planCycles]);
+### 2. Show per-plan fee in the plan dropdown
+In the `SelectItem` for each valid plan, append the per-batch fee:
+
+```
+"2 Regular + 1 Grid — ₹12,834/batch"
 ```
 
-This ensures the effect re-runs when data finishes loading and correctly picks the first valid plan with up-to-date closure values.
+Computed as: `(plan.total_regular_cycles * 3767) + (plan.total_grid_cycles * 5300)`.
+
+## Files changed
+- `src/pages/Enrollments.tsx` — rewrite `isPlanValid`, update plan dropdown labels
 
 ## No database changes needed.
 
