@@ -178,7 +178,7 @@ const EnrollmentsPage = () => {
     if (dialogOpen && validPlans.length > 0 && (!form.subscription_plan_id || form.subscription_plan_id === "none")) {
       computeCycleAssignment(String(validPlans[0].id));
     }
-  }, [dialogOpen, validPlans.length]);
+  }, [dialogOpen, validPlans, form.subscription_plan_id, subPlans, subPlanCycles, planCycles]);
 
   // Compute cycle assignment when subscription plan changes
   const computeCycleAssignment = (planId: string) => {
@@ -461,7 +461,22 @@ const EnrollmentsPage = () => {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input placeholder="Search by student..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10" />
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <Dialog open={dialogOpen} onOpenChange={(open) => {
+          setDialogOpen(open);
+          if (open) {
+            setForm({
+              student_id: "", batch_ids: [], payment_mode: "cash",
+              subscription_plan_id: "", computed_start: "", computed_end: "",
+              start_cycle_name: "", end_cycle_name: "",
+              start_cycle_id: null, end_cycle_id: null,
+              regular_cycles: 1, grid_cycles: 0,
+            });
+            setEligibleDropIn(null);
+            setDetectedStatus("NEW");
+            setLatestEndDate(null);
+            setPreviousBatchIds([]);
+          }
+        }}>
           <DialogTrigger asChild>
             <Button className="gradient-primary"><Plus className="h-4 w-4 mr-2" />New Enrollment</Button>
           </DialogTrigger>
