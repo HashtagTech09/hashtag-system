@@ -152,23 +152,27 @@ const EnrollmentsPage = () => {
   })();
 
   // Check if a plan's sequence matches upcoming cycles starting from the open cycle
+  // Mirrors computeCycleAssignment: walks forward and skips non-matching cycle types
   const isPlanValid = (plan: any): boolean => {
-    const requiredRegular = plan.total_regular_cycles || 0;
-    const requiredGrid = plan.total_grid_cycles || 0;
-    const totalRequired = plan.total_cycles || (requiredRegular + requiredGrid);
-    if (totalRequired === 0) return false;
+    const sequence = subPlanCycles
+      .filter(s => s.subscription_plan_id === plan.id)
+      .sort((a, b) => a.sequence_order - b.sequence_order);
+    if (sequence.length === 0) return false;
 
-    // Only look at the next `totalRequired` cycles — plan must fit within that window
-    const windowEnd = Math.min(startCycleIndex + totalRequired, planCycles.length);
-    if (windowEnd - startCycleIndex < totalRequired) return false;
-
-    let regularAvailable = 0;
-    let gridAvailable = 0;
-    for (let i = startCycleIndex; i < windowEnd; i++) {
-      if (planCycles[i].plan_type === "regular") regularAvailable++;
-      else if (planCycles[i].plan_type === "grid") gridAvailable++;
+    let calIdx = startCycleIndex;
+    for (const seqEntry of sequence) {
+      let found = false;
+      while (calIdx < planCycles.length) {
+        if (planCycles[calIdx].plan_type === seqEntry.plan_type) {
+          calIdx++;
+          found = true;
+          break;
+        }
+        calIdx++;
+      }
+      if (!found) return false;
     }
-    return regularAvailable >= requiredRegular && gridAvailable >= requiredGrid;
+    return true;
   };
 
   const validPlans = subPlans.filter(p => isPlanValid(p));
@@ -510,7 +514,10 @@ const EnrollmentsPage = () => {
                   <SelectTrigger><SelectValue placeholder="No plan (manual dates)" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">No plan</SelectItem>
-                    {validPlans.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}
+                    {validPlans.map(p => {
+                      const perBatchFee = (p.total_regular_cycles || 0) * 3767 + (p.total_grid_cycles || 0) * 5300;
+                      return <SelectItem key={p.id} value={String(p.id)}>{p.name} — ₹{perBatchFee.toLocaleString("en-IN")}/batch</SelectItem>;
+                    })}
                   </SelectContent>
                 </Select>
                 {form.computed_start && (
