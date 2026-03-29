@@ -161,17 +161,28 @@ const EnrollmentsPage = () => {
     if (sequence.length === 0) return false;
 
     let calIdx = startCycleIndex;
+    let prevType: string | null = null;
     for (const seqEntry of sequence) {
-      let found = false;
-      while (calIdx < planCycles.length) {
-        if (planCycles[calIdx].plan_type === seqEntry.plan_type) {
-          calIdx++;
-          found = true;
-          break;
+      if (prevType === seqEntry.plan_type) {
+        // Same type as previous — next calendar cycle MUST match
+        if (calIdx >= planCycles.length || planCycles[calIdx].plan_type !== seqEntry.plan_type) {
+          return false;
         }
         calIdx++;
+      } else {
+        // Type changed (or first entry) — allow skipping
+        let found = false;
+        while (calIdx < planCycles.length) {
+          if (planCycles[calIdx].plan_type === seqEntry.plan_type) {
+            calIdx++;
+            found = true;
+            break;
+          }
+          calIdx++;
+        }
+        if (!found) return false;
       }
-      if (!found) return false;
+      prevType = seqEntry.plan_type;
     }
     return true;
   };
@@ -197,19 +208,34 @@ const EnrollmentsPage = () => {
 
     const sequence = subPlanCycles.filter(s => s.subscription_plan_id === plan.id).sort((a, b) => a.sequence_order - b.sequence_order);
 
-    // Walk through calendar cycles, skip cycles of different type
+    // Walk through calendar cycles — only skip when type changes
     const matched: any[] = [];
     let calIdx = startCycleIndex;
+    let prevType: string | null = null;
     for (const seqEntry of sequence) {
-      while (calIdx < planCycles.length) {
-        const cycle = planCycles[calIdx];
-        if (cycle.plan_type === seqEntry.plan_type) {
-          matched.push(cycle);
-          calIdx++;
+      if (prevType === seqEntry.plan_type) {
+        // Same type as previous — next calendar cycle MUST match
+        if (calIdx >= planCycles.length || planCycles[calIdx].plan_type !== seqEntry.plan_type) {
           break;
         }
+        matched.push(planCycles[calIdx]);
         calIdx++;
+      } else {
+        // Type changed (or first entry) — allow skipping
+        let found = false;
+        while (calIdx < planCycles.length) {
+          const cycle = planCycles[calIdx];
+          if (cycle.plan_type === seqEntry.plan_type) {
+            matched.push(cycle);
+            calIdx++;
+            found = true;
+            break;
+          }
+          calIdx++;
+        }
+        if (!found) break;
       }
+      prevType = seqEntry.plan_type;
     }
 
     if (matched.length === sequence.length) {
