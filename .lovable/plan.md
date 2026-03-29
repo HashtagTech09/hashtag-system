@@ -1,18 +1,46 @@
 
 
-# Fix Enrollment Fee Display and Subscription Plan Defaults
+# Fix Enrollment Plan Selection and Fee Display
 
 ## Problem
-1. **Fee breakdown display shows old prices**: Line 533 hardcodes the display text as `₹3,220` and `₹7,000` but the actual calculation (line 231) uses the updated `₹3,767` and `₹5,300`. This makes the displayed breakdown misleading.
-2. **Default cycles when no plan selected**: When no subscription plan is chosen, `regular_cycles` defaults to `1` and `grid_cycles` to `0`, which may not match what the admin expects.
+1. When the enrollment dialog opens, the form state is never reset — stale `subscription_plan_id`, `batch_ids`, `student_id` persist from prior interactions.
+2. The auto-select `useEffect` at line 177 has an incomplete dependency array (`[dialogOpen, validPlans.length]`), causing `computeCycleAssignment` to run with stale closures over `subPlans`, `subPlanCycles`, and `planCycles`.
+3. When reopening the dialog with a previously selected plan, the condition `!form.subscription_plan_id` is false, so auto-select never fires.
 
 ## Fix — `src/pages/Enrollments.tsx`
 
-1. **Update fee breakdown display text** (line 533): Change `₹3,220` → `₹3,767` and `₹7,000` → `₹5,300` so the label matches the actual calculation.
+### 1. Reset form on dialog open
+Change `onOpenChange={setDialogOpen}` (line 464) to reset the form when opening:
+```ts
+onOpenChange={(open) => {
+  setDialogOpen(open);
+  if (open) {
+    setForm({
+      student_id: "", batch_ids: [], payment_mode: "cash",
+      subscription_plan_id: "", computed_start: "", computed_end: "",
+      start_cycle_name: "", end_cycle_name: "",
+      start_cycle_id: null, end_cycle_id: null,
+      regular_cycles: 1, grid_cycles: 0,
+    });
+    setEligibleDropIn(null);
+    setDetectedStatus("NEW");
+    setLatestEndDate(null);
+    setPreviousBatchIds([]);
+  }
+}}
+```
 
-2. **Auto-select the first valid subscription plan** when the enrollment dialog opens (or when student changes), so the cycle composition and fees are always correct by default instead of falling back to `regular_cycles: 1, grid_cycles: 0`.
+### 2. Fix auto-select useEffect dependencies
+Update the effect (line 176-181) to depend on the actual data arrays, not just `.length`, and reference `validPlans` correctly:
+```ts
+useEffect(() => {
+  if (dialogOpen && validPlans.length > 0 && (!form.subscription_plan_id || form.subscription_plan_id === "none")) {
+    computeCycleAssignment(String(validPlans[0].id));
+  }
+}, [dialogOpen, validPlans, form.subscription_plan_id, subPlans, subPlanCycles, planCycles]);
+```
 
-   Add a `useEffect` that watches `validPlans` and `dialogOpen` — if `form.subscription_plan_id` is empty and there are valid plans, auto-call `computeCycleAssignment` with the first valid plan.
+This ensures the effect re-runs when data finishes loading and correctly picks the first valid plan with up-to-date closure values.
 
-No database changes needed.
+## No database changes needed.
 
