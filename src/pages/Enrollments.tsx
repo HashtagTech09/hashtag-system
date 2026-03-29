@@ -173,6 +173,13 @@ const EnrollmentsPage = () => {
 
   const validPlans = subPlans.filter(p => isPlanValid(p));
 
+  // Auto-select first valid plan when dialog opens
+  useEffect(() => {
+    if (dialogOpen && validPlans.length > 0 && (!form.subscription_plan_id || form.subscription_plan_id === "none")) {
+      computeCycleAssignment(String(validPlans[0].id));
+    }
+  }, [dialogOpen, validPlans.length]);
+
   // Compute cycle assignment when subscription plan changes
   const computeCycleAssignment = (planId: string) => {
     if (!planId || planId === "none") {
@@ -530,7 +537,7 @@ const EnrollmentsPage = () => {
               {form.batch_ids.length > 0 && (
                 <div className="p-3 rounded-lg border border-border bg-muted/30 text-sm space-y-1">
                   <p className="font-medium text-foreground mb-2">Fee Breakdown</p>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Per batch ({form.regular_cycles}R × ₹3,220 + {form.grid_cycles}G × ₹7,000)</span><span>₹{feeBreakdown.perBatchFee.toLocaleString()}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Per batch ({form.regular_cycles}R × ₹3,767 + {form.grid_cycles}G × ₹5,300)</span><span>₹{feeBreakdown.perBatchFee.toLocaleString()}</span></div>
                   {feeBreakdown.discountPct > 0 && <div className="flex justify-between text-success"><span>Discount ({Math.round(feeBreakdown.discountPct * 100)}% for {feeBreakdown.batchCount} batches)</span><span>-₹{feeBreakdown.discountAmount.toLocaleString()}</span></div>}
                   <div className="flex justify-between"><span className="text-muted-foreground">Batch total ({feeBreakdown.batchCount} batch{feeBreakdown.batchCount > 1 ? "es" : ""})</span><span>₹{feeBreakdown.totalBatchFee.toLocaleString()}</span></div>
                   {feeBreakdown.regFee > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Registration fee ({detectedStatus}{feeBreakdown.isLateRenewal ? " - Late" : ""})</span><span>₹{feeBreakdown.regFee}</span></div>}
