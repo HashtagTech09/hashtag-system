@@ -17,6 +17,7 @@ const AttendancePage = () => {
   const [students, setStudents] = useState<any[]>([]);
   const [attendance, setAttendance] = useState<Record<number, string>>({});
   const [date] = useState(todayIST());
+  const [planCycles, setPlanCycles] = useState<any[]>([]);
 
   useEffect(() => {
     const fetchBatches = async () => {
