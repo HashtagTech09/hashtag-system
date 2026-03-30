@@ -36,8 +36,8 @@ export default function PhoneEntry({ onStudentFound, onNewUser }: PhoneEntryProp
         body: { phone: searchPhone },
       });
 
-      if (error) {
-        toast.error("Failed to send OTP");
+      if (error || !data?.success) {
+        toast.error(data?.error || "Failed to send OTP");
         return;
       }
 

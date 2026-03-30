@@ -82,7 +82,10 @@ Deno.serve(async (req) => {
       error_message: res.ok ? null : resBody,
     });
 
-    return new Response(JSON.stringify({ success: res.ok }), { headers: corsHeaders });
+    if (!res.ok) {
+      return new Response(JSON.stringify({ success: false, error: "Failed to send WhatsApp OTP. Enable test mode or check Interakt config." }), { headers: corsHeaders });
+    }
+    return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
   } catch (err) {
     return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: corsHeaders });
   }
