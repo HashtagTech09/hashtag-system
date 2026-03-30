@@ -43,7 +43,7 @@ const SAMPLES: Record<string, { filename: string; csv: string }> = {
   },
   Enrollments: {
     filename: "sample_enrollments.csv",
-    csv: "student_name,student_phone,batch_name,start_date,end_date,status_type,subscription_plan_name\nJohn Junior,9876543212,Batch A,2025-01-01,2025-03-31,NEW,3 Month Plan\nJane Junior,9876543213,Batch B,2025-01-01,2025-06-30,NEW,6 Month Plan",
+    csv: "student_name,student_phone,batch_code,start_date,end_date,status_type,subscription_plan_name\nJohn Junior,9876543212,HipHop-NDA,2025-01-01,2025-03-31,NEW,3 Month Plan\nJane Junior,9876543213,Contemporary-BLR,2025-01-01,2025-06-30,NEW,6 Month Plan",
   },
 };
 
