@@ -25,7 +25,7 @@ const BatchesPage = () => {
   const [instructors, setInstructors] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [form, setForm] = useState({ name: "", style: "", schedule: [] as ScheduleEntry[], studio_id: "", instructor_id: "", instructor_2_id: "", capacity: "" });
+  const [form, setForm] = useState({ name: "", style_base: "", level: "", schedule: [] as ScheduleEntry[], studio_id: "", instructor_id: "", instructor_2_id: "", capacity: "" });
   const [editId, setEditId] = useState<number | null>(null);
   const [sessionsBatch, setSessionsBatch] = useState<any>(null);
 
