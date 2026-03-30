@@ -14,7 +14,7 @@ Deno.serve(async (req) => {
     const { channel, recipient, template_name, template_data, student_id, payment_id } = await req.json();
 
     if (!channel || !recipient) {
-      return new Response(JSON.stringify({ error: "channel and recipient required" }), { status: 400, headers: corsHeaders });
+      return new Response(JSON.stringify({ error: "channel and recipient required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
