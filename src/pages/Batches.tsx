@@ -255,7 +255,7 @@ const BatchesPage = () => {
                       <Button variant="ghost" size="icon" onClick={() => {
                         const sched = getSchedule(batch);
                         setForm({
-                          name: batch.name, style: batch.style || "",
+                          name: batch.name, style_base: batch.style_base || "", level: batch.level || "",
                           schedule: sched,
                           studio_id: batch.studio_id ? String(batch.studio_id) : "",
                           instructor_id: batch.instructor_id ? String(batch.instructor_id) : "",
