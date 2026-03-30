@@ -50,6 +50,7 @@ const AppRoutes = () => (
     <Route path="/payments" element={<ProtectedRoute><PaymentsPage /></ProtectedRoute>} />
     <Route path="/attendance" element={<ProtectedRoute><AttendancePage /></ProtectedRoute>} />
     <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+    <Route path="/import" element={<ProtectedRoute><ImportPage /></ProtectedRoute>} />
     <Route path="/register" element={<RegisterPage />} />
     <Route path="*" element={<NotFound />} />
   </Routes>

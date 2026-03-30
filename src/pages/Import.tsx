@@ -309,7 +309,7 @@ export default function ImportPage() {
   };
 
   return (
-    <AdminLayout>
+    <AdminLayout title="Import Data">
       <div className="p-4 md:p-6 space-y-4">
         <h1 className="text-xl font-bold">Import Data</h1>
         <p className="text-sm text-muted-foreground">Upload CSV files exported from Google Sheets to import users, students, and enrollments.</p>

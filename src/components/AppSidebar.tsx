@@ -45,6 +45,7 @@ const operationItems = [
   { title: "Payments", url: "/payments", icon: CreditCard },
   { title: "Attendance", url: "/attendance", icon: UserCheck },
   { title: "Settings", url: "/settings", icon: Settings },
+  { title: "Import Data", url: "/import", icon: FileUp },
 ];
 
 export function AppSidebar() {
