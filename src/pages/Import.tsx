@@ -356,8 +356,8 @@ export default function ImportPage() {
         const studentId = phoneToStudentId.get(row.student_phone);
         if (!studentId) { errors++; errorMessages.push(`No student for phone: ${row.student_phone}`); continue; }
 
-        const batchId = nameToBatchId.get((row.batch_name || "").toLowerCase().trim());
-        if (!batchId) { errors++; errorMessages.push(`No batch: ${row.batch_name}`); continue; }
+        const batchId = codeToBatchId.get((row.batch_code || "").toLowerCase().trim());
+        if (!batchId) { errors++; errorMessages.push(`No batch with code: ${row.batch_code}`); continue; }
 
         if (!row.start_date || !row.end_date) { errors++; errorMessages.push(`Missing dates for ${row.student_phone}`); continue; }
 
