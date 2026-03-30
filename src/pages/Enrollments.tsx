@@ -302,8 +302,19 @@ const EnrollmentsPage = () => {
       };
     });
 
-    const { error } = await supabase.from("enrollments").insert(enrollmentRecords);
+    const { data: insertedEnrollments, error } = await supabase.from("enrollments").insert(enrollmentRecords).select();
     if (error) { toast.error("Enrollment failed"); return; }
+
+    // Write enrollment_cycles for each inserted enrollment
+    if (insertedEnrollments && form.start_cycle_id && form.end_cycle_id) {
+      const plan = subPlans.find(p => p.id === Number(form.subscription_plan_id));
+      if (plan) {
+        const allocated = allocateCyclesForPlan(plan, planCycles, startCycleIndex);
+        for (const enrollment of insertedEnrollments) {
+          await insertEnrollmentCycles(enrollment.id, enrollment.student_id, enrollment.batch_id, allocated);
+        }
+      }
+    }
 
     // Mark drop-in as adjusted
     if (eligibleDropIn) {
