@@ -18,7 +18,7 @@ const ORG_ID = 1;
 
 const USER_DB_COLUMNS = ["name", "phone", "email", "source"] as const;
 const STUDENT_DB_COLUMNS = ["name", "phone", "email", "dob", "gender", "user_phone"] as const;
-const ENROLLMENT_DB_COLUMNS = ["student_name", "student_phone", "batch_name", "start_date", "end_date", "status_type", "subscription_plan_name"] as const;
+const ENROLLMENT_DB_COLUMNS = ["student_name", "student_phone", "batch_code", "start_date", "end_date", "status_type", "subscription_plan_name"] as const;
 
 type ImportResult = { success: number; errors: number; errorMessages: string[]; extra?: string };
 
@@ -43,7 +43,7 @@ const SAMPLES: Record<string, { filename: string; csv: string }> = {
   },
   Enrollments: {
     filename: "sample_enrollments.csv",
-    csv: "student_name,student_phone,batch_name,start_date,end_date,status_type,subscription_plan_name\nJohn Junior,9876543212,Batch A,2025-01-01,2025-03-31,NEW,3 Month Plan\nJane Junior,9876543213,Batch B,2025-01-01,2025-06-30,NEW,6 Month Plan",
+    csv: "student_name,student_phone,batch_code,start_date,end_date,status_type,subscription_plan_name\nJohn Junior,9876543212,HipHop-NDA,2025-01-01,2025-03-31,NEW,3 Month Plan\nJane Junior,9876543213,Contemporary-BLR,2025-01-01,2025-06-30,NEW,6 Month Plan",
   },
 };
 
@@ -340,9 +340,9 @@ export default function ImportPage() {
     }
 
     // Step 3: Create Enrollments
-    const { data: batches } = await supabase.from("batches").select("id, name").eq("organization_id", ORG_ID);
-    const nameToBatchId = new Map<string, number>();
-    (batches || []).forEach(b => nameToBatchId.set(b.name.toLowerCase().trim(), b.id));
+    const { data: batches } = await supabase.from("batches").select("id, batch_code").eq("organization_id", ORG_ID);
+    const codeToBatchId = new Map<string, number>();
+    (batches || []).forEach(b => { if (b.batch_code) codeToBatchId.set(b.batch_code.toLowerCase().trim(), b.id); });
 
     const { data: planCycles } = await supabase.from("plan_cycles").select("*").eq("organization_id", ORG_ID).order("start_date");
     const cycles = planCycles || [];
@@ -356,8 +356,8 @@ export default function ImportPage() {
         const studentId = phoneToStudentId.get(row.student_phone);
         if (!studentId) { errors++; errorMessages.push(`No student for phone: ${row.student_phone}`); continue; }
 
-        const batchId = nameToBatchId.get((row.batch_name || "").toLowerCase().trim());
-        if (!batchId) { errors++; errorMessages.push(`No batch: ${row.batch_name}`); continue; }
+        const batchId = codeToBatchId.get((row.batch_code || "").toLowerCase().trim());
+        if (!batchId) { errors++; errorMessages.push(`No batch with code: ${row.batch_code}`); continue; }
 
         if (!row.start_date || !row.end_date) { errors++; errorMessages.push(`Missing dates for ${row.student_phone}`); continue; }
 
