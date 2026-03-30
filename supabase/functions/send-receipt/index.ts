@@ -42,7 +42,7 @@ Deno.serve(async (req) => {
         payload,
         status: "test_logged",
       });
-      return new Response(JSON.stringify({ success: true, test_mode: true }), { headers: corsHeaders });
+      return new Response(JSON.stringify({ success: true, test_mode: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     // Real send
