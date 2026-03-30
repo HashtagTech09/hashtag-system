@@ -215,6 +215,13 @@ function JoinBatchFlow() {
       const { error } = await supabase.from("enrollments").insert(records);
       if (error) throw error;
 
+      // Insert payment allocations
+      if (allocations.length > 0) {
+        await supabase.from("payment_allocations").insert(
+          allocations.map(a => ({ ...a, payment_id: payment.id }))
+        );
+      }
+
       toast.success(`Enrolled successfully! Amount: ₹${breakdown.total.toLocaleString()}`);
       setStep("browse");
       setSelectedBatchIds([]);
