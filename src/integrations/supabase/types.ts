@@ -129,6 +129,7 @@ export type Database = {
           capacity: number | null
           created_at: string
           id: number
+          instructor_2_id: number | null
           instructor_id: number | null
           level: string | null
           name: string
@@ -142,6 +143,7 @@ export type Database = {
           capacity?: number | null
           created_at?: string
           id?: never
+          instructor_2_id?: number | null
           instructor_id?: number | null
           level?: string | null
           name: string
@@ -155,6 +157,7 @@ export type Database = {
           capacity?: number | null
           created_at?: string
           id?: never
+          instructor_2_id?: number | null
           instructor_id?: number | null
           level?: string | null
           name?: string

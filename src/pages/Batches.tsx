@@ -24,7 +24,7 @@ const BatchesPage = () => {
   const [instructors, setInstructors] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [form, setForm] = useState({ name: "", style: "", schedule: [] as ScheduleEntry[], studio_id: "", instructor_id: "", capacity: "" });
+  const [form, setForm] = useState({ name: "", style: "", schedule: [] as ScheduleEntry[], studio_id: "", instructor_id: "", instructor_2_id: "", capacity: "" });
   const [editId, setEditId] = useState<number | null>(null);
   const [sessionsBatch, setSessionsBatch] = useState<any>(null);
 
@@ -72,6 +72,7 @@ const BatchesPage = () => {
       schedule: form.schedule.length > 0 ? form.schedule : null,
       studio_id: form.studio_id ? Number(form.studio_id) : null,
       instructor_id: form.instructor_id ? Number(form.instructor_id) : null,
+      instructor_2_id: form.instructor_2_id ? Number(form.instructor_2_id) : null,
       capacity: form.capacity ? Number(form.capacity) : null,
       batch_code: batchCode || null,
     };
@@ -87,7 +88,7 @@ const BatchesPage = () => {
     fetchData();
   };
 
-  const resetForm = () => { setForm({ name: "", style: "", schedule: [], studio_id: "", instructor_id: "", capacity: "" }); setEditId(null); setDialogOpen(false); };
+  const resetForm = () => { setForm({ name: "", style: "", schedule: [], studio_id: "", instructor_id: "", instructor_2_id: "", capacity: "" }); setEditId(null); setDialogOpen(false); };
 
   const handleDelete = async (id: number) => {
     await supabase.from("batches").delete().eq("id", id);
@@ -191,9 +192,15 @@ const BatchesPage = () => {
                   <SelectContent>{studios.map((s) => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
-              <div><Label>Instructor</Label>
+              <div><Label>Instructor 1</Label>
                 <Select value={form.instructor_id} onValueChange={(v) => setForm({ ...form, instructor_id: v })}>
                   <SelectTrigger><SelectValue placeholder="Select instructor" /></SelectTrigger>
+                  <SelectContent>{instructors.map((i) => <SelectItem key={i.id} value={String(i.id)}>{i.name}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div><Label>Instructor 2</Label>
+                <Select value={form.instructor_2_id} onValueChange={(v) => setForm({ ...form, instructor_2_id: v })}>
+                  <SelectTrigger><SelectValue placeholder="Select instructor (optional)" /></SelectTrigger>
                   <SelectContent>{instructors.map((i) => <SelectItem key={i.id} value={String(i.id)}>{i.name}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
@@ -224,7 +231,14 @@ const BatchesPage = () => {
                   <TableCell className="font-medium">{batch.name}</TableCell>
                   <TableCell className="text-muted-foreground">{batch.style || "—"}</TableCell>
                   <TableCell className="hidden md:table-cell text-muted-foreground text-sm">{formatScheduleDisplay(batch)}</TableCell>
-                  <TableCell className="hidden lg:table-cell text-muted-foreground">{batch.users?.name || "—"}</TableCell>
+                  <TableCell className="hidden lg:table-cell text-muted-foreground">
+                    {(() => {
+                      const i1 = instructors.find((i) => i.id === batch.instructor_id);
+                      const i2 = instructors.find((i) => i.id === batch.instructor_2_id);
+                      const names = [i1?.name, i2?.name].filter(Boolean).join(", ");
+                      return names || "—";
+                    })()}
+                  </TableCell>
                   <TableCell>
                     <div className="flex gap-1">
                       <Button variant="ghost" size="icon" title="Sessions" onClick={() => setSessionsBatch(batch)}>
@@ -237,6 +251,7 @@ const BatchesPage = () => {
                           schedule: sched,
                           studio_id: batch.studio_id ? String(batch.studio_id) : "",
                           instructor_id: batch.instructor_id ? String(batch.instructor_id) : "",
+                          instructor_2_id: batch.instructor_2_id ? String(batch.instructor_2_id) : "",
                           capacity: batch.capacity ? String(batch.capacity) : "",
                         });
                         setEditId(batch.id);

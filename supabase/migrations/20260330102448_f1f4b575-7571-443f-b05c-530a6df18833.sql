@@ -1,0 +1,1 @@
+ALTER TABLE public.batches ADD COLUMN instructor_2_id bigint;
