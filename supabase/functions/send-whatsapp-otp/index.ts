@@ -44,7 +44,7 @@ Deno.serve(async (req) => {
         payload: { otp },
         status: "test_logged",
       });
-      return new Response(JSON.stringify({ success: true, test_mode: true, test_otp: otp }), { headers: corsHeaders });
+      return new Response(JSON.stringify({ success: true, test_mode: true, test_otp: otp }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     // Send via Interakt
