@@ -98,10 +98,76 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
     setSelectedBatchIds(prev => prev.includes(id) ? prev.filter(b => b !== id) : [...prev, id]);
   };
 
+  const buildEnrollmentRecords = (paymentId?: number) => {
+    return selectedBatchIds.map(batchId => {
+      let prevBatchId: number | null = null;
+      if (detectedStatus === "REN" || detectedStatus === "REV") {
+        const numBatchId = Number(batchId);
+        prevBatchId = previousBatchIds.includes(numBatchId) ? numBatchId : (previousBatchIds[0] ?? null);
+      }
+      return {
+        organization_id: 1, student_id: student.id, batch_id: Number(batchId),
+        ...(paymentId ? { payment_id: paymentId } : {}),
+        status_type: detectedStatus,
+        registration_fee_applied: breakdown!.applyRegFee, late_renewal: breakdown!.isLateRenewal,
+        start_date: assignment!.startCycle.start_date, end_date: assignment!.endCycle.end_date || assignment!.startCycle.start_date,
+        subscription_plan_id: Number(selectedPlanId),
+        start_cycle_id: assignment!.startCycle.id, end_cycle_id: assignment!.endCycle.id,
+        previous_batch_id: prevBatchId,
+      };
+    });
+  };
+
+  const buildCyclesTemplate = () => {
+    const plan = subPlans.find(p => p.id === Number(selectedPlanId));
+    if (!plan || !assignment) return [];
+    const startIdx = planCycles.findIndex(c => c.id === assignment.startCycle.id);
+    return allocateCyclesForPlan(plan, planCycles, startIdx !== -1 ? startIdx : 0);
+  };
+
+  const onRenewSuccess = () => {
+    toast.success(`Payment initiated! Enrollment will be confirmed once payment is captured.`);
+    setMode("view");
+    setSelectedBatchIds([]);
+    setSelectedPlanId("");
+    fetchData();
+  };
+
   const handleRenew = async () => {
     if (selectedBatchIds.length === 0 || !assignment || !breakdown) return;
     setSubmitting(true);
     try {
+      if (paymentMode === "razorpay") {
+        const enrollmentRecords = buildEnrollmentRecords();
+        const cyclesTemplate = buildCyclesTemplate();
+        const batchNames = selectedBatchIds.map(id => batches.find(b => b.id === Number(id))?.name).filter(Boolean).join(", ");
+        const planName = subPlans.find(p => p.id === Number(selectedPlanId))?.name || "";
+
+        await initiateRazorpayPayment({
+          orderParams: {
+            student_id: student.id,
+            organization_id: 1,
+            batch_ids: selectedBatchIds.map(Number),
+            amount: breakdown.subtotal,
+            gst: breakdown.gst,
+            final_amount: breakdown.total,
+            enrollment_data: {
+              enrollments: enrollmentRecords,
+              enrollment_cycles_template: cyclesTemplate,
+            },
+            student_name: student.name,
+            student_phone: user?.phone || student.phone || "",
+            batch_names: batchNames,
+            plan_name: planName,
+          },
+          onSuccess: onRenewSuccess,
+          onFailure: (err) => toast.error(err),
+        });
+        setSubmitting(false);
+        return;
+      }
+
+      // Cash flow
       const { data: payment, error: payError } = await supabase.from("payments").insert({
         organization_id: 1, student_id: student.id, amount: breakdown.subtotal,
         gst: breakdown.gst, final_amount: breakdown.total,
@@ -109,27 +175,10 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
       }).select().single();
       if (payError) throw payError;
 
-      const records = selectedBatchIds.map(batchId => {
-        let prevBatchId: number | null = null;
-        if (detectedStatus === "REN" || detectedStatus === "REV") {
-          const numBatchId = Number(batchId);
-          prevBatchId = previousBatchIds.includes(numBatchId) ? numBatchId : (previousBatchIds[0] ?? null);
-        }
-        return {
-          organization_id: 1, student_id: student.id, batch_id: Number(batchId),
-          payment_id: payment.id, status_type: detectedStatus,
-          registration_fee_applied: breakdown.applyRegFee, late_renewal: breakdown.isLateRenewal,
-          start_date: assignment.startCycle.start_date, end_date: assignment.endCycle.end_date || assignment.startCycle.start_date,
-          subscription_plan_id: Number(selectedPlanId),
-          start_cycle_id: assignment.startCycle.id, end_cycle_id: assignment.endCycle.id,
-          previous_batch_id: prevBatchId,
-        };
-      });
-
+      const records = buildEnrollmentRecords(payment.id);
       const { data: insertedRecords, error } = await supabase.from("enrollments").insert(records).select();
       if (error) throw error;
 
-      // Write enrollment_cycles
       if (insertedRecords && assignment) {
         const plan = subPlans.find(p => p.id === Number(selectedPlanId));
         if (plan) {
