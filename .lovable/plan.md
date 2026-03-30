@@ -1,69 +1,30 @@
-# Student Self-Service Portal (No OTP — Phone Entry Only)
 
-## Overview
 
-Public page at `/register` where students browse batches/sessions from the live database and self-register. Phone number is entered without OTP verification for now (OTP can be layered on later). All batch, session, plan cycle, and pricing data comes from existing tables.
+# Add Second Instructor to Batches
 
-## Three Flows
+## Problem
+Batches currently support only one instructor (`instructor_id` column). Need to support 2 instructors per batch.
 
-### Flow 1: New Registration
+## Approach
+Add an `instructor_2_id` column to the `batches` table rather than a junction table — simpler for a fixed max of 2.
 
-Browse batches (from `batches` table with studio/instructor info) → select batches → enter phone number (lookup in `students` table; if not found, collect name to create student + user record) → auto-detect subscription plan using existing `isPlanValid` logic → show fee breakdown → select payment mode → create payment + enrollment records
+## Changes
 
-### Flow 2: Drop-In
+### Database Migration
+- Add `instructor_2_id bigint` nullable column to `batches` table
 
-Browse upcoming sessions (from `batch_sessions` table, status=scheduled, future dates) grouped by batch → pick a session → enter phone → same student lookup/creation → show drop-in fee (from `system_settings`) → confirm → create payment + drop_in record
+### `src/pages/Batches.tsx`
+- Add `instructor_2_id` to form state
+- Add second instructor `<Select>` dropdown in the dialog (labeled "Instructor 2")
+- Include `instructor_2_id` in save payload
+- Update the edit handler to populate `instructor_2_id` from existing batch
+- Update the table query to join the second instructor name (or fetch separately)
+- Display both instructor names in the table's Instructor column (e.g. "Alice, Bob" or "Alice" if only one)
 
-### Flow 3: Returning Student (Renew / Add Batch)
+### `src/components/register/BatchBrowser.tsx`
+- No changes needed (doesn't display instructor info currently)
 
-Enter phone number → lookup student → show active enrollments with batch names and validity dates → options to **Renew** (same status detection: NEW/REN/REV, same fee logic) or **Add Batch** (same add-batch logic as admin)
+## Technical Details
+- Migration: `ALTER TABLE public.batches ADD COLUMN instructor_2_id bigint;`
+- The select query changes to: `supabase.from("batches").select("*, studios(name), users!batches_instructor_id_fkey(name)")` — but since there are no foreign keys defined, the current approach uses `users(name)` which may need adjustment. We'll fetch instructor names by joining against the instructors list in-memory instead.
 
-## Architecture
-
-### Shared Logic Extraction
-
-Extract from `Enrollments.tsx` into `src/lib/enrollmentUtils.ts`:
-
-- `isPlanValid` — count-based greedy plan validation
-- `computeCycleAssignment` — cycle date computation
-- `getDiscount` / `computeFeeBreakdown` — fee calculation (discount tiers, reg fee, GST, drop-in adjustment)
-- `detectStudentStatus` — NEW/REN/REV detection
-- `getStartCycleIndex` — find first open registration cycle
-
-Both admin `Enrollments.tsx` and public `Register.tsx` import from this shared file.
-
-### New Files
-
-- `src/lib/enrollmentUtils.ts` — shared business logic
-- `src/pages/Register.tsx` — main public portal with 3-tab wizard
-- `src/components/register/BatchBrowser.tsx` — batch cards fetched from DB
-- `src/components/register/SessionBrowser.tsx` — upcoming sessions from DB
-- `src/components/register/PhoneEntry.tsx` — phone input + student lookup/creation (no OTP)
-- `src/components/register/FeeBreakdown.tsx` — reusable fee summary
-- `src/components/register/StudentDashboard.tsx` — returning student view with renew/add options
-
-### Modified Files
-
-- `src/App.tsx` — add `/register` as public route (no ProtectedRoute)
-- `src/pages/Enrollments.tsx` — import shared logic from `enrollmentUtils.ts` instead of inline
-
-### RLS Consideration
-
-All existing tables have permissive RLS for `authenticated` role. The public portal uses the anon key which is **not** authenticated. We need to add `anon` SELECT policies on: `batches`, `batch_sessions`, `studios`, `plan_cycles`, `subscription_plans`, `subscription_plan_cycles`, `pricing_plans`, `system_settings`, `students` (for phone lookup). And `anon` INSERT on: `students`, `users`, `enrollments`, `payments`, `drop_ins`.
-
-### Database Changes (migration)
-
-- Add RLS policies allowing `anon` role to SELECT from read-needed tables and INSERT into write-needed tables
-- Keep existing `authenticated` policies unchanged
-
-### OTP Later
-
-The `PhoneEntry` component will be designed with a clear separation point — phone input → lookup/create. When OTP is added later, a verification step slots in between phone entry and the lookup, requiring no structural changes.
-
-### Payment
-
-Same as admin flow: records created with selected payment mode and status "success". Payment gateway integration can be added later.
-
-## UI
-
-Mobile-first dark theme matching existing brand. Tab navigation: "Join a Batch" | "Drop-In" | "My Account". Each flow is a step-by-step wizard.
