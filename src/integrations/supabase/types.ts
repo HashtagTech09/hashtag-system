@@ -470,6 +470,42 @@ export type Database = {
           },
         ]
       }
+      notification_log: {
+        Row: {
+          channel: string
+          created_at: string
+          error_message: string | null
+          id: number
+          organization_id: number
+          payload: Json | null
+          recipient: string
+          status: string
+          template_name: string | null
+        }
+        Insert: {
+          channel: string
+          created_at?: string
+          error_message?: string | null
+          id?: never
+          organization_id?: number
+          payload?: Json | null
+          recipient: string
+          status?: string
+          template_name?: string | null
+        }
+        Update: {
+          channel?: string
+          created_at?: string
+          error_message?: string | null
+          id?: never
+          organization_id?: number
+          payload?: Json | null
+          recipient?: string
+          status?: string
+          template_name?: string | null
+        }
+        Relationships: []
+      }
       organizations: {
         Row: {
           created_at: string
@@ -1011,6 +1047,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      whatsapp_otp: {
+        Row: {
+          created_at: string
+          expires_at: string
+          id: number
+          otp: string
+          phone: string
+          verified: boolean
+        }
+        Insert: {
+          created_at?: string
+          expires_at: string
+          id?: never
+          otp: string
+          phone: string
+          verified?: boolean
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          id?: never
+          otp?: string
+          phone?: string
+          verified?: boolean
+        }
+        Relationships: []
       }
     }
     Views: {
