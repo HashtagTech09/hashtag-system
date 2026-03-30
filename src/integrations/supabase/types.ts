@@ -190,6 +190,45 @@ export type Database = {
           },
         ]
       }
+      cycle_adjustments: {
+        Row: {
+          adjustment_type: string
+          approved_by: number | null
+          batch_id: number
+          created_at: string
+          id: number
+          new_cycle_id: number | null
+          original_cycle_id: number
+          reason: string | null
+          status: string
+          student_id: number
+        }
+        Insert: {
+          adjustment_type: string
+          approved_by?: number | null
+          batch_id: number
+          created_at?: string
+          id?: never
+          new_cycle_id?: number | null
+          original_cycle_id: number
+          reason?: string | null
+          status?: string
+          student_id: number
+        }
+        Update: {
+          adjustment_type?: string
+          approved_by?: number | null
+          batch_id?: number
+          created_at?: string
+          id?: never
+          new_cycle_id?: number | null
+          original_cycle_id?: number
+          reason?: string | null
+          status?: string
+          student_id?: number
+        }
+        Relationships: []
+      }
       drop_ins: {
         Row: {
           adjusted_at: string | null
@@ -254,6 +293,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      enrollment_cycles: {
+        Row: {
+          batch_id: number
+          created_at: string
+          cycle_id: number
+          cycle_type: string
+          enrollment_id: number
+          id: number
+          student_id: number
+        }
+        Insert: {
+          batch_id: number
+          created_at?: string
+          cycle_id: number
+          cycle_type?: string
+          enrollment_id: number
+          id?: never
+          student_id: number
+        }
+        Update: {
+          batch_id?: number
+          created_at?: string
+          cycle_id?: number
+          cycle_type?: string
+          enrollment_id?: number
+          id?: never
+          student_id?: number
+        }
+        Relationships: []
       }
       enrollments: {
         Row: {
@@ -443,9 +512,11 @@ export type Database = {
           id: number
           is_active: boolean
           name: string
+          open_for_sale: boolean
           organization_id: number
           plan_type: string
           registration_deadline: string | null
+          sequence_no: number | null
           start_date: string
         }
         Insert: {
@@ -456,9 +527,11 @@ export type Database = {
           id?: never
           is_active?: boolean
           name: string
+          open_for_sale?: boolean
           organization_id: number
           plan_type?: string
           registration_deadline?: string | null
+          sequence_no?: number | null
           start_date: string
         }
         Update: {
@@ -469,9 +542,11 @@ export type Database = {
           id?: never
           is_active?: boolean
           name?: string
+          open_for_sale?: boolean
           organization_id?: number
           plan_type?: string
           registration_deadline?: string | null
+          sequence_no?: number | null
           start_date?: string
         }
         Relationships: [

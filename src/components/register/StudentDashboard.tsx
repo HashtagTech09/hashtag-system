@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { isPlanValid, computeCycleAssignment, computeFeeBreakdown, detectStudentStatus, getStartCycleIndex, getDiscount } from "@/lib/enrollmentUtils";
 import type { PlanCycle, SubPlan } from "@/lib/enrollmentUtils";
+import { allocateCyclesForPlan, insertEnrollmentCycles } from "@/lib/cycleUtils";
 import FeeBreakdownDisplay from "./FeeBreakdown";
 
 interface StudentDashboardProps {
@@ -124,8 +125,20 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
         };
       });
 
-      const { error } = await supabase.from("enrollments").insert(records);
+      const { data: insertedRecords, error } = await supabase.from("enrollments").insert(records).select();
       if (error) throw error;
+
+      // Write enrollment_cycles
+      if (insertedRecords && assignment) {
+        const plan = subPlans.find(p => p.id === Number(selectedPlanId));
+        if (plan) {
+          const startIdx = planCycles.findIndex(c => c.id === assignment.startCycle.id);
+          const allocated = allocateCyclesForPlan(plan, planCycles, startIdx !== -1 ? startIdx : 0);
+          for (const enrollment of insertedRecords) {
+            await insertEnrollmentCycles(enrollment.id, enrollment.student_id, enrollment.batch_id, allocated);
+          }
+        }
+      }
 
       toast.success(`Enrolled successfully! Amount: ₹${breakdown.total.toLocaleString()}`);
       setMode("view");
@@ -185,8 +198,22 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
         previous_batch_id: null,
       }));
 
-      const { error } = await supabase.from("enrollments").insert(records);
+      const { data: insertedAddRecords, error } = await supabase.from("enrollments").insert(records).select();
       if (error) throw error;
+
+      // Write enrollment_cycles for add-batch
+      if (insertedAddRecords && refEnrollment?.start_cycle_id && refEnrollment?.end_cycle_id) {
+        const refPlan = subPlans.find(p => p.id === refEnrollment.subscription_plan_id);
+        if (refPlan) {
+          const startIdx = planCycles.findIndex(c => c.id === refEnrollment.start_cycle_id);
+          if (startIdx !== -1) {
+            const allocated = allocateCyclesForPlan(refPlan, planCycles, startIdx);
+            for (const enrollment of insertedAddRecords) {
+              await insertEnrollmentCycles(enrollment.id, enrollment.student_id, enrollment.batch_id, allocated);
+            }
+          }
+        }
+      }
 
       toast.success(`Added ${selectedBatchIds.length} batch(es)! Amount: ₹${addBatchBreakdown.total.toLocaleString()}`);
       setMode("view");
