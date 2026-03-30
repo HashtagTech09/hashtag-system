@@ -183,7 +183,7 @@ function JoinBatchFlow() {
             amount: breakdown.subtotal,
             gst: breakdown.gst,
             final_amount: breakdown.total,
-            enrollment_data: { enrollments: enrollmentRecords, enrollment_cycles_template: [] },
+            enrollment_data: { enrollments: enrollmentRecords, enrollment_cycles_template: [], payment_allocations: allocations },
             student_name: student.name,
             student_phone: student.phone || "",
             batch_names: batchNames,
