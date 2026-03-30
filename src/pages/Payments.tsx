@@ -42,8 +42,11 @@ const PaymentsPage = () => {
                 <TableHead>Student</TableHead>
                 <TableHead>Phone</TableHead>
                 <TableHead>Amount</TableHead>
+                <TableHead className="hidden md:table-cell">Net Amount</TableHead>
                 <TableHead>Mode</TableHead>
+                <TableHead className="hidden md:table-cell">Account</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead className="hidden md:table-cell">Razorpay Ref</TableHead>
                 <TableHead className="hidden md:table-cell">Date</TableHead>
               </TableRow>
             </TableHeader>
@@ -52,13 +55,16 @@ const PaymentsPage = () => {
                 <TableRow key={p.id}>
                   <TableCell className="font-medium">{p.students?.name}</TableCell>
                   <TableCell className="text-muted-foreground">{p.students ? getDisplayPhone(p.students) : "—"}</TableCell>
-                  <TableCell className="font-display">₹{Number(p.amount).toLocaleString()}</TableCell>
+                  <TableCell className="font-display">₹{Number(p.final_amount || p.amount).toLocaleString()}</TableCell>
+                  <TableCell className="hidden md:table-cell font-display">{p.net_amount ? `₹${Number(p.net_amount).toLocaleString()}` : "—"}</TableCell>
                   <TableCell className="text-muted-foreground capitalize">{p.payment_mode || "—"}</TableCell>
+                  <TableCell className="hidden md:table-cell">{p.rzp_account ? <Badge variant="outline" className="capitalize">{p.rzp_account}</Badge> : "—"}</TableCell>
                   <TableCell><Badge className={statusColors[p.status] || ""} variant="secondary">{p.status}</Badge></TableCell>
+                  <TableCell className="hidden md:table-cell text-muted-foreground text-xs">{p.gateway_payment_id || "—"}</TableCell>
                   <TableCell className="hidden md:table-cell text-muted-foreground">{toISTDateString(p.created_at)}</TableCell>
                 </TableRow>
               ))}
-              {filtered.length === 0 && <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No payments found</TableCell></TableRow>}
+              {filtered.length === 0 && <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground py-8">No payments found</TableCell></TableRow>}
             </TableBody>
           </Table>
         </CardContent>
