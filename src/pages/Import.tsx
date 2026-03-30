@@ -18,7 +18,7 @@ const ORG_ID = 1;
 
 const USER_DB_COLUMNS = ["name", "phone", "email", "source"] as const;
 const STUDENT_DB_COLUMNS = ["name", "phone", "email", "dob", "gender", "user_phone"] as const;
-const ENROLLMENT_DB_COLUMNS = ["student_name", "student_phone", "batch_name", "start_date", "end_date", "status_type", "subscription_plan_name"] as const;
+const ENROLLMENT_DB_COLUMNS = ["student_name", "student_phone", "batch_code", "start_date", "end_date", "status_type", "subscription_plan_name"] as const;
 
 type ImportResult = { success: number; errors: number; errorMessages: string[]; extra?: string };
 
