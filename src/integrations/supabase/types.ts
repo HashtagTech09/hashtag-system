@@ -128,6 +128,7 @@ export type Database = {
           batch_code: string | null
           capacity: number | null
           created_at: string
+          eligibility_key: string | null
           id: number
           instructor_2_id: number | null
           instructor_id: number | null
@@ -137,11 +138,13 @@ export type Database = {
           schedule: Json | null
           studio_id: number | null
           style: string | null
+          style_base: string | null
         }
         Insert: {
           batch_code?: string | null
           capacity?: number | null
           created_at?: string
+          eligibility_key?: string | null
           id?: never
           instructor_2_id?: number | null
           instructor_id?: number | null
@@ -151,11 +154,13 @@ export type Database = {
           schedule?: Json | null
           studio_id?: number | null
           style?: string | null
+          style_base?: string | null
         }
         Update: {
           batch_code?: string | null
           capacity?: number | null
           created_at?: string
+          eligibility_key?: string | null
           id?: never
           instructor_2_id?: number | null
           instructor_id?: number | null
@@ -165,6 +170,7 @@ export type Database = {
           schedule?: Json | null
           studio_id?: number | null
           style?: string | null
+          style_base?: string | null
         }
         Relationships: [
           {
@@ -225,6 +231,42 @@ export type Database = {
           original_cycle_id?: number
           reason?: string | null
           status?: string
+          student_id?: number
+        }
+        Relationships: []
+      }
+      drop_in_credits: {
+        Row: {
+          created_at: string
+          credits_total: number
+          credits_used: number
+          eligibility_key: string
+          expiry_date: string | null
+          id: number
+          organization_id: number
+          payment_id: number | null
+          student_id: number
+        }
+        Insert: {
+          created_at?: string
+          credits_total?: number
+          credits_used?: number
+          eligibility_key: string
+          expiry_date?: string | null
+          id?: never
+          organization_id?: number
+          payment_id?: number | null
+          student_id: number
+        }
+        Update: {
+          created_at?: string
+          credits_total?: number
+          credits_used?: number
+          eligibility_key?: string
+          expiry_date?: string | null
+          id?: never
+          organization_id?: number
+          payment_id?: number | null
           student_id?: number
         }
         Relationships: []
@@ -443,6 +485,36 @@ export type Database = {
           created_at?: string
           id?: never
           name?: string
+        }
+        Relationships: []
+      }
+      payment_allocations: {
+        Row: {
+          allocated_amount: number
+          batch_id: number
+          created_at: string
+          id: number
+          is_primary: boolean
+          payment_id: number
+          studio_id: number | null
+        }
+        Insert: {
+          allocated_amount?: number
+          batch_id: number
+          created_at?: string
+          id?: never
+          is_primary?: boolean
+          payment_id: number
+          studio_id?: number | null
+        }
+        Update: {
+          allocated_amount?: number
+          batch_id?: number
+          created_at?: string
+          id?: never
+          is_primary?: boolean
+          payment_id?: number
+          studio_id?: number | null
         }
         Relationships: []
       }
