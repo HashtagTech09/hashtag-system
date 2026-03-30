@@ -1,47 +1,56 @@
 
+## Findings
+- Test mode is actually working.
+- The latest OTP requests returned success from the backend with test OTPs:
+  - `396166`
+  - `887091` (latest)
+- So the failure is not the OTP generation itself; it is the client interpreting the response incorrectly.
 
-# Fix OTP Flow — Enable Test Mode + Debug Edge Function
+## Root cause
+`send-whatsapp-otp` returns JSON, but its responses do not include `Content-Type: application/json`.
 
-## Problem
-The `send-whatsapp-otp` function returned `{"success":false}` because:
-1. Test mode is not enabled in `system_settings`, so it tried to send via Interakt
-2. The Interakt API call likely failed (no proper API key or template not configured)
-3. The function returns `{"success": false}` on Interakt failure but the frontend still shows the OTP screen, with no way to know the code
+Because of that:
+- `supabase.functions.invoke()` does not reliably give `data` as a parsed object
+- `PhoneEntry.tsx` checks `!data?.success`
+- the UI shows `Failed to send OTP` even though the backend already returned `{ success: true, test_mode: true, test_otp: "..." }`
 
-## Root Cause
-Looking at the edge function, when test mode is OFF and Interakt fails, it returns `{ success: res.ok }` which is `false`. But the frontend `PhoneEntry.tsx` only checks for `error` from `supabase.functions.invoke`, not `data.success`:
+The same header issue also exists in:
+- `supabase/functions/verify-whatsapp-otp/index.ts`
+- `supabase/functions/send-receipt/index.ts`
 
-```typescript
-if (error) {
-  toast.error("Failed to send OTP");
-  return;
-}
-// It proceeds to setOtpSent(true) even when data.success is false
-```
+## Implementation plan
+1. Fix all edge-function responses to always return:
+   ```ts
+   headers: { ...corsHeaders, "Content-Type": "application/json" }
+   ```
+   in:
+   - `supabase/functions/send-whatsapp-otp/index.ts`
+   - `supabase/functions/verify-whatsapp-otp/index.ts`
+   - `supabase/functions/send-receipt/index.ts`
 
-## Fixes
+2. Harden `PhoneEntry.tsx`
+   - keep the `error || !data?.success` guard
+   - add a defensive fallback so if response parsing is ever wrong again, the toast shows the raw server message instead of generic failure
+   - keep showing the `test_otp` badge when test mode is on
 
-### 1. Fix `PhoneEntry.tsx` — check `data.success`
-After the invoke call, also check `if (!data?.success)` and show an error toast instead of proceeding to the OTP entry screen.
+3. Improve function robustness
+   - switch the `test_mode` lookup to a safer single-row pattern
+   - add lightweight logs around:
+     - test mode detected / not detected
+     - OTP insert success/failure
+     - notification log insert success/failure
+   - do not log secrets
 
-### 2. Ensure test mode toggle works
-Verify the Settings page correctly inserts/updates the `test_mode` key in `system_settings`. If the row doesn't exist yet, it needs to be created on first toggle.
+## Expected result after fix
+- With test mode ON:
+  - clicking “Send OTP” moves to the OTP screen
+  - the yellow test-mode OTP badge appears
+  - entering the shown OTP verifies successfully
+- With test mode OFF and provider failure:
+  - the UI stays on the phone step
+  - the real provider error is shown clearly
 
-### 3. Improve edge function error handling
-The `send-whatsapp-otp` function should return a clearer error message when Interakt fails, so the frontend can display it.
-
-## Technical Changes
-
-**`src/components/register/PhoneEntry.tsx`** — line ~42:
-```typescript
-if (error || !data?.success) {
-  toast.error(data?.error || "Failed to send OTP");
-  return;
-}
-```
-
-This ensures the OTP screen only appears when the OTP was actually sent (or test-logged).
-
-## Immediate Action
-Enable Test Mode in Settings first, then retry. The OTP will display on screen.
-
+## Technical notes
+- No database change is needed.
+- This is mainly a response-header contract issue between the backend function and `supabase.functions.invoke()`.
+- I’ll also standardize the same fix for receipt sending so the same bug does not show up there later.
