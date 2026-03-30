@@ -5,8 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Save } from "lucide-react";
+import { Save, AlertTriangle } from "lucide-react";
 
 const SettingsPage = () => {
   const [settings, setSettings] = useState<Record<string, string>>({});
@@ -38,9 +40,46 @@ const SettingsPage = () => {
     toast.success("Pricing updated");
   };
 
+  const handleTestModeToggle = async (checked: boolean) => {
+    const newValue = checked ? "true" : "false";
+    setSettings({ ...settings, test_mode: newValue });
+    await supabase.from("system_settings").upsert(
+      { organization_id: 1, key: "test_mode", value: newValue },
+      { onConflict: "organization_id,key" }
+    );
+    toast.success(checked ? "Test mode enabled — no real messages will be sent" : "Test mode disabled — messages will be sent for real");
+  };
+
+  const isTestMode = settings.test_mode === "true";
+
   return (
     <AdminLayout title="Settings">
       <div className="grid gap-6 max-w-2xl">
+        {isTestMode && (
+          <div className="flex items-center gap-2 p-3 rounded-lg bg-warning/10 border border-warning/30">
+            <AlertTriangle className="h-4 w-4 text-warning shrink-0" />
+            <span className="text-sm font-medium text-warning">TEST MODE ON — no real messages will be sent</span>
+          </div>
+        )}
+
+        <Card className="glass-card">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center justify-between">
+              Test Mode
+              {isTestMode && <Badge variant="secondary" className="bg-warning/20 text-warning">Active</Badge>}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-foreground">Enable test mode</p>
+                <p className="text-xs text-muted-foreground">When ON, emails and WhatsApp messages are logged but not actually sent</p>
+              </div>
+              <Switch checked={isTestMode} onCheckedChange={handleTestModeToggle} />
+            </div>
+          </CardContent>
+        </Card>
+
         <Card className="glass-card">
           <CardHeader><CardTitle className="text-base">System Settings</CardTitle></CardHeader>
           <CardContent className="space-y-4">
