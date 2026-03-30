@@ -40,16 +40,43 @@ const AttendancePage = () => {
   useEffect(() => {
     if (!selectedBatch) return;
     const fetchStudents = async () => {
-      const { data: enrollments } = await supabase
-        .from("enrollments")
-        .select("student_id, students(id, name, phone, users(phone))")
-        .eq("organization_id", 1)
-        .eq("batch_id", Number(selectedBatch))
-        .lte("start_date", date)
-        .gte("end_date", date);
+      // Find the cycle for the current date
+      const currentCycle = getCurrentCycle(planCycles);
 
-      const uniqueStudents = Array.from(new Map((enrollments || []).map((e) => [e.student_id, e.students])).values()).filter(Boolean);
-      setStudents(uniqueStudents as any[]);
+      let eligibleStudentIds: number[] = [];
+
+      if (currentCycle) {
+        // Cycle-based: query enrollment_cycles for students who own this cycle+batch
+        const { data: ecData } = await supabase
+          .from("enrollment_cycles")
+          .select("student_id")
+          .eq("batch_id", Number(selectedBatch))
+          .eq("cycle_id", currentCycle.id);
+
+        eligibleStudentIds = [...new Set((ecData || []).map(ec => ec.student_id))];
+      } else {
+        // Fallback to date-based for backward compatibility
+        const { data: enrollments } = await supabase
+          .from("enrollments")
+          .select("student_id")
+          .eq("organization_id", 1)
+          .eq("batch_id", Number(selectedBatch))
+          .lte("start_date", date)
+          .gte("end_date", date);
+
+        eligibleStudentIds = [...new Set((enrollments || []).map(e => e.student_id))];
+      }
+
+      // Fetch student details
+      if (eligibleStudentIds.length > 0) {
+        const { data: studentData } = await supabase
+          .from("students")
+          .select("id, name, phone, users(phone)")
+          .in("id", eligibleStudentIds);
+        setStudents((studentData || []) as any[]);
+      } else {
+        setStudents([]);
+      }
 
       const { data: existingAtt } = await supabase
         .from("attendance")
