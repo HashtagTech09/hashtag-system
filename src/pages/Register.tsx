@@ -142,16 +142,9 @@ function JoinBatchFlow() {
     if (!student || selectedBatchIds.length === 0 || !assignment || !breakdown) return;
     setSubmitting(true);
     try {
-      const { data: payment, error: payError } = await supabase.from("payments").insert({
-        organization_id: 1, student_id: student.id, amount: breakdown.subtotal,
-        gst: breakdown.gst, final_amount: breakdown.total,
-        payment_mode: paymentMode, status: "success",
-      }).select().single();
-      if (payError) throw payError;
-
-      const records = selectedBatchIds.map(batchId => ({
+      const enrollmentRecords = selectedBatchIds.map(batchId => ({
         organization_id: 1, student_id: student.id, batch_id: Number(batchId),
-        payment_id: payment.id, status_type: detectedStatus,
+        status_type: detectedStatus,
         registration_fee_applied: breakdown.applyRegFee, late_renewal: false,
         start_date: assignment.startCycle.start_date,
         end_date: assignment.endCycle.end_date || assignment.startCycle.start_date,
@@ -160,11 +153,51 @@ function JoinBatchFlow() {
         previous_batch_id: null,
       }));
 
+      if (paymentMode === "razorpay") {
+        const batchNames = selectedBatchIds.map(id => "Batch#" + id).join(", ");
+        const planName = subPlans.find(p => p.id === Number(selectedPlanId))?.name || "";
+
+        await initiateRazorpayPayment({
+          orderParams: {
+            student_id: student.id,
+            organization_id: 1,
+            batch_ids: selectedBatchIds.map(Number),
+            amount: breakdown.subtotal,
+            gst: breakdown.gst,
+            final_amount: breakdown.total,
+            enrollment_data: { enrollments: enrollmentRecords, enrollment_cycles_template: [] },
+            student_name: student.name,
+            student_phone: student.phone || "",
+            batch_names: batchNames,
+            plan_name: planName,
+          },
+          onSuccess: () => {
+            toast.success("Payment initiated! Enrollment will be confirmed once payment is captured.");
+            setStep("browse");
+            setSelectedBatchIds([]);
+            setStudent(null);
+            setUser(null);
+            setSelectedPlanId("");
+          },
+          onFailure: (err) => toast.error(err),
+        });
+        setSubmitting(false);
+        return;
+      }
+
+      // Cash flow
+      const { data: payment, error: payError } = await supabase.from("payments").insert({
+        organization_id: 1, student_id: student.id, amount: breakdown.subtotal,
+        gst: breakdown.gst, final_amount: breakdown.total,
+        payment_mode: paymentMode, status: "success",
+      }).select().single();
+      if (payError) throw payError;
+
+      const records = enrollmentRecords.map(r => ({ ...r, payment_id: payment.id }));
       const { error } = await supabase.from("enrollments").insert(records);
       if (error) throw error;
 
       toast.success(`Enrolled successfully! Amount: ₹${breakdown.total.toLocaleString()}`);
-      // Reset
       setStep("browse");
       setSelectedBatchIds([]);
       setStudent(null);
