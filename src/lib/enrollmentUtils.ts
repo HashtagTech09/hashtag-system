@@ -106,6 +106,14 @@ export function computeCycleAssignment(plan: SubPlan, planCycles: PlanCycle[], s
   };
 }
 
+export interface BatchAllocation {
+  batch_id: number;
+  batch_name: string;
+  style_base: string;
+  is_primary: boolean;
+  amount: number;
+}
+
 export interface FeeBreakdown {
   batchCount: number;
   perBatchFee: number;
@@ -119,6 +127,7 @@ export interface FeeBreakdown {
   total: number;
   applyRegFee: boolean;
   isLateRenewal: boolean;
+  batchAllocations: BatchAllocation[];
 }
 
 export function computeFeeBreakdown(params: {
@@ -128,12 +137,17 @@ export function computeFeeBreakdown(params: {
   detectedStatus: string;
   latestEndDate: string | null;
   dropInAmount: number;
+  /** Sorted batches by hierarchy (highest priority first) */
+  sortedBatches?: { id: number; name: string; style_base?: string | null }[];
 }): FeeBreakdown {
-  const { batchCount, regularCycles, gridCycles, detectedStatus, latestEndDate, dropInAmount } = params;
+  const { batchCount, regularCycles, gridCycles, detectedStatus, latestEndDate, dropInAmount, sortedBatches } = params;
   const perBatchFee = (regularCycles * REGULAR_PRICE) + (gridCycles * GRID_PRICE);
   const discountPct = getDiscount(batchCount);
+
+  // Primary batch (first in hierarchy) gets full price, rest get discounted
   const discountedPerBatch = Math.round(perBatchFee * (1 - discountPct));
-  const totalBatchFee = discountedPerBatch * batchCount;
+  const primaryFee = perBatchFee; // no discount
+  const totalBatchFee = batchCount === 1 ? primaryFee : primaryFee + discountedPerBatch * (batchCount - 1);
   const discountAmount = (perBatchFee * batchCount) - totalBatchFee;
 
   const todayStr = new Date().toISOString().split("T")[0];
@@ -145,7 +159,16 @@ export function computeFeeBreakdown(params: {
   const gst = Math.round(subtotal * GST_RATE);
   const total = subtotal + gst;
 
-  return { batchCount, perBatchFee, discountPct, discountAmount, totalBatchFee, regFee, dropInAdj: dropInAmount, subtotal, gst, total, applyRegFee, isLateRenewal };
+  // Build per-batch allocations
+  const batchAllocations: BatchAllocation[] = (sortedBatches || []).map((b, idx) => ({
+    batch_id: b.id,
+    batch_name: b.name,
+    style_base: b.style_base || "",
+    is_primary: idx === 0,
+    amount: idx === 0 ? primaryFee : discountedPerBatch,
+  }));
+
+  return { batchCount, perBatchFee, discountPct, discountAmount, totalBatchFee, regFee, dropInAdj: dropInAmount, subtotal, gst, total, applyRegFee, isLateRenewal, batchAllocations };
 }
 
 /** Detect student enrollment status: NEW, REN, or REV */

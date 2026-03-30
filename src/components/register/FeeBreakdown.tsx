@@ -15,9 +15,24 @@ export default function FeeBreakdownDisplay({ breakdown, regularCycles, gridCycl
         <span className="text-muted-foreground">Per batch ({regularCycles}R × ₹3,767 + {gridCycles}G × ₹5,300)</span>
         <span>₹{breakdown.perBatchFee.toLocaleString()}</span>
       </div>
+
+      {/* Per-batch line items with hierarchy */}
+      {breakdown.batchAllocations.length > 0 && (
+        <div className="pl-2 border-l-2 border-primary/20 ml-1 space-y-0.5">
+          {breakdown.batchAllocations.map((alloc, idx) => (
+            <div key={idx} className="flex justify-between text-xs">
+              <span className={alloc.is_primary ? "text-foreground font-medium" : "text-muted-foreground"}>
+                {alloc.batch_name} {alloc.is_primary ? "(Primary)" : `(${Math.round(breakdown.discountPct * 100)}% off)`}
+              </span>
+              <span className={alloc.is_primary ? "" : "text-success"}>₹{alloc.amount.toLocaleString()}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
       {breakdown.discountPct > 0 && (
         <div className="flex justify-between text-success">
-          <span>Discount ({Math.round(breakdown.discountPct * 100)}% for {breakdown.batchCount} batches)</span>
+          <span>Multi-batch discount ({breakdown.batchCount} batches)</span>
           <span>-₹{breakdown.discountAmount.toLocaleString()}</span>
         </div>
       )}
