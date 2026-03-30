@@ -331,8 +331,7 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="cash">Cash</SelectItem>
-                <SelectItem value="upi">UPI</SelectItem>
-                <SelectItem value="online">Online</SelectItem>
+                <SelectItem value="razorpay">Razorpay</SelectItem>
               </SelectContent>
             </Select>
           </div>
