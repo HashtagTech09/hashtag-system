@@ -125,8 +125,20 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
         };
       });
 
-      const { error } = await supabase.from("enrollments").insert(records);
+      const { data: insertedRecords, error } = await supabase.from("enrollments").insert(records).select();
       if (error) throw error;
+
+      // Write enrollment_cycles
+      if (insertedRecords && assignment) {
+        const plan = subPlans.find(p => p.id === Number(selectedPlanId));
+        if (plan) {
+          const startIdx = planCycles.findIndex(c => c.id === assignment.startCycle.id);
+          const allocated = allocateCyclesForPlan(plan, planCycles, startIdx !== -1 ? startIdx : 0);
+          for (const enrollment of insertedRecords) {
+            await insertEnrollmentCycles(enrollment.id, enrollment.student_id, enrollment.batch_id, allocated);
+          }
+        }
+      }
 
       toast.success(`Enrolled successfully! Amount: ₹${breakdown.total.toLocaleString()}`);
       setMode("view");
