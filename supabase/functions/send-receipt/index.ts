@@ -14,7 +14,7 @@ Deno.serve(async (req) => {
     const { channel, recipient, template_name, template_data, student_id, payment_id } = await req.json();
 
     if (!channel || !recipient) {
-      return new Response(JSON.stringify({ error: "channel and recipient required" }), { status: 400, headers: corsHeaders });
+      return new Response(JSON.stringify({ error: "channel and recipient required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -42,7 +42,7 @@ Deno.serve(async (req) => {
         payload,
         status: "test_logged",
       });
-      return new Response(JSON.stringify({ success: true, test_mode: true }), { headers: corsHeaders });
+      return new Response(JSON.stringify({ success: true, test_mode: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     // Real send
@@ -108,9 +108,9 @@ Deno.serve(async (req) => {
       error_message: sendResult.error || null,
     });
 
-    return new Response(JSON.stringify({ success: sendResult.success, error: sendResult.error }), { headers: corsHeaders });
+    return new Response(JSON.stringify({ success: sendResult.success, error: sendResult.error }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: corsHeaders });
+    return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 });
 

@@ -13,7 +13,7 @@ Deno.serve(async (req) => {
   try {
     const { phone } = await req.json();
     if (!phone || phone.length < 10) {
-      return new Response(JSON.stringify({ error: "Valid phone required" }), { status: 400, headers: corsHeaders });
+      return new Response(JSON.stringify({ error: "Valid phone required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -44,13 +44,13 @@ Deno.serve(async (req) => {
         payload: { otp },
         status: "test_logged",
       });
-      return new Response(JSON.stringify({ success: true, test_mode: true, test_otp: otp }), { headers: corsHeaders });
+      return new Response(JSON.stringify({ success: true, test_mode: true, test_otp: otp }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     // Send via Interakt
     const interaktKey = Deno.env.get("INTERAKT_API_KEY");
     if (!interaktKey) {
-      return new Response(JSON.stringify({ error: "INTERAKT_API_KEY not configured" }), { status: 500, headers: corsHeaders });
+      return new Response(JSON.stringify({ error: "INTERAKT_API_KEY not configured" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const phoneNum = phone.startsWith("91") ? phone.replace(/^91/, "") : phone;
@@ -83,10 +83,10 @@ Deno.serve(async (req) => {
     });
 
     if (!res.ok) {
-      return new Response(JSON.stringify({ success: false, error: "Failed to send WhatsApp OTP. Enable test mode or check Interakt config." }), { headers: corsHeaders });
+      return new Response(JSON.stringify({ success: false, error: "Failed to send WhatsApp OTP. Enable test mode or check Interakt config." }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-    return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
+    return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: corsHeaders });
+    return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 });
