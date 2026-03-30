@@ -21,8 +21,12 @@ const AttendancePage = () => {
 
   useEffect(() => {
     const fetchBatches = async () => {
-      const { data } = await supabase.from("batches").select("*").eq("organization_id", 1).order("name");
-      setBatches(data || []);
+      const [batchRes, cycleRes] = await Promise.all([
+        supabase.from("batches").select("*").eq("organization_id", 1).order("name"),
+        supabase.from("plan_cycles").select("*").eq("organization_id", 1).order("start_date"),
+      ]);
+      setBatches(batchRes.data || []);
+      setPlanCycles(cycleRes.data || []);
     };
     fetchBatches();
   }, []);
