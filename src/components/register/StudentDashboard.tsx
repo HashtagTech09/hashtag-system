@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { isPlanValid, computeCycleAssignment, computeFeeBreakdown, detectStudentStatus, getStartCycleIndex, getDiscount } from "@/lib/enrollmentUtils";
 import type { PlanCycle, SubPlan } from "@/lib/enrollmentUtils";
+import { allocateCyclesForPlan, insertEnrollmentCycles } from "@/lib/cycleUtils";
 import FeeBreakdownDisplay from "./FeeBreakdown";
 
 interface StudentDashboardProps {
