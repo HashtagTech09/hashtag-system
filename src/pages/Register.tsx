@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { initiateRazorpayPayment } from "@/lib/razorpayUtils";
 import { useEffect } from "react";
 import BatchBrowser from "@/components/register/BatchBrowser";
 import SessionBrowser from "@/components/register/SessionBrowser";
