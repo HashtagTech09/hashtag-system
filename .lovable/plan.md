@@ -1,28 +1,17 @@
 
 
-# Add Razorpay Webhook Secrets
+# Style Hierarchy Pricing, Payment Allocations & Credit-Based Drop-ins — IMPLEMENTED
 
-## What's needed
-You need to add **6 Razorpay secrets** to the project for the dual-account integration. None have been added yet.
+## What was done
 
-## Secrets to add
+1. **Database**: Added `style_base`, `eligibility_key` columns to `batches`. Created `payment_allocations` and `drop_in_credits` tables with RLS.
+2. **Style Hierarchy** (`src/lib/styleHierarchy.ts`): Jazz(1) > Ballet(2) > Modern(3) > Hip Hop(4) > Heels(5). Primary batch = full price, rest = discounted.
+3. **Batches page**: Split style dropdown into Style + Level with eligibility key preview.
+4. **Pricing**: Primary batch gets full price, subsequent batches get tiered discount. Per-batch allocations shown in FeeBreakdown.
+5. **Payment Allocations**: Inserted on both cash and Razorpay flows. Webhook updated to handle allocations.
+6. **Drop-in Credits**: New credit-based system with Issue Credits dialog, eligibility key matching, Credits tab in DropIns page.
+7. **Backfill**: Existing batches updated with parsed `style_base` and `level`.
 
-| Secret Name | Where to find it |
-|---|---|
-| `RZP_PRIDE_KEY_ID` | Razorpay Dashboard → Pride account → Settings → API Keys → Key ID |
-| `RZP_PRIDE_KEY_SECRET` | Razorpay Dashboard → Pride account → Settings → API Keys → Key Secret |
-| `RZP_PRIDE_WEBHOOK_SECRET` | Razorpay Dashboard → Pride account → Settings → Webhooks → Secret |
-| `RZP_PRUDENT_KEY_ID` | Razorpay Dashboard → Prudent account → Settings → API Keys → Key ID |
-| `RZP_PRUDENT_KEY_SECRET` | Razorpay Dashboard → Prudent account → Settings → API Keys → Key Secret |
-| `RZP_PRUDENT_WEBHOOK_SECRET` | Razorpay Dashboard → Prudent account → Settings → Webhooks → Secret |
-
-## Implementation
-Once you approve, I'll use the secret addition tool to prompt you for each value one at a time. You can paste each secret when prompted.
-
-## Webhook URL
-For the Razorpay webhook configuration in both dashboards, set the webhook URL to:
-```
-https://plrpurjponddhelgtebw.supabase.co/functions/v1/razorpay-webhook
-```
-Select the `payment.captured` event.
-
+## Next steps
+- Update eligibility_key on existing batches (run UPDATE after backfill)
+- Build drop-in credit redemption flow in Register.tsx
