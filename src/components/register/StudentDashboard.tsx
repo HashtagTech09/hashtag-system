@@ -72,6 +72,10 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
 
   const assignment = selectedPlanId ? computeCycleAssignment(subPlans.find(p => p.id === Number(selectedPlanId))!, planCycles, startCycleIdx) : null;
 
+  // Sort selected batches by style hierarchy
+  const selectedBatchObjects = selectedBatchIds.map(id => batches.find(b => b.id === Number(id))).filter(Boolean);
+  const sortedSelectedBatches = sortBatchesByHierarchy(selectedBatchObjects);
+
   const breakdown = selectedBatchIds.length > 0 && assignment ? computeFeeBreakdown({
     batchCount: selectedBatchIds.length,
     regularCycles: assignment.regularCount,
@@ -79,6 +83,7 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
     detectedStatus,
     latestEndDate,
     dropInAmount: 0,
+    sortedBatches: sortedSelectedBatches.map(b => ({ id: b.id, name: b.name, style_base: b.style_base })),
   }) : null;
 
   // Auto-select first valid plan
