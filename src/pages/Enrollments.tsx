@@ -14,6 +14,7 @@ import { Plus, Search, PackagePlus } from "lucide-react";
 import { toast } from "sonner";
 import { getDisplayPhone } from "@/lib/studentUtils";
 import { parseISO } from "date-fns";
+import { allocateCyclesForPlan, insertEnrollmentCycles } from "@/lib/cycleUtils";
 
 const EnrollmentsPage = () => {
   const [enrollments, setEnrollments] = useState<any[]>([]);
