@@ -74,8 +74,11 @@ function JoinBatchFlow() {
   const [selectedPlanId, setSelectedPlanId] = useState("");
   const [paymentMode, setPaymentMode] = useState("cash");
   const [submitting, setSubmitting] = useState(false);
+  const [allBatches, setAllBatches] = useState<any[]>([]);
 
   useEffect(() => {
+    supabase.from("batches").select("*").eq("organization_id", 1).then(({ data }) => setAllBatches(data || []));
+  }, []);
     const fetch = async () => {
       const [planRes, cycleRes] = await Promise.all([
         supabase.from("subscription_plans").select("*").eq("organization_id", 1).eq("is_active", true).order("id"),
