@@ -1,0 +1,136 @@
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+async function verifySignature(body: string, signature: string, secret: string): Promise<boolean> {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(body));
+  const expected = Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, "0")).join("");
+  return expected === signature;
+}
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const rawBody = await req.text();
+    const signature = req.headers.get("x-razorpay-signature") || "";
+    const event = JSON.parse(rawBody);
+
+    if (event.event !== "payment.captured") {
+      return new Response(JSON.stringify({ status: "ignored" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const rzpPayment = event.payload?.payment?.entity;
+    if (!rzpPayment) {
+      return new Response(JSON.stringify({ error: "No payment entity" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const orderId = rzpPayment.order_id;
+    const rzpPaymentId = rzpPayment.id;
+    const rzpFee = (rzpPayment.fee || 0) / 100; // fee in paise → rupees
+    const rzpAmount = (rzpPayment.amount || 0) / 100;
+    const netAmount = rzpAmount - rzpFee;
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Find payment by order ID
+    const { data: payment, error: findErr } = await supabase
+      .from("payments")
+      .select("*")
+      .eq("gateway_order_id", orderId)
+      .single();
+
+    if (findErr || !payment) {
+      return new Response(JSON.stringify({ error: "Payment not found for order: " + orderId }), {
+        status: 404,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Verify signature with correct account secret
+    const webhookSecret = payment.rzp_account === "pride"
+      ? Deno.env.get("RZP_PRIDE_WEBHOOK_SECRET")!
+      : Deno.env.get("RZP_PRUDENT_WEBHOOK_SECRET")!;
+
+    const valid = await verifySignature(rawBody, signature, webhookSecret);
+    if (!valid) {
+      return new Response(JSON.stringify({ error: "Invalid signature" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Update payment to success
+    await supabase.from("payments").update({
+      status: "success",
+      gateway_payment_id: rzpPaymentId,
+      net_amount: netAmount,
+    }).eq("id", payment.id);
+
+    // Get pending enrollment data
+    const { data: pending } = await supabase
+      .from("pending_enrollments")
+      .select("*")
+      .eq("payment_id", payment.id)
+      .eq("status", "pending")
+      .single();
+
+    if (pending?.enrollment_data) {
+      const data = pending.enrollment_data as any;
+
+      // Insert enrollments
+      if (data.enrollments?.length) {
+        const enrollments = data.enrollments.map((e: any) => ({
+          ...e,
+          payment_id: payment.id,
+        }));
+        const { data: inserted } = await supabase.from("enrollments").insert(enrollments).select();
+
+        // Insert enrollment_cycles
+        if (inserted && data.enrollment_cycles_template?.length) {
+          for (const enrollment of inserted) {
+            const cycles = data.enrollment_cycles_template.map((c: any) => ({
+              enrollment_id: enrollment.id,
+              student_id: enrollment.student_id,
+              batch_id: enrollment.batch_id,
+              cycle_id: c.cycle_id,
+              cycle_type: c.cycle_type || "regular",
+            }));
+            await supabase.from("enrollment_cycles").insert(cycles);
+          }
+        }
+      }
+
+      // Mark pending as completed
+      await supabase.from("pending_enrollments").update({ status: "completed" }).eq("id", pending.id);
+    }
+
+    return new Response(JSON.stringify({ status: "ok" }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  } catch (e: any) {
+    return new Response(JSON.stringify({ error: e.message }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+});

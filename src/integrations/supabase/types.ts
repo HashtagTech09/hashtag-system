@@ -455,8 +455,10 @@ export type Database = {
           gateway_payment_id: string | null
           gst: number | null
           id: number
+          net_amount: number | null
           organization_id: number
           payment_mode: string | null
+          rzp_account: string | null
           status: string
           student_id: number
         }
@@ -468,8 +470,10 @@ export type Database = {
           gateway_payment_id?: string | null
           gst?: number | null
           id?: never
+          net_amount?: number | null
           organization_id: number
           payment_mode?: string | null
+          rzp_account?: string | null
           status?: string
           student_id: number
         }
@@ -481,8 +485,10 @@ export type Database = {
           gateway_payment_id?: string | null
           gst?: number | null
           id?: never
+          net_amount?: number | null
           organization_id?: number
           payment_mode?: string | null
+          rzp_account?: string | null
           status?: string
           student_id?: number
         }
@@ -502,6 +508,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      pending_enrollments: {
+        Row: {
+          created_at: string
+          enrollment_data: Json
+          id: number
+          payment_id: number
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          enrollment_data: Json
+          id?: never
+          payment_id: number
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          enrollment_data?: Json
+          id?: never
+          payment_id?: number
+          status?: string
+        }
+        Relationships: []
       }
       plan_cycles: {
         Row: {
