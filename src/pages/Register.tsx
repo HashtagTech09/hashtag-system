@@ -102,7 +102,11 @@ function JoinBatchFlow() {
 
   const assignment = selectedPlanId ? computeCycleAssignment(subPlans.find(p => p.id === Number(selectedPlanId))!, planCycles, startCycleIdx) : null;
 
-  const detectedStatus = student ? "REN" : "NEW"; // simplified — full detection happens for returning students
+  // Sort selected batches by style hierarchy
+  const selectedBatchObjects = selectedBatchIds.map(id => allBatches.find(b => b.id === Number(id))).filter(Boolean);
+  const sortedSelectedBatches = sortBatchesByHierarchy(selectedBatchObjects);
+
+  const detectedStatus = student ? "REN" : "NEW";
   const breakdown = selectedBatchIds.length > 0 && assignment ? computeFeeBreakdown({
     batchCount: selectedBatchIds.length,
     regularCycles: assignment.regularCount,
@@ -110,6 +114,7 @@ function JoinBatchFlow() {
     detectedStatus,
     latestEndDate: null,
     dropInAmount: 0,
+    sortedBatches: sortedSelectedBatches.map(b => ({ id: b.id, name: b.name, style_base: b.style_base })),
   }) : null;
 
   const toggleBatch = (id: string) => {
