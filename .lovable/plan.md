@@ -1,54 +1,69 @@
+# Student Self-Service Portal (No OTP — Phone Entry Only)
 
+## Overview
 
-# Fix 6-Month Plan Validation: Use Count-Based Matching Instead of Sequence-Based
+Public page at `/register` where students browse batches/sessions from the live database and self-register. Phone number is entered without OTP verification for now (OTP can be layered on later). All batch, session, plan cycle, and pricing data comes from existing tables.
 
-## Problem
-The "5 Regular + 1 Grid" plan (id:7) has its sequence stored as R,R,R,R,R,G — but the actual calendar from April is: April(R), May(R), Grid(G), July(R), Aug(R), Sep(R). The strict sequence matcher requires 5 consecutive regulars before grid, which never exists in the calendar. The plan is incorrectly hidden.
+## Three Flows
 
-The fundamental issue: the `subscription_plan_cycles` sequence encodes a fixed order (5 regulars then 1 grid), but the real calendar interleaves types differently. Re-ordering the sequence rows would be fragile and break whenever the calendar changes.
+### Flow 1: New Registration
 
-## Solution
-Replace sequence-based matching with **count-based greedy matching**. Instead of walking the stored sequence entries in order, walk the calendar from `startCycleIndex` and consume cycles by type until the required counts (`total_regular_cycles` and `total_grid_cycles`) are satisfied.
+Browse batches (from `batches` table with studio/instructor info) → select batches → enter phone number (lookup in `students` table; if not found, collect name to create student + user record) → auto-detect subscription plan using existing `isPlanValid` logic → show fee breakdown → select payment mode → create payment + enrollment records
 
-### Logic for both `isPlanValid` and `computeCycleAssignment`:
+### Flow 2: Drop-In
 
-```text
-needed_regular = plan.total_regular_cycles   (e.g. 5)
-needed_grid    = plan.total_grid_cycles       (e.g. 1)
-total_needed   = needed_regular + needed_grid (e.g. 6)
+Browse upcoming sessions (from `batch_sessions` table, status=scheduled, future dates) grouped by batch → pick a session → enter phone → same student lookup/creation → show drop-in fee (from `system_settings`) → confirm → create payment + drop_in record
 
-Walk calendar from startCycleIndex:
-  For each calendar cycle:
-    if cycle is 'regular' and needed_regular > 0 → assign, decrement needed_regular
-    else if cycle is 'grid' and needed_grid > 0 → assign, decrement needed_grid
-    else → this cycle type isn't needed, plan can't span past it → INVALID
+### Flow 3: Returning Student (Renew / Add Batch)
 
-  If both counts reach 0 → VALID
-  If we run out of calendar cycles → INVALID
-```
+Enter phone number → lookup student → show active enrollments with batch names and validity dates → options to **Renew** (same status detection: NEW/REN/REV, same fee logic) or **Add Batch** (same add-batch logic as admin)
 
-The key rule: every calendar cycle between start and end must be consumed. We don't skip cycles — the student is enrolled for the full contiguous span. If a cycle type appears that isn't needed, the plan doesn't fit.
+## Architecture
 
-### Example: "5 Regular + 1 Grid" from April
-- April(R) → need regular, consume → 4R + 1G remaining
-- May(R) → consume → 3R + 1G remaining  
-- Grid(G) → need grid, consume → 3R + 0G remaining
-- July(R) → consume → 2R remaining
-- Aug(R) → consume → 1R remaining
-- Sep(R) → consume → 0R remaining → **VALID** ✓
+### Shared Logic Extraction
 
-### Example: "3 Regular Months" from April
-- April(R) → consume → 2R remaining
-- May(R) → consume → 1R remaining
-- Grid(G) → need 0 grid, can't consume → **INVALID** ✗ (correct)
+Extract from `Enrollments.tsx` into `src/lib/enrollmentUtils.ts`:
 
-### Example: "2 Regular + 1 Grid" from April
-- April(R) → consume → 1R + 1G remaining
-- May(R) → consume → 0R + 1G remaining
-- Grid(G) → consume → 0R + 0G → **VALID** ✓
+- `isPlanValid` — count-based greedy plan validation
+- `computeCycleAssignment` — cycle date computation
+- `getDiscount` / `computeFeeBreakdown` — fee calculation (discount tiers, reg fee, GST, drop-in adjustment)
+- `detectStudentStatus` — NEW/REN/REV detection
+- `getStartCycleIndex` — find first open registration cycle
 
-## Files changed
-- `src/pages/Enrollments.tsx` — rewrite `isPlanValid` and `computeCycleAssignment` to use count-based greedy matching with `total_regular_cycles` / `total_grid_cycles` instead of walking `subscription_plan_cycles` sequence entries
+Both admin `Enrollments.tsx` and public `Register.tsx` import from this shared file.
 
-## No database changes needed
+### New Files
 
+- `src/lib/enrollmentUtils.ts` — shared business logic
+- `src/pages/Register.tsx` — main public portal with 3-tab wizard
+- `src/components/register/BatchBrowser.tsx` — batch cards fetched from DB
+- `src/components/register/SessionBrowser.tsx` — upcoming sessions from DB
+- `src/components/register/PhoneEntry.tsx` — phone input + student lookup/creation (no OTP)
+- `src/components/register/FeeBreakdown.tsx` — reusable fee summary
+- `src/components/register/StudentDashboard.tsx` — returning student view with renew/add options
+
+### Modified Files
+
+- `src/App.tsx` — add `/register` as public route (no ProtectedRoute)
+- `src/pages/Enrollments.tsx` — import shared logic from `enrollmentUtils.ts` instead of inline
+
+### RLS Consideration
+
+All existing tables have permissive RLS for `authenticated` role. The public portal uses the anon key which is **not** authenticated. We need to add `anon` SELECT policies on: `batches`, `batch_sessions`, `studios`, `plan_cycles`, `subscription_plans`, `subscription_plan_cycles`, `pricing_plans`, `system_settings`, `students` (for phone lookup). And `anon` INSERT on: `students`, `users`, `enrollments`, `payments`, `drop_ins`.
+
+### Database Changes (migration)
+
+- Add RLS policies allowing `anon` role to SELECT from read-needed tables and INSERT into write-needed tables
+- Keep existing `authenticated` policies unchanged
+
+### OTP Later
+
+The `PhoneEntry` component will be designed with a clear separation point — phone input → lookup/create. When OTP is added later, a verification step slots in between phone entry and the lookup, requiring no structural changes.
+
+### Payment
+
+Same as admin flow: records created with selected payment mode and status "success". Payment gateway integration can be added later.
+
+## UI
+
+Mobile-first dark theme matching existing brand. Tab navigation: "Join a Batch" | "Drop-In" | "My Account". Each flow is a step-by-step wizard.
