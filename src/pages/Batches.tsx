@@ -153,6 +153,9 @@ const BatchesPage = () => {
                     <SelectItem value="Hip Hop Level 3">Hip Hop Level 3</SelectItem>
                     <SelectItem value="Heels Level 1">Heels Level 1</SelectItem>
                     <SelectItem value="Heels Level 2">Heels Level 2</SelectItem>
+                    <SelectItem value="Kids Jazz">Kids Jazz</SelectItem>
+                    <SelectItem value="Kids Jazz Level 2">Kids Jazz Level 2</SelectItem>
+                    <SelectItem value="Kids Ballet">Kids Ballet</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
