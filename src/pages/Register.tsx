@@ -17,6 +17,7 @@ import FeeBreakdownDisplay from "@/components/register/FeeBreakdown";
 import StudentDashboard from "@/components/register/StudentDashboard";
 import { isPlanValid, computeCycleAssignment, computeFeeBreakdown, detectStudentStatus, getStartCycleIndex } from "@/lib/enrollmentUtils";
 import type { PlanCycle, SubPlan } from "@/lib/enrollmentUtils";
+import { sortBatchesByHierarchy, computePaymentAllocations } from "@/lib/styleHierarchy";
 import { Music } from "lucide-react";
 
 const RegisterPage = () => {
