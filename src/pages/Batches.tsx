@@ -144,27 +144,25 @@ const BatchesPage = () => {
               )}
               <div><Label>Name *</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
               <div><Label>Style</Label>
-                <Select value={form.style} onValueChange={(v) => setForm({ ...form, style: v })}>
+                <Select value={form.style_base} onValueChange={(v) => setForm({ ...form, style_base: v })}>
                   <SelectTrigger><SelectValue placeholder="Select style" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Jazz Level 1">Jazz Level 1</SelectItem>
-                    <SelectItem value="Jazz Level 2">Jazz Level 2</SelectItem>
-                    <SelectItem value="Jazz Level 3">Jazz Level 3</SelectItem>
-                    <SelectItem value="Jazz Level 4">Jazz Level 4</SelectItem>
-                    <SelectItem value="Ballet Level 1">Ballet Level 1</SelectItem>
-                    <SelectItem value="Ballet Level 2">Ballet Level 2</SelectItem>
-                    <SelectItem value="Ballet Level 3">Ballet Level 3</SelectItem>
-                    <SelectItem value="Modern Level 1">Modern Level 1</SelectItem>
-                    <SelectItem value="Hip Hop Level 1">Hip Hop Level 1</SelectItem>
-                    <SelectItem value="Hip Hop Level 2">Hip Hop Level 2</SelectItem>
-                    <SelectItem value="Hip Hop Level 3">Hip Hop Level 3</SelectItem>
-                    <SelectItem value="Heels Level 1">Heels Level 1</SelectItem>
-                    <SelectItem value="Heels Level 2">Heels Level 2</SelectItem>
-                    <SelectItem value="Kids Jazz">Kids Jazz</SelectItem>
-                    <SelectItem value="Kids Jazz Level 2">Kids Jazz Level 2</SelectItem>
-                    <SelectItem value="Kids Ballet">Kids Ballet</SelectItem>
+                    {STYLE_OPTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                   </SelectContent>
                 </Select>
+              </div>
+              <div><Label>Level</Label>
+                <Select value={form.level} onValueChange={(v) => setForm({ ...form, level: v })}>
+                  <SelectTrigger><SelectValue placeholder="Select level" /></SelectTrigger>
+                  <SelectContent>
+                    {LEVEL_OPTIONS.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                {form.style_base && form.level && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Display: <span className="font-medium">{buildDisplayStyle(form.style_base, form.level)}</span> · Key: <span className="font-mono">{buildEligibilityKey(form.style_base, form.level)}</span>
+                  </p>
+                )}
               </div>
               <div>
                 <Label>Days & Schedule</Label>
