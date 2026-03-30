@@ -50,7 +50,7 @@ Deno.serve(async (req) => {
     // Send via Interakt
     const interaktKey = Deno.env.get("INTERAKT_API_KEY");
     if (!interaktKey) {
-      return new Response(JSON.stringify({ error: "INTERAKT_API_KEY not configured" }), { status: 500, headers: corsHeaders });
+      return new Response(JSON.stringify({ error: "INTERAKT_API_KEY not configured" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const phoneNum = phone.startsWith("91") ? phone.replace(/^91/, "") : phone;
