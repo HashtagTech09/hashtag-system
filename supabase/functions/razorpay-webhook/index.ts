@@ -120,6 +120,18 @@ Deno.serve(async (req) => {
         }
       }
 
+      // Insert payment allocations
+      if (data.payment_allocations?.length) {
+        const allocs = data.payment_allocations.map((a: any) => ({
+          payment_id: payment.id,
+          batch_id: a.batch_id,
+          studio_id: a.studio_id || null,
+          allocated_amount: a.allocated_amount,
+          is_primary: a.is_primary || false,
+        }));
+        await supabase.from("payment_allocations").insert(allocs);
+      }
+
       // Mark pending as completed
       await supabase.from("pending_enrollments").update({ status: "completed" }).eq("id", pending.id);
     }
