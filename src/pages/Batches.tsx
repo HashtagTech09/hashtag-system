@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import AdminLayout from "@/components/AdminLayout";
+import { STYLE_OPTIONS, LEVEL_OPTIONS, buildDisplayStyle, buildEligibilityKey } from "@/lib/styleHierarchy";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,7 +25,7 @@ const BatchesPage = () => {
   const [instructors, setInstructors] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [form, setForm] = useState({ name: "", style: "", schedule: [] as ScheduleEntry[], studio_id: "", instructor_id: "", instructor_2_id: "", capacity: "" });
+  const [form, setForm] = useState({ name: "", style_base: "", level: "", schedule: [] as ScheduleEntry[], studio_id: "", instructor_id: "", instructor_2_id: "", capacity: "" });
   const [editId, setEditId] = useState<number | null>(null);
   const [sessionsBatch, setSessionsBatch] = useState<any>(null);
 
@@ -67,8 +68,14 @@ const BatchesPage = () => {
   const handleSave = async () => {
     if (!form.name.trim()) { toast.error("Name is required"); return; }
     const batchCode = generateBatchCode(form.name, form.studio_id);
+    const displayStyle = buildDisplayStyle(form.style_base, form.level);
+    const eligibilityKey = buildEligibilityKey(form.style_base, form.level);
     const payload = {
-      organization_id: 1, name: form.name, style: form.style || null,
+      organization_id: 1, name: form.name,
+      style: displayStyle || null,
+      style_base: form.style_base || null,
+      level: form.level || null,
+      eligibility_key: eligibilityKey || null,
       schedule: form.schedule.length > 0 ? form.schedule : null,
       studio_id: form.studio_id ? Number(form.studio_id) : null,
       instructor_id: form.instructor_id ? Number(form.instructor_id) : null,
@@ -88,7 +95,7 @@ const BatchesPage = () => {
     fetchData();
   };
 
-  const resetForm = () => { setForm({ name: "", style: "", schedule: [], studio_id: "", instructor_id: "", instructor_2_id: "", capacity: "" }); setEditId(null); setDialogOpen(false); };
+  const resetForm = () => { setForm({ name: "", style_base: "", level: "", schedule: [], studio_id: "", instructor_id: "", instructor_2_id: "", capacity: "" }); setEditId(null); setDialogOpen(false); };
 
   const handleDelete = async (id: number) => {
     await supabase.from("batches").delete().eq("id", id);
@@ -137,27 +144,25 @@ const BatchesPage = () => {
               )}
               <div><Label>Name *</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
               <div><Label>Style</Label>
-                <Select value={form.style} onValueChange={(v) => setForm({ ...form, style: v })}>
+                <Select value={form.style_base} onValueChange={(v) => setForm({ ...form, style_base: v })}>
                   <SelectTrigger><SelectValue placeholder="Select style" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Jazz Level 1">Jazz Level 1</SelectItem>
-                    <SelectItem value="Jazz Level 2">Jazz Level 2</SelectItem>
-                    <SelectItem value="Jazz Level 3">Jazz Level 3</SelectItem>
-                    <SelectItem value="Jazz Level 4">Jazz Level 4</SelectItem>
-                    <SelectItem value="Ballet Level 1">Ballet Level 1</SelectItem>
-                    <SelectItem value="Ballet Level 2">Ballet Level 2</SelectItem>
-                    <SelectItem value="Ballet Level 3">Ballet Level 3</SelectItem>
-                    <SelectItem value="Modern Level 1">Modern Level 1</SelectItem>
-                    <SelectItem value="Hip Hop Level 1">Hip Hop Level 1</SelectItem>
-                    <SelectItem value="Hip Hop Level 2">Hip Hop Level 2</SelectItem>
-                    <SelectItem value="Hip Hop Level 3">Hip Hop Level 3</SelectItem>
-                    <SelectItem value="Heels Level 1">Heels Level 1</SelectItem>
-                    <SelectItem value="Heels Level 2">Heels Level 2</SelectItem>
-                    <SelectItem value="Kids Jazz">Kids Jazz</SelectItem>
-                    <SelectItem value="Kids Jazz Level 2">Kids Jazz Level 2</SelectItem>
-                    <SelectItem value="Kids Ballet">Kids Ballet</SelectItem>
+                    {STYLE_OPTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                   </SelectContent>
                 </Select>
+              </div>
+              <div><Label>Level</Label>
+                <Select value={form.level} onValueChange={(v) => setForm({ ...form, level: v })}>
+                  <SelectTrigger><SelectValue placeholder="Select level" /></SelectTrigger>
+                  <SelectContent>
+                    {LEVEL_OPTIONS.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                {form.style_base && form.level && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Display: <span className="font-medium">{buildDisplayStyle(form.style_base, form.level)}</span> · Key: <span className="font-mono">{buildEligibilityKey(form.style_base, form.level)}</span>
+                  </p>
+                )}
               </div>
               <div>
                 <Label>Days & Schedule</Label>
@@ -250,7 +255,7 @@ const BatchesPage = () => {
                       <Button variant="ghost" size="icon" onClick={() => {
                         const sched = getSchedule(batch);
                         setForm({
-                          name: batch.name, style: batch.style || "",
+                          name: batch.name, style_base: batch.style_base || "", level: batch.level || "",
                           schedule: sched,
                           studio_id: batch.studio_id ? String(batch.studio_id) : "",
                           instructor_id: batch.instructor_id ? String(batch.instructor_id) : "",

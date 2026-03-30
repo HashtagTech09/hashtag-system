@@ -11,6 +11,7 @@ import type { PlanCycle, SubPlan } from "@/lib/enrollmentUtils";
 import { allocateCyclesForPlan, insertEnrollmentCycles } from "@/lib/cycleUtils";
 import FeeBreakdownDisplay from "./FeeBreakdown";
 import { initiateRazorpayPayment } from "@/lib/razorpayUtils";
+import { sortBatchesByHierarchy, computePaymentAllocations } from "@/lib/styleHierarchy";
 
 interface StudentDashboardProps {
   student: any;
@@ -71,6 +72,10 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
 
   const assignment = selectedPlanId ? computeCycleAssignment(subPlans.find(p => p.id === Number(selectedPlanId))!, planCycles, startCycleIdx) : null;
 
+  // Sort selected batches by style hierarchy
+  const selectedBatchObjects = selectedBatchIds.map(id => batches.find(b => b.id === Number(id))).filter(Boolean);
+  const sortedSelectedBatches = sortBatchesByHierarchy(selectedBatchObjects);
+
   const breakdown = selectedBatchIds.length > 0 && assignment ? computeFeeBreakdown({
     batchCount: selectedBatchIds.length,
     regularCycles: assignment.regularCount,
@@ -78,6 +83,7 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
     detectedStatus,
     latestEndDate,
     dropInAmount: 0,
+    sortedBatches: sortedSelectedBatches.map(b => ({ id: b.id, name: b.name, style_base: b.style_base })),
   }) : null;
 
   // Auto-select first valid plan
@@ -137,6 +143,12 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
     if (selectedBatchIds.length === 0 || !assignment || !breakdown) return;
     setSubmitting(true);
     try {
+      // Build allocations from sorted batches
+      const allocations = computePaymentAllocations(
+        sortedSelectedBatches.map(b => ({ id: b.id, studio_id: b.studio_id })),
+        breakdown.perBatchFee, breakdown.discountPct
+      );
+
       if (paymentMode === "razorpay") {
         const enrollmentRecords = buildEnrollmentRecords();
         const cyclesTemplate = buildCyclesTemplate();
@@ -154,6 +166,7 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
             enrollment_data: {
               enrollments: enrollmentRecords,
               enrollment_cycles_template: cyclesTemplate,
+              payment_allocations: allocations,
             },
             student_name: student.name,
             student_phone: user?.phone || student.phone || "",
@@ -178,6 +191,13 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
       const records = buildEnrollmentRecords(payment.id);
       const { data: insertedRecords, error } = await supabase.from("enrollments").insert(records).select();
       if (error) throw error;
+
+      // Insert payment allocations
+      if (allocations.length > 0) {
+        await supabase.from("payment_allocations").insert(
+          allocations.map(a => ({ ...a, payment_id: payment.id }))
+        );
+      }
 
       if (insertedRecords && assignment) {
         const plan = subPlans.find(p => p.id === Number(selectedPlanId));
@@ -223,7 +243,7 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
     return {
       batchCount: newBatchCount, perBatchFee, discountPct, discountAmount: (perBatchFee * newBatchCount) - totalNewFee,
       totalBatchFee: totalNewFee, regFee: 0, dropInAdj: 0, subtotal, gst, total, applyRegFee: false, isLateRenewal: false,
-      regularCycles, gridCycles,
+      regularCycles, gridCycles, batchAllocations: [] as any[],
     };
   })();
 

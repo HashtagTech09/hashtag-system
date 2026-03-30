@@ -17,6 +17,7 @@ import FeeBreakdownDisplay from "@/components/register/FeeBreakdown";
 import StudentDashboard from "@/components/register/StudentDashboard";
 import { isPlanValid, computeCycleAssignment, computeFeeBreakdown, detectStudentStatus, getStartCycleIndex } from "@/lib/enrollmentUtils";
 import type { PlanCycle, SubPlan } from "@/lib/enrollmentUtils";
+import { sortBatchesByHierarchy, computePaymentAllocations } from "@/lib/styleHierarchy";
 import { Music } from "lucide-react";
 
 const RegisterPage = () => {
@@ -73,6 +74,11 @@ function JoinBatchFlow() {
   const [selectedPlanId, setSelectedPlanId] = useState("");
   const [paymentMode, setPaymentMode] = useState("cash");
   const [submitting, setSubmitting] = useState(false);
+  const [allBatches, setAllBatches] = useState<any[]>([]);
+
+  useEffect(() => {
+    supabase.from("batches").select("*").eq("organization_id", 1).then(({ data }) => setAllBatches(data || []));
+  }, []);
 
   useEffect(() => {
     const fetch = async () => {
@@ -98,7 +104,11 @@ function JoinBatchFlow() {
 
   const assignment = selectedPlanId ? computeCycleAssignment(subPlans.find(p => p.id === Number(selectedPlanId))!, planCycles, startCycleIdx) : null;
 
-  const detectedStatus = student ? "REN" : "NEW"; // simplified — full detection happens for returning students
+  // Sort selected batches by style hierarchy
+  const selectedBatchObjects = selectedBatchIds.map(id => allBatches.find(b => b.id === Number(id))).filter(Boolean);
+  const sortedSelectedBatches = sortBatchesByHierarchy(selectedBatchObjects);
+
+  const detectedStatus = student ? "REN" : "NEW";
   const breakdown = selectedBatchIds.length > 0 && assignment ? computeFeeBreakdown({
     batchCount: selectedBatchIds.length,
     regularCycles: assignment.regularCount,
@@ -106,6 +116,7 @@ function JoinBatchFlow() {
     detectedStatus,
     latestEndDate: null,
     dropInAmount: 0,
+    sortedBatches: sortedSelectedBatches.map(b => ({ id: b.id, name: b.name, style_base: b.style_base })),
   }) : null;
 
   const toggleBatch = (id: string) => {
@@ -142,8 +153,9 @@ function JoinBatchFlow() {
     if (!student || selectedBatchIds.length === 0 || !assignment || !breakdown) return;
     setSubmitting(true);
     try {
-      const enrollmentRecords = selectedBatchIds.map(batchId => ({
-        organization_id: 1, student_id: student.id, batch_id: Number(batchId),
+      // Use sorted batch order for enrollment records
+      const enrollmentRecords = sortedSelectedBatches.map(batch => ({
+        organization_id: 1, student_id: student.id, batch_id: batch.id,
         status_type: detectedStatus,
         registration_fee_applied: breakdown.applyRegFee, late_renewal: false,
         start_date: assignment.startCycle.start_date,
@@ -152,6 +164,12 @@ function JoinBatchFlow() {
         start_cycle_id: assignment.startCycle.id, end_cycle_id: assignment.endCycle.id,
         previous_batch_id: null,
       }));
+
+      // Build allocations data
+      const allocations = computePaymentAllocations(
+        sortedSelectedBatches.map(b => ({ id: b.id, studio_id: b.studio_id })),
+        breakdown.perBatchFee, breakdown.discountPct
+      );
 
       if (paymentMode === "razorpay") {
         const batchNames = selectedBatchIds.map(id => "Batch#" + id).join(", ");
@@ -165,7 +183,7 @@ function JoinBatchFlow() {
             amount: breakdown.subtotal,
             gst: breakdown.gst,
             final_amount: breakdown.total,
-            enrollment_data: { enrollments: enrollmentRecords, enrollment_cycles_template: [] },
+            enrollment_data: { enrollments: enrollmentRecords, enrollment_cycles_template: [], payment_allocations: allocations },
             student_name: student.name,
             student_phone: student.phone || "",
             batch_names: batchNames,
@@ -196,6 +214,13 @@ function JoinBatchFlow() {
       const records = enrollmentRecords.map(r => ({ ...r, payment_id: payment.id }));
       const { error } = await supabase.from("enrollments").insert(records);
       if (error) throw error;
+
+      // Insert payment allocations
+      if (allocations.length > 0) {
+        await supabase.from("payment_allocations").insert(
+          allocations.map(a => ({ ...a, payment_id: payment.id }))
+        );
+      }
 
       toast.success(`Enrolled successfully! Amount: ₹${breakdown.total.toLocaleString()}`);
       setStep("browse");
