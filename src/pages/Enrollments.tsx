@@ -152,39 +152,26 @@ const EnrollmentsPage = () => {
     return activeCycle.registration_deadline && todayStr > activeCycle.registration_deadline;
   })();
 
-  // Check if a plan's sequence matches upcoming cycles starting from the open cycle
-  // Mirrors computeCycleAssignment: walks forward and skips non-matching cycle types
+  // Count-based greedy matching: walk calendar consuming cycles by type counts
+  // Every calendar cycle in the span must be consumed — no skipping allowed
   const isPlanValid = (plan: any): boolean => {
-    const sequence = subPlanCycles
-      .filter(s => s.subscription_plan_id === plan.id)
-      .sort((a, b) => a.sequence_order - b.sequence_order);
-    if (sequence.length === 0) return false;
+    let neededRegular = plan.total_regular_cycles ?? 0;
+    let neededGrid = plan.total_grid_cycles ?? 0;
+    if (neededRegular + neededGrid === 0) return false;
 
     let calIdx = startCycleIndex;
-    let prevType: string | null = null;
-    for (const seqEntry of sequence) {
-      if (prevType === seqEntry.plan_type) {
-        // Same type as previous — next calendar cycle MUST match
-        if (calIdx >= planCycles.length || planCycles[calIdx].plan_type !== seqEntry.plan_type) {
-          return false;
-        }
-        calIdx++;
+    while ((neededRegular > 0 || neededGrid > 0) && calIdx < planCycles.length) {
+      const cycle = planCycles[calIdx];
+      if (cycle.plan_type === "regular" && neededRegular > 0) {
+        neededRegular--;
+      } else if (cycle.plan_type === "grid" && neededGrid > 0) {
+        neededGrid--;
       } else {
-        // Type changed (or first entry) — allow skipping
-        let found = false;
-        while (calIdx < planCycles.length) {
-          if (planCycles[calIdx].plan_type === seqEntry.plan_type) {
-            calIdx++;
-            found = true;
-            break;
-          }
-          calIdx++;
-        }
-        if (!found) return false;
+        return false; // cycle type not needed — plan can't span past it
       }
-      prevType = seqEntry.plan_type;
+      calIdx++;
     }
-    return true;
+    return neededRegular === 0 && neededGrid === 0;
   };
 
   const validPlans = subPlans.filter(p => isPlanValid(p));
@@ -206,39 +193,28 @@ const EnrollmentsPage = () => {
     const plan = subPlans.find(p => p.id === Number(planId));
     if (!plan) return;
 
-    const sequence = subPlanCycles.filter(s => s.subscription_plan_id === plan.id).sort((a, b) => a.sequence_order - b.sequence_order);
-
-    // Walk through calendar cycles — only skip when type changes
+    // Count-based greedy matching — walk calendar consuming by type counts
+    let neededRegular = plan.total_regular_cycles ?? 0;
+    let neededGrid = plan.total_grid_cycles ?? 0;
+    const totalNeeded = neededRegular + neededGrid;
     const matched: any[] = [];
     let calIdx = startCycleIndex;
-    let prevType: string | null = null;
-    for (const seqEntry of sequence) {
-      if (prevType === seqEntry.plan_type) {
-        // Same type as previous — next calendar cycle MUST match
-        if (calIdx >= planCycles.length || planCycles[calIdx].plan_type !== seqEntry.plan_type) {
-          break;
-        }
-        matched.push(planCycles[calIdx]);
-        calIdx++;
+
+    while ((neededRegular > 0 || neededGrid > 0) && calIdx < planCycles.length) {
+      const cycle = planCycles[calIdx];
+      if (cycle.plan_type === "regular" && neededRegular > 0) {
+        matched.push(cycle);
+        neededRegular--;
+      } else if (cycle.plan_type === "grid" && neededGrid > 0) {
+        matched.push(cycle);
+        neededGrid--;
       } else {
-        // Type changed (or first entry) — allow skipping
-        let found = false;
-        while (calIdx < planCycles.length) {
-          const cycle = planCycles[calIdx];
-          if (cycle.plan_type === seqEntry.plan_type) {
-            matched.push(cycle);
-            calIdx++;
-            found = true;
-            break;
-          }
-          calIdx++;
-        }
-        if (!found) break;
+        break; // cycle type not needed — plan can't span past it
       }
-      prevType = seqEntry.plan_type;
+      calIdx++;
     }
 
-    if (matched.length === sequence.length) {
+    if (matched.length === totalNeeded) {
       const startCycle = matched[0];
       const endCycle = matched[matched.length - 1];
       const regularCount = matched.filter(c => c.plan_type === "regular").length;
