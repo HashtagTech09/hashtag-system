@@ -11,6 +11,7 @@ import type { PlanCycle, SubPlan } from "@/lib/enrollmentUtils";
 import { allocateCyclesForPlan, insertEnrollmentCycles } from "@/lib/cycleUtils";
 import FeeBreakdownDisplay from "./FeeBreakdown";
 import { initiateRazorpayPayment } from "@/lib/razorpayUtils";
+import { sortBatchesByHierarchy, computePaymentAllocations } from "@/lib/styleHierarchy";
 
 interface StudentDashboardProps {
   student: any;
