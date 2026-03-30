@@ -153,8 +153,9 @@ function JoinBatchFlow() {
     if (!student || selectedBatchIds.length === 0 || !assignment || !breakdown) return;
     setSubmitting(true);
     try {
-      const enrollmentRecords = selectedBatchIds.map(batchId => ({
-        organization_id: 1, student_id: student.id, batch_id: Number(batchId),
+      // Use sorted batch order for enrollment records
+      const enrollmentRecords = sortedSelectedBatches.map(batch => ({
+        organization_id: 1, student_id: student.id, batch_id: batch.id,
         status_type: detectedStatus,
         registration_fee_applied: breakdown.applyRegFee, late_renewal: false,
         start_date: assignment.startCycle.start_date,
@@ -163,6 +164,12 @@ function JoinBatchFlow() {
         start_cycle_id: assignment.startCycle.id, end_cycle_id: assignment.endCycle.id,
         previous_batch_id: null,
       }));
+
+      // Build allocations data
+      const allocations = computePaymentAllocations(
+        sortedSelectedBatches.map(b => ({ id: b.id, studio_id: b.studio_id })),
+        breakdown.perBatchFee, breakdown.discountPct
+      );
 
       if (paymentMode === "razorpay") {
         const batchNames = selectedBatchIds.map(id => "Batch#" + id).join(", ");
