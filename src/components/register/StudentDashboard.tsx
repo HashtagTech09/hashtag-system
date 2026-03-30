@@ -198,8 +198,22 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
         previous_batch_id: null,
       }));
 
-      const { error } = await supabase.from("enrollments").insert(records);
+      const { data: insertedAddRecords, error } = await supabase.from("enrollments").insert(records).select();
       if (error) throw error;
+
+      // Write enrollment_cycles for add-batch
+      if (insertedAddRecords && refEnrollment?.start_cycle_id && refEnrollment?.end_cycle_id) {
+        const refPlan = subPlans.find(p => p.id === refEnrollment.subscription_plan_id);
+        if (refPlan) {
+          const startIdx = planCycles.findIndex(c => c.id === refEnrollment.start_cycle_id);
+          if (startIdx !== -1) {
+            const allocated = allocateCyclesForPlan(refPlan, planCycles, startIdx);
+            for (const enrollment of insertedAddRecords) {
+              await insertEnrollmentCycles(enrollment.id, enrollment.student_id, enrollment.batch_id, allocated);
+            }
+          }
+        }
+      }
 
       toast.success(`Added ${selectedBatchIds.length} batch(es)! Amount: ₹${addBatchBreakdown.total.toLocaleString()}`);
       setMode("view");

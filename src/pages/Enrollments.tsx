@@ -449,8 +449,22 @@ const EnrollmentsPage = () => {
       previous_batch_id: null,
     }));
 
-    const { error } = await supabase.from("enrollments").insert(enrollmentRecords);
+    const { data: insertedAddBatch, error } = await supabase.from("enrollments").insert(enrollmentRecords).select();
     if (error) { toast.error("Enrollment failed"); return; }
+
+    // Write enrollment_cycles for add-batch enrollments
+    if (insertedAddBatch && existingEnrollment?.start_cycle_id && existingEnrollment?.end_cycle_id) {
+      const plan = subPlans.find(p => p.id === existingEnrollment.subscription_plan_id);
+      if (plan) {
+        const startIdx = planCycles.findIndex(c => c.id === existingEnrollment.start_cycle_id);
+        if (startIdx !== -1) {
+          const allocated = allocateCyclesForPlan(plan, planCycles, startIdx);
+          for (const enrollment of insertedAddBatch) {
+            await insertEnrollmentCycles(enrollment.id, enrollment.student_id, enrollment.batch_id, allocated);
+          }
+        }
+      }
+    }
 
     if (addBatchDropIn) {
       await supabase.from("drop_ins").update({ is_adjusted: true, adjusted_at: new Date().toISOString() }).eq("id", addBatchDropIn.id);
