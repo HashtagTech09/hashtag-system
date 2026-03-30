@@ -89,7 +89,7 @@ const AttendancePage = () => {
       setAttendance(attMap);
     };
     fetchStudents();
-  }, [selectedBatch, date]);
+  }, [selectedBatch, date, planCycles]);
 
   const markAttendance = async (studentId: number, status: string) => {
     setAttendance((prev) => ({ ...prev, [studentId]: status }));
