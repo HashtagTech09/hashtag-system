@@ -10,6 +10,7 @@ import { isPlanValid, computeCycleAssignment, computeFeeBreakdown, detectStudent
 import type { PlanCycle, SubPlan } from "@/lib/enrollmentUtils";
 import { allocateCyclesForPlan, insertEnrollmentCycles } from "@/lib/cycleUtils";
 import FeeBreakdownDisplay from "./FeeBreakdown";
+import { initiateRazorpayPayment } from "@/lib/razorpayUtils";
 
 interface StudentDashboardProps {
   student: any;
