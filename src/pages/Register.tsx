@@ -79,6 +79,8 @@ function JoinBatchFlow() {
   useEffect(() => {
     supabase.from("batches").select("*").eq("organization_id", 1).then(({ data }) => setAllBatches(data || []));
   }, []);
+
+  useEffect(() => {
     const fetch = async () => {
       const [planRes, cycleRes] = await Promise.all([
         supabase.from("subscription_plans").select("*").eq("organization_id", 1).eq("is_active", true).order("id"),
