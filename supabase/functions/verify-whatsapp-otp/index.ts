@@ -13,7 +13,7 @@ Deno.serve(async (req) => {
   try {
     const { phone, otp } = await req.json();
     if (!phone || !otp) {
-      return new Response(JSON.stringify({ error: "phone and otp required" }), { status: 400, headers: corsHeaders });
+      return new Response(JSON.stringify({ error: "phone and otp required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -30,18 +30,18 @@ Deno.serve(async (req) => {
       .limit(1);
 
     if (!otpRecords || otpRecords.length === 0) {
-      return new Response(JSON.stringify({ success: false, error: "Invalid OTP" }), { headers: corsHeaders });
+      return new Response(JSON.stringify({ success: false, error: "Invalid OTP" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const record = otpRecords[0];
     if (new Date(record.expires_at) < new Date()) {
-      return new Response(JSON.stringify({ success: false, error: "OTP expired" }), { headers: corsHeaders });
+      return new Response(JSON.stringify({ success: false, error: "OTP expired" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     await supabase.from("whatsapp_otp").update({ verified: true }).eq("id", record.id);
 
-    return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
+    return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: corsHeaders });
+    return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 });

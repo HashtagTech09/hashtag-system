@@ -13,7 +13,7 @@ Deno.serve(async (req) => {
   try {
     const { phone } = await req.json();
     if (!phone || phone.length < 10) {
-      return new Response(JSON.stringify({ error: "Valid phone required" }), { status: 400, headers: corsHeaders });
+      return new Response(JSON.stringify({ error: "Valid phone required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
