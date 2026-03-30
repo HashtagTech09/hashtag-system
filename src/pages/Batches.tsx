@@ -95,7 +95,7 @@ const BatchesPage = () => {
     fetchData();
   };
 
-  const resetForm = () => { setForm({ name: "", style: "", schedule: [], studio_id: "", instructor_id: "", instructor_2_id: "", capacity: "" }); setEditId(null); setDialogOpen(false); };
+  const resetForm = () => { setForm({ name: "", style_base: "", level: "", schedule: [], studio_id: "", instructor_id: "", instructor_2_id: "", capacity: "" }); setEditId(null); setDialogOpen(false); };
 
   const handleDelete = async (id: number) => {
     await supabase.from("batches").delete().eq("id", id);
