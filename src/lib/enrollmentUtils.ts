@@ -106,7 +106,9 @@ export function computeCycleAssignment(plan: SubPlan, planCycles: PlanCycle[], s
       matched.push(cycle);
       neededGrid--;
     } else {
-      break;
+      // Skip cycles whose type isn't needed
+      calIdx++;
+      continue;
     }
     calIdx++;
   }
