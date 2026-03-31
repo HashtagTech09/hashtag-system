@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { isPlanValid, computeCycleAssignment, computeFeeBreakdown, detectStudentStatus, getStartCycleIndex, getDiscount } from "@/lib/enrollmentUtils";
+import { isPlanValid, computeCycleAssignment, computeFeeBreakdown, detectStudentStatus, getStartCycleIndex, getDiscount, getPlanKey, PLAN_FIXED_TOTALS, REGULAR_PRICE, GRID_PRICE } from "@/lib/enrollmentUtils";
 import type { PlanCycle, SubPlan } from "@/lib/enrollmentUtils";
 import { allocateCyclesForPlan, insertEnrollmentCycles } from "@/lib/cycleUtils";
 import FeeBreakdownDisplay from "./FeeBreakdown";
@@ -233,7 +233,10 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
     const gridCycles = refPlan?.total_grid_cycles || 0;
     const totalBatchCount = existingBatchIds.length + selectedBatchIds.length;
     const newBatchCount = selectedBatchIds.length;
-    const perBatchFee = (regularCycles * 3767) + (gridCycles * 5300);
+    const planKey = getPlanKey(regularCycles, gridCycles);
+    const fixedTotal = PLAN_FIXED_TOTALS[planKey];
+    const isFixedPricePlan = fixedTotal !== undefined;
+    const perBatchFee = isFixedPricePlan ? Math.round(fixedTotal / 1.18) : (regularCycles * REGULAR_PRICE) + (gridCycles * GRID_PRICE);
     const discountPct = getDiscount(totalBatchCount);
     const discountedPerBatch = Math.round(perBatchFee * (1 - discountPct));
     const totalNewFee = discountedPerBatch * newBatchCount;
@@ -243,6 +246,7 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
     return {
       batchCount: newBatchCount, perBatchFee, discountPct, discountAmount: (perBatchFee * newBatchCount) - totalNewFee,
       totalBatchFee: totalNewFee, regFee: 0, dropInAdj: 0, subtotal, gst, total, applyRegFee: false, isLateRenewal: false,
+      isFixedPricePlan, planKey,
       regularCycles, gridCycles, batchAllocations: [] as any[],
     };
   })();
@@ -372,7 +376,9 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
               <SelectTrigger><SelectValue placeholder="Select plan" /></SelectTrigger>
               <SelectContent>
                 {validPlans.map(p => {
-                  const perBatchFee = (p.total_regular_cycles || 0) * 3767 + (p.total_grid_cycles || 0) * 5300;
+                  const pk = getPlanKey(p.total_regular_cycles || 0, p.total_grid_cycles || 0);
+                  const ft = PLAN_FIXED_TOTALS[pk];
+                  const perBatchFee = ft !== undefined ? Math.round(ft / 1.18) : (p.total_regular_cycles || 0) * REGULAR_PRICE + (p.total_grid_cycles || 0) * GRID_PRICE;
                   return <SelectItem key={p.id} value={String(p.id)}>{p.name} — ₹{perBatchFee.toLocaleString("en-IN")}/batch</SelectItem>;
                 })}
               </SelectContent>

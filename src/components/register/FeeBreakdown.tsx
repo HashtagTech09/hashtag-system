@@ -11,10 +11,18 @@ export default function FeeBreakdownDisplay({ breakdown, regularCycles, gridCycl
   return (
     <div className="p-3 rounded-lg border border-border bg-muted/30 text-sm space-y-1">
       <p className="font-medium text-foreground mb-2">Fee Breakdown</p>
-      <div className="flex justify-between">
-        <span className="text-muted-foreground">Per batch ({regularCycles}R × ₹3,767 + {gridCycles}G × ₹5,300)</span>
-        <span>₹{breakdown.perBatchFee.toLocaleString()}</span>
-      </div>
+
+      {breakdown.isFixedPricePlan ? (
+        <div className="flex justify-between">
+          <span className="text-muted-foreground">Plan fee ({regularCycles}R + {gridCycles}G)</span>
+          <span>₹{breakdown.perBatchFee.toLocaleString()}/batch</span>
+        </div>
+      ) : (
+        <div className="flex justify-between">
+          <span className="text-muted-foreground">Per batch ({regularCycles}R × ₹3,200 + {gridCycles}G × ₹7,667)</span>
+          <span>₹{breakdown.perBatchFee.toLocaleString()}</span>
+        </div>
+      )}
 
       {/* Per-batch line items with hierarchy */}
       {breakdown.batchAllocations.length > 0 && (
@@ -22,7 +30,7 @@ export default function FeeBreakdownDisplay({ breakdown, regularCycles, gridCycl
           {breakdown.batchAllocations.map((alloc, idx) => (
             <div key={idx} className="flex justify-between text-xs">
               <span className={alloc.is_primary ? "text-foreground font-medium" : "text-muted-foreground"}>
-                {alloc.batch_name} {alloc.is_primary ? "(Primary)" : `(${Math.round(breakdown.discountPct * 100)}% off)`}
+                {alloc.batch_name} {alloc.is_primary ? "(Primary)" : !breakdown.isFixedPricePlan ? `(${Math.round(breakdown.discountPct * 100)}% off)` : "(Discounted)"}
               </span>
               <span className={alloc.is_primary ? "" : "text-success"}>₹{alloc.amount.toLocaleString()}</span>
             </div>
@@ -30,7 +38,7 @@ export default function FeeBreakdownDisplay({ breakdown, regularCycles, gridCycl
         </div>
       )}
 
-      {breakdown.discountPct > 0 && (
+      {!breakdown.isFixedPricePlan && breakdown.discountPct > 0 && (
         <div className="flex justify-between text-success">
           <span>Multi-batch discount ({breakdown.batchCount} batches)</span>
           <span>-₹{breakdown.discountAmount.toLocaleString()}</span>
