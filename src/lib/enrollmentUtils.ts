@@ -3,10 +3,24 @@ import { todayIST } from "@/lib/dateUtils";
 export const DISCOUNT_TIERS: Record<number, number> = { 1: 0, 2: 0.12, 3: 0.13, 4: 0.14 };
 export const getDiscount = (count: number) => DISCOUNT_TIERS[count] ?? 0.15;
 
-export const REGULAR_PRICE = 3767;
-export const GRID_PRICE = 5300;
+export const REGULAR_PRICE = 3200;
+export const GRID_PRICE = 7667;
 export const REG_FEE = 500;
 export const GST_RATE = 0.18;
+
+/** Fixed after-GST per-batch totals for specific plans (hidden discount) */
+export const PLAN_FIXED_TOTALS: Record<string, number> = {
+  "5R1G": 26500,
+  "10R2G": 50000,
+};
+
+export function getPlanKey(regularCycles: number, gridCycles: number): string {
+  return `${regularCycles}R${gridCycles}G`;
+}
+
+export function roundToNearest100(n: number): number {
+  return Math.round(n / 100) * 100;
+}
 
 export interface PlanCycle {
   id: number;
