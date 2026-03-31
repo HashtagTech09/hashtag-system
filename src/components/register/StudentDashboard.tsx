@@ -246,6 +246,7 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
     return {
       batchCount: newBatchCount, perBatchFee, discountPct, discountAmount: (perBatchFee * newBatchCount) - totalNewFee,
       totalBatchFee: totalNewFee, regFee: 0, dropInAdj: 0, subtotal, gst, total, applyRegFee: false, isLateRenewal: false,
+      isFixedPricePlan, planKey,
       regularCycles, gridCycles, batchAllocations: [] as any[],
     };
   })();

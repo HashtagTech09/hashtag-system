@@ -212,7 +212,7 @@ export function computeFeeBreakdown(params: {
     amount: idx === 0 ? primaryFee : discountedPerBatch,
   }));
 
-  return { batchCount, perBatchFee, discountPct, discountAmount, totalBatchFee, regFee, dropInAdj: dropInAmount, subtotal, gst, total, applyRegFee, isLateRenewal, batchAllocations };
+  return { batchCount, perBatchFee, discountPct, discountAmount, totalBatchFee, regFee, dropInAdj: dropInAmount, subtotal, gst, total, applyRegFee, isLateRenewal, isFixedPricePlan, planKey, batchAllocations };
 }
 
 /** Detect student enrollment status: NEW, REN, or REV */
