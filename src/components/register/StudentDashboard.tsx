@@ -233,7 +233,10 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
     const gridCycles = refPlan?.total_grid_cycles || 0;
     const totalBatchCount = existingBatchIds.length + selectedBatchIds.length;
     const newBatchCount = selectedBatchIds.length;
-    const perBatchFee = (regularCycles * 3767) + (gridCycles * 5300);
+    const planKey = getPlanKey(regularCycles, gridCycles);
+    const fixedTotal = PLAN_FIXED_TOTALS[planKey];
+    const isFixedPricePlan = fixedTotal !== undefined;
+    const perBatchFee = isFixedPricePlan ? Math.round(fixedTotal / 1.18) : (regularCycles * REGULAR_PRICE) + (gridCycles * GRID_PRICE);
     const discountPct = getDiscount(totalBatchCount);
     const discountedPerBatch = Math.round(perBatchFee * (1 - discountPct));
     const totalNewFee = discountedPerBatch * newBatchCount;
