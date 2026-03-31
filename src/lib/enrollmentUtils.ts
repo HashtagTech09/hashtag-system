@@ -72,7 +72,9 @@ export function isPlanValid(plan: SubPlan, planCycles: PlanCycle[], startCycleIn
     } else if (cycle.plan_type === "grid" && neededGrid > 0) {
       neededGrid--;
     } else {
-      return false;
+      // Skip cycles whose type isn't needed
+      calIdx++;
+      continue;
     }
     calIdx++;
   }
