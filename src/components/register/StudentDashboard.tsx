@@ -376,7 +376,9 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
               <SelectTrigger><SelectValue placeholder="Select plan" /></SelectTrigger>
               <SelectContent>
                 {validPlans.map(p => {
-                  const perBatchFee = (p.total_regular_cycles || 0) * 3767 + (p.total_grid_cycles || 0) * 5300;
+                  const pk = getPlanKey(p.total_regular_cycles || 0, p.total_grid_cycles || 0);
+                  const ft = PLAN_FIXED_TOTALS[pk];
+                  const perBatchFee = ft !== undefined ? Math.round(ft / 1.18) : (p.total_regular_cycles || 0) * REGULAR_PRICE + (p.total_grid_cycles || 0) * GRID_PRICE;
                   return <SelectItem key={p.id} value={String(p.id)}>{p.name} — ₹{perBatchFee.toLocaleString("en-IN")}/batch</SelectItem>;
                 })}
               </SelectContent>
