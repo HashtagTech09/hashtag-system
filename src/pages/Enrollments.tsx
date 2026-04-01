@@ -238,15 +238,15 @@ const EnrollmentsPage = () => {
     }
   };
 
-  const DISCOUNT_TIERS: Record<number, number> = { 1: 0, 2: 0.12, 3: 0.13, 4: 0.14 };
-  const getDiscount = (count: number) => DISCOUNT_TIERS[count] ?? 0.15;
-
   const computeFeeBreakdown = () => {
     const batchCount = form.batch_ids.length;
-    const perBatchFee = (form.regular_cycles * 3767) + (form.grid_cycles * 5300);
-    const discountPct = getDiscount(batchCount);
-    const discountedPerBatch = Math.round(perBatchFee * (1 - discountPct));
-    const totalBatchFee = discountedPerBatch * batchCount;
+    const perBatchFee = (form.regular_cycles * 3200) + (form.grid_cycles * 7667);
+    let totalBatchFee = 0;
+    for (let i = 0; i < batchCount; i++) {
+      const position = i + 1;
+      const disc = position <= 1 ? 0 : ({ 2: 0.12, 3: 0.13, 4: 0.14 } as Record<number, number>)[position] ?? 0.15;
+      totalBatchFee += position === 1 ? perBatchFee : Math.round(perBatchFee * (1 - disc));
+    }
     const discountAmount = (perBatchFee * batchCount) - totalBatchFee;
 
     const todayStr = new Date().toISOString().split("T")[0];
@@ -259,7 +259,7 @@ const EnrollmentsPage = () => {
     const gst = Math.round(subtotal * 0.18);
     const total = subtotal + gst;
 
-    return { batchCount, perBatchFee, discountPct, discountAmount, totalBatchFee, regFee, dropInAdj, subtotal, gst, total, applyRegFee: !!applyRegFee, isLateRenewal };
+    return { batchCount, perBatchFee, discountPct: 0, discountAmount, totalBatchFee, regFee, dropInAdj, subtotal, gst, total, applyRegFee: !!applyRegFee, isLateRenewal };
   };
 
   const feeBreakdown = computeFeeBreakdown();
@@ -409,10 +409,13 @@ const EnrollmentsPage = () => {
 
     const totalBatchCount = existingBatches.length + addBatchForm.new_batch_ids.length;
     const newBatchCount = addBatchForm.new_batch_ids.length;
-    const perBatchFee = (regularCycles * 3767) + (gridCycles * 5300);
-    const discountPct = getDiscount(totalBatchCount);
-    const discountedPerBatch = Math.round(perBatchFee * (1 - discountPct));
-    const totalNewFee = discountedPerBatch * newBatchCount;
+    const perBatchFee = (regularCycles * 3200) + (gridCycles * 7667);
+    let totalNewFee = 0;
+    for (let i = 0; i < newBatchCount; i++) {
+      const position = existingBatches.length + 1 + i;
+      const disc = position <= 1 ? 0 : ({ 2: 0.12, 3: 0.13, 4: 0.14 } as Record<number, number>)[position] ?? 0.15;
+      totalNewFee += Math.round(perBatchFee * (1 - disc));
+    }
     const discountAmount = (perBatchFee * newBatchCount) - totalNewFee;
 
     const dropInAdj = addBatchDropIn ? Number(addBatchDropIn.amount) : 0;
@@ -420,7 +423,7 @@ const EnrollmentsPage = () => {
     const gst = Math.round(subtotal * 0.18);
     const total = subtotal + gst;
 
-    return { totalBatchCount, newBatchCount, perBatchFee, discountPct, discountAmount, totalNewFee, dropInAdj, subtotal, gst, total, regularCycles, gridCycles };
+    return { totalBatchCount, newBatchCount, perBatchFee, discountPct: 0, discountAmount, totalNewFee, dropInAdj, subtotal, gst, total, regularCycles, gridCycles };
   };
 
   const addBatchFee = computeAddBatchFee();

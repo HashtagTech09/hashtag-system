@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { isPlanValid, computeCycleAssignment, computeFeeBreakdown, detectStudentStatus, getStartCycleIndex, getDiscount, getPlanKey, PLAN_FIXED_TOTALS, REGULAR_PRICE, GRID_PRICE } from "@/lib/enrollmentUtils";
+import { isPlanValid, computeCycleAssignment, computeFeeBreakdown, detectStudentStatus, getStartCycleIndex, getBatchDiscount, getPlanKey, PLAN_FIXED_TOTALS, REGULAR_PRICE, GRID_PRICE } from "@/lib/enrollmentUtils";
 import type { PlanCycle, SubPlan } from "@/lib/enrollmentUtils";
 import { allocateCyclesForPlan, insertEnrollmentCycles } from "@/lib/cycleUtils";
 import FeeBreakdownDisplay from "./FeeBreakdown";
@@ -237,17 +237,24 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
     const fixedTotal = PLAN_FIXED_TOTALS[planKey];
     const isFixedPricePlan = fixedTotal !== undefined;
     const perBatchFee = isFixedPricePlan ? Math.round(fixedTotal / 1.18) : (regularCycles * REGULAR_PRICE) + (gridCycles * GRID_PRICE);
-    const discountPct = getDiscount(totalBatchCount);
-    const discountedPerBatch = Math.round(perBatchFee * (1 - discountPct));
-    const totalNewFee = discountedPerBatch * newBatchCount;
+    // New batches start at position (existingBatchIds.length + 1)
+    let totalNewFee = 0;
+    const batchAllocations: any[] = [];
+    for (let i = 0; i < newBatchCount; i++) {
+      const position = existingBatchIds.length + 1 + i;
+      const disc = getBatchDiscount(position);
+      const amount = Math.round(perBatchFee * (1 - disc));
+      totalNewFee += amount;
+      batchAllocations.push({ batch_id: 0, batch_name: `Batch ${i + 1}`, style_base: "", is_primary: false, amount, discountPct: disc });
+    }
     const subtotal = totalNewFee;
     const gst = Math.round(subtotal * 0.18);
     const total = subtotal + gst;
     return {
-      batchCount: newBatchCount, perBatchFee, discountPct, discountAmount: (perBatchFee * newBatchCount) - totalNewFee,
+      batchCount: newBatchCount, perBatchFee, discountPct: 0, discountAmount: (perBatchFee * newBatchCount) - totalNewFee,
       totalBatchFee: totalNewFee, regFee: 0, dropInAdj: 0, subtotal, gst, total, applyRegFee: false, isLateRenewal: false,
       isFixedPricePlan, planKey,
-      regularCycles, gridCycles, batchAllocations: [] as any[],
+      regularCycles, gridCycles, batchAllocations,
     };
   })();
 

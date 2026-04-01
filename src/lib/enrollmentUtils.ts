@@ -1,7 +1,11 @@
 import { todayIST } from "@/lib/dateUtils";
 
-export const DISCOUNT_TIERS: Record<number, number> = { 1: 0, 2: 0.12, 3: 0.13, 4: 0.14 };
-export const getDiscount = (count: number) => DISCOUNT_TIERS[count] ?? 0.15;
+/** Per-position discount: 1st=0%, 2nd=12%, 3rd=13%, 4th=14%, 5th+=15% */
+export function getBatchDiscount(position: number): number {
+  if (position <= 1) return 0;
+  const tiers: Record<number, number> = { 2: 0.12, 3: 0.13, 4: 0.14 };
+  return tiers[position] ?? 0.15;
+}
 
 export const REGULAR_PRICE = 3200;
 export const GRID_PRICE = 7667;
@@ -130,6 +134,7 @@ export interface BatchAllocation {
   style_base: string;
   is_primary: boolean;
   amount: number;
+  discountPct: number;
 }
 
 export interface FeeBreakdown {
@@ -171,48 +176,44 @@ export function computeFeeBreakdown(params: {
   const isLateRenewal = detectedStatus === "REN" && latestEndDate ? todayStr > latestEndDate : false;
 
   let perBatchFee: number;
-  let discountPct: number;
   let discountAmount: number;
   let totalBatchFee: number;
-  let primaryFee: number;
-  let discountedPerBatch: number;
 
   if (isFixedPricePlan) {
-    // Back-calculate subtotal from fixed after-GST total
     perBatchFee = Math.round(fixedTotal / (1 + GST_RATE));
-    primaryFee = perBatchFee;
-    discountPct = getDiscount(batchCount);
-    discountedPerBatch = Math.round(perBatchFee * (1 - discountPct));
-    totalBatchFee = batchCount === 1 ? primaryFee : primaryFee + discountedPerBatch * (batchCount - 1);
-    discountAmount = batchCount > 1 ? (perBatchFee * batchCount) - totalBatchFee : 0;
   } else {
     perBatchFee = (regularCycles * REGULAR_PRICE) + (gridCycles * GRID_PRICE);
-    discountPct = getDiscount(batchCount);
-    discountedPerBatch = Math.round(perBatchFee * (1 - discountPct));
-    primaryFee = perBatchFee;
-    totalBatchFee = batchCount === 1 ? primaryFee : primaryFee + discountedPerBatch * (batchCount - 1);
-    discountAmount = (perBatchFee * batchCount) - totalBatchFee;
   }
+
+  // Build per-batch allocations with incremental discounts
+  const batchAllocations: BatchAllocation[] = (sortedBatches || []).map((b, idx) => {
+    const position = idx + 1;
+    const disc = getBatchDiscount(position);
+    const amount = position === 1 ? perBatchFee : Math.round(perBatchFee * (1 - disc));
+    return {
+      batch_id: b.id,
+      batch_name: b.name,
+      style_base: b.style_base || "",
+      is_primary: idx === 0,
+      amount,
+      discountPct: disc,
+    };
+  });
+
+  totalBatchFee = batchAllocations.length > 0
+    ? batchAllocations.reduce((sum, a) => sum + a.amount, 0)
+    : perBatchFee * batchCount;
+  discountAmount = (perBatchFee * batchCount) - totalBatchFee;
 
   const subtotal = Math.max(0, totalBatchFee + regFee - dropInAmount);
   const gst = Math.round(subtotal * GST_RATE);
   let total = subtotal + gst;
 
-  // For non-fixed plans, round to nearest 100
   if (!isFixedPricePlan) {
     total = roundToNearest100(total);
   }
 
-  // Build per-batch allocations
-  const batchAllocations: BatchAllocation[] = (sortedBatches || []).map((b, idx) => ({
-    batch_id: b.id,
-    batch_name: b.name,
-    style_base: b.style_base || "",
-    is_primary: idx === 0,
-    amount: idx === 0 ? primaryFee : discountedPerBatch,
-  }));
-
-  return { batchCount, perBatchFee, discountPct, discountAmount, totalBatchFee, regFee, dropInAdj: dropInAmount, subtotal, gst, total, applyRegFee, isLateRenewal, isFixedPricePlan, planKey, batchAllocations };
+  return { batchCount, perBatchFee, discountPct: 0, discountAmount, totalBatchFee, regFee, dropInAdj: dropInAmount, subtotal, gst, total, applyRegFee, isLateRenewal, isFixedPricePlan, planKey, batchAllocations };
 }
 
 /** Detect student enrollment status: NEW, REN, or REV */
