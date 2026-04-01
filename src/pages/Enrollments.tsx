@@ -409,10 +409,13 @@ const EnrollmentsPage = () => {
 
     const totalBatchCount = existingBatches.length + addBatchForm.new_batch_ids.length;
     const newBatchCount = addBatchForm.new_batch_ids.length;
-    const perBatchFee = (regularCycles * 3767) + (gridCycles * 5300);
-    const discountPct = getDiscount(totalBatchCount);
-    const discountedPerBatch = Math.round(perBatchFee * (1 - discountPct));
-    const totalNewFee = discountedPerBatch * newBatchCount;
+    const perBatchFee = (regularCycles * 3200) + (gridCycles * 7667);
+    let totalNewFee = 0;
+    for (let i = 0; i < newBatchCount; i++) {
+      const position = existingBatches.length + 1 + i;
+      const disc = position <= 1 ? 0 : ({ 2: 0.12, 3: 0.13, 4: 0.14 } as Record<number, number>)[position] ?? 0.15;
+      totalNewFee += Math.round(perBatchFee * (1 - disc));
+    }
     const discountAmount = (perBatchFee * newBatchCount) - totalNewFee;
 
     const dropInAdj = addBatchDropIn ? Number(addBatchDropIn.amount) : 0;
