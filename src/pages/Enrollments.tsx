@@ -238,15 +238,15 @@ const EnrollmentsPage = () => {
     }
   };
 
-  const DISCOUNT_TIERS: Record<number, number> = { 1: 0, 2: 0.12, 3: 0.13, 4: 0.14 };
-  const getDiscount = (count: number) => DISCOUNT_TIERS[count] ?? 0.15;
-
   const computeFeeBreakdown = () => {
     const batchCount = form.batch_ids.length;
-    const perBatchFee = (form.regular_cycles * 3767) + (form.grid_cycles * 5300);
-    const discountPct = getDiscount(batchCount);
-    const discountedPerBatch = Math.round(perBatchFee * (1 - discountPct));
-    const totalBatchFee = discountedPerBatch * batchCount;
+    const perBatchFee = (form.regular_cycles * 3200) + (form.grid_cycles * 7667);
+    let totalBatchFee = 0;
+    for (let i = 0; i < batchCount; i++) {
+      const position = i + 1;
+      const disc = position <= 1 ? 0 : ({ 2: 0.12, 3: 0.13, 4: 0.14 } as Record<number, number>)[position] ?? 0.15;
+      totalBatchFee += position === 1 ? perBatchFee : Math.round(perBatchFee * (1 - disc));
+    }
     const discountAmount = (perBatchFee * batchCount) - totalBatchFee;
 
     const todayStr = new Date().toISOString().split("T")[0];
