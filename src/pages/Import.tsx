@@ -358,8 +358,8 @@ export default function ImportPage() {
 
     for (const row of rows) {
       try {
-        const studentId = phoneToStudentId.get(row.student_phone);
-        if (!studentId) { errors++; errorMessages.push(`No student for phone: ${row.student_phone}`); continue; }
+        const studentId = namePhoneToStudentId.get(studentKey(row.student_name, row.student_phone));
+        if (!studentId) { errors++; errorMessages.push(`No student for: ${row.student_name} / ${row.student_phone}`); continue; }
 
         const batchId = codeToBatchId.get((row.batch_code || "").toLowerCase().trim());
         if (!batchId) { errors++; errorMessages.push(`No batch with code: ${row.batch_code}`); continue; }
