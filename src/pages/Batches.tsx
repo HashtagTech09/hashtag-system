@@ -10,9 +10,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Trash2, Edit, X, Calendar } from "lucide-react";
+import { Plus, Search, Trash2, Edit, X, Calendar, Loader2 } from "lucide-react";
 import BatchSessionsDialog from "@/components/BatchSessionsDialog";
 import { TimePickerPopover } from "@/components/ui/time-picker";
+import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -28,6 +29,8 @@ const BatchesPage = () => {
   const [form, setForm] = useState({ name: "", style_base: "", level: "", schedule: [] as ScheduleEntry[], studio_id: "", instructor_id: "", instructor_2_id: "", capacity: "" });
   const [editId, setEditId] = useState<number | null>(null);
   const [sessionsBatch, setSessionsBatch] = useState<any>(null);
+  const [pageLoading, setPageLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
   const generateBatchCode = (name: string, studioId: string) => {
     const studio = studios.find((s) => String(s.id) === studioId);
@@ -36,14 +39,23 @@ const BatchesPage = () => {
   };
 
   const fetchData = async () => {
-    const [batchRes, studioRes, instrRes] = await Promise.all([
-      supabase.from("batches").select("*, studios(name), users(name)").eq("organization_id", 1).order("created_at", { ascending: false }),
-      supabase.from("studios").select("*").eq("organization_id", 1),
-      supabase.from("users").select("*, user_roles!inner(roles!inner(name))").eq("organization_id", 1).eq("user_roles.roles.name", "instructor"),
-    ]);
-    setBatches(batchRes.data || []);
-    setStudios(studioRes.data || []);
-    setInstructors(instrRes.data || []);
+    try {
+      const [batchRes, studioRes, instrRes] = await Promise.all([
+        supabase.from("batches").select("*, studios(name), users(name)").eq("organization_id", 1).order("created_at", { ascending: false }),
+        supabase.from("studios").select("*").eq("organization_id", 1),
+        supabase.from("users").select("*, user_roles!inner(roles!inner(name))").eq("organization_id", 1).eq("user_roles.roles.name", "instructor"),
+      ]);
+      if (batchRes.error) throw batchRes.error;
+      if (studioRes.error) throw studioRes.error;
+      if (instrRes.error) throw instrRes.error;
+      setBatches(batchRes.data || []);
+      setStudios(studioRes.data || []);
+      setInstructors(instrRes.data || []);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to load data");
+    } finally {
+      setPageLoading(false);
+    }
   };
 
   useEffect(() => { fetchData(); }, []);
@@ -67,38 +79,48 @@ const BatchesPage = () => {
 
   const handleSave = async () => {
     if (!form.name.trim()) { toast.error("Name is required"); return; }
-    const batchCode = generateBatchCode(form.name, form.studio_id);
-    const displayStyle = buildDisplayStyle(form.style_base, form.level);
-    const eligibilityKey = buildEligibilityKey(form.style_base, form.level);
-    const payload = {
-      organization_id: 1, name: form.name,
-      style: displayStyle || null,
-      style_base: form.style_base || null,
-      level: form.level || null,
-      eligibility_key: eligibilityKey || null,
-      schedule: form.schedule.length > 0 ? form.schedule : null,
-      studio_id: form.studio_id ? Number(form.studio_id) : null,
-      instructor_id: form.instructor_id ? Number(form.instructor_id) : null,
-      instructor_2_id: form.instructor_2_id ? Number(form.instructor_2_id) : null,
-      capacity: form.capacity ? Number(form.capacity) : null,
-      batch_code: batchCode || null,
-    };
-    if (editId) {
-      const { organization_id, ...updatePayload } = payload;
-      await supabase.from("batches").update(updatePayload).eq("id", editId);
-      toast.success("Batch updated");
-    } else {
-      await supabase.from("batches").insert(payload);
-      toast.success("Batch added");
+    setSaving(true);
+    try {
+      const batchCode = generateBatchCode(form.name, form.studio_id);
+      const displayStyle = buildDisplayStyle(form.style_base, form.level);
+      const eligibilityKey = buildEligibilityKey(form.style_base, form.level);
+      const payload = {
+        organization_id: 1, name: form.name,
+        style: displayStyle || null,
+        style_base: form.style_base || null,
+        level: form.level || null,
+        eligibility_key: eligibilityKey || null,
+        schedule: form.schedule.length > 0 ? form.schedule : null,
+        studio_id: form.studio_id ? Number(form.studio_id) : null,
+        instructor_id: form.instructor_id ? Number(form.instructor_id) : null,
+        instructor_2_id: form.instructor_2_id ? Number(form.instructor_2_id) : null,
+        capacity: form.capacity ? Number(form.capacity) : null,
+        batch_code: batchCode || null,
+      };
+      if (editId) {
+        const { organization_id, ...updatePayload } = payload;
+        const { error } = await supabase.from("batches").update(updatePayload).eq("id", editId);
+        if (error) { toast.error(error.message); return; }
+        toast.success("Batch updated");
+      } else {
+        const { error } = await supabase.from("batches").insert(payload);
+        if (error) { toast.error(error.message); return; }
+        toast.success("Batch added");
+      }
+      resetForm();
+      fetchData();
+    } catch (err: any) {
+      toast.error(err.message || "Save failed");
+    } finally {
+      setSaving(false);
     }
-    resetForm();
-    fetchData();
   };
 
   const resetForm = () => { setForm({ name: "", style_base: "", level: "", schedule: [], studio_id: "", instructor_id: "", instructor_2_id: "", capacity: "" }); setEditId(null); setDialogOpen(false); };
 
   const handleDelete = async (id: number) => {
-    await supabase.from("batches").delete().eq("id", id);
+    const { error } = await supabase.from("batches").delete().eq("id", id);
+    if (error) { toast.error(error.message); return; }
     toast.success("Batch deleted");
     fetchData();
   };
@@ -213,7 +235,10 @@ const BatchesPage = () => {
                 </Select>
               </div>
               <div><Label>Capacity</Label><Input type="number" value={form.capacity} onChange={(e) => setForm({ ...form, capacity: e.target.value })} /></div>
-              <Button className="w-full gradient-primary" onClick={handleSave}>Save</Button>
+              <Button className="w-full gradient-primary" onClick={handleSave} disabled={saving}>
+                {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                {saving ? "Saving..." : "Save"}
+              </Button>
             </div>
           </DialogContent>
         </Dialog>
@@ -233,44 +258,55 @@ const BatchesPage = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((batch) => (
-                <TableRow key={batch.id}>
-                  <TableCell className="font-mono text-xs text-muted-foreground">{batch.batch_code || "—"}</TableCell>
-                  <TableCell className="font-medium">{batch.name}</TableCell>
-                  <TableCell className="text-muted-foreground">{batch.style || "—"}</TableCell>
-                  <TableCell className="hidden md:table-cell text-muted-foreground text-sm">{formatScheduleDisplay(batch)}</TableCell>
-                  <TableCell className="hidden lg:table-cell text-muted-foreground">
-                    {(() => {
-                      const i1 = instructors.find((i) => i.id === batch.instructor_id);
-                      const i2 = instructors.find((i) => i.id === batch.instructor_2_id);
-                      const names = [i1?.name, i2?.name].filter(Boolean).join(", ");
-                      return names || "—";
-                    })()}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex gap-1">
-                      <Button variant="ghost" size="icon" title="Sessions" onClick={() => setSessionsBatch(batch)}>
-                        <Calendar className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" onClick={() => {
-                        const sched = getSchedule(batch);
-                        setForm({
-                          name: batch.name, style_base: batch.style_base || "", level: batch.level || "",
-                          schedule: sched,
-                          studio_id: batch.studio_id ? String(batch.studio_id) : "",
-                          instructor_id: batch.instructor_id ? String(batch.instructor_id) : "",
-                          instructor_2_id: batch.instructor_2_id ? String(batch.instructor_2_id) : "",
-                          capacity: batch.capacity ? String(batch.capacity) : "",
-                        });
-                        setEditId(batch.id);
-                        setDialogOpen(true);
-                      }}><Edit className="h-4 w-4" /></Button>
-                      <Button variant="ghost" size="icon" onClick={() => handleDelete(batch.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {filtered.length === 0 && <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No batches found</TableCell></TableRow>}
+              {pageLoading ? (
+                Array.from({ length: 4 }).map((_, i) => (
+                  <TableRow key={i}>
+                    {Array.from({ length: 6 }).map((_, j) => (
+                      <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              ) : filtered.length === 0 ? (
+                <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No batches found</TableCell></TableRow>
+              ) : (
+                filtered.map((batch) => (
+                  <TableRow key={batch.id}>
+                    <TableCell className="font-mono text-xs text-muted-foreground">{batch.batch_code || "—"}</TableCell>
+                    <TableCell className="font-medium">{batch.name}</TableCell>
+                    <TableCell className="text-muted-foreground">{batch.style || "—"}</TableCell>
+                    <TableCell className="hidden md:table-cell text-muted-foreground text-sm">{formatScheduleDisplay(batch)}</TableCell>
+                    <TableCell className="hidden lg:table-cell text-muted-foreground">
+                      {(() => {
+                        const i1 = instructors.find((i) => i.id === batch.instructor_id);
+                        const i2 = instructors.find((i) => i.id === batch.instructor_2_id);
+                        const names = [i1?.name, i2?.name].filter(Boolean).join(", ");
+                        return names || "—";
+                      })()}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex gap-1">
+                        <Button variant="ghost" size="icon" title="Sessions" onClick={() => setSessionsBatch(batch)}>
+                          <Calendar className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => {
+                          const sched = getSchedule(batch);
+                          setForm({
+                            name: batch.name, style_base: batch.style_base || "", level: batch.level || "",
+                            schedule: sched,
+                            studio_id: batch.studio_id ? String(batch.studio_id) : "",
+                            instructor_id: batch.instructor_id ? String(batch.instructor_id) : "",
+                            instructor_2_id: batch.instructor_2_id ? String(batch.instructor_2_id) : "",
+                            capacity: batch.capacity ? String(batch.capacity) : "",
+                          });
+                          setEditId(batch.id);
+                          setDialogOpen(true);
+                        }}><Edit className="h-4 w-4" /></Button>
+                        <Button variant="ghost" size="icon" onClick={() => handleDelete(batch.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </CardContent>
