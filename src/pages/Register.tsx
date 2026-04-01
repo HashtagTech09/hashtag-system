@@ -110,13 +110,32 @@ function JoinBatchFlow() {
   const selectedBatchObjects = selectedBatchIds.map(id => allBatches.find(b => b.id === Number(id))).filter(Boolean);
   const sortedSelectedBatches = sortBatchesByHierarchy(selectedBatchObjects);
 
-  const detectedStatus = student ? "REN" : "NEW";
+  // Detect student status based on actual enrollments
+  useEffect(() => {
+    const detectStatus = async () => {
+      if (!student) {
+        setDetectedStatus("NEW");
+        setLatestEndDate(null);
+        return;
+      }
+      const { data: enrollments } = await supabase
+        .from("enrollments")
+        .select("end_date")
+        .eq("student_id", student.id)
+        .order("end_date", { ascending: false });
+      const result = detectStudentStatus(enrollments || [], planCycles);
+      setDetectedStatus(result.status);
+      setLatestEndDate(result.latestEndDate);
+    };
+    detectStatus();
+  }, [student, planCycles]);
+
   const breakdown = selectedBatchIds.length > 0 && assignment ? computeFeeBreakdown({
     batchCount: selectedBatchIds.length,
     regularCycles: assignment.regularCount,
     gridCycles: assignment.gridCount,
     detectedStatus,
-    latestEndDate: null,
+    latestEndDate,
     dropInAmount: 0,
     sortedBatches: sortedSelectedBatches.map(b => ({ id: b.id, name: b.name, style_base: b.style_base })),
   }) : null;
