@@ -259,7 +259,7 @@ const EnrollmentsPage = () => {
     const gst = Math.round(subtotal * 0.18);
     const total = subtotal + gst;
 
-    return { batchCount, perBatchFee, discountPct, discountAmount, totalBatchFee, regFee, dropInAdj, subtotal, gst, total, applyRegFee: !!applyRegFee, isLateRenewal };
+    return { batchCount, perBatchFee, discountPct: 0, discountAmount, totalBatchFee, regFee, dropInAdj, subtotal, gst, total, applyRegFee: !!applyRegFee, isLateRenewal };
   };
 
   const feeBreakdown = computeFeeBreakdown();
