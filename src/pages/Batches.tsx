@@ -119,7 +119,8 @@ const BatchesPage = () => {
   const resetForm = () => { setForm({ name: "", style_base: "", level: "", schedule: [], studio_id: "", instructor_id: "", instructor_2_id: "", capacity: "" }); setEditId(null); setDialogOpen(false); };
 
   const handleDelete = async (id: number) => {
-    await supabase.from("batches").delete().eq("id", id);
+    const { error } = await supabase.from("batches").delete().eq("id", id);
+    if (error) { toast.error(error.message); return; }
     toast.success("Batch deleted");
     fetchData();
   };
