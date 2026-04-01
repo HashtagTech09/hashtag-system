@@ -127,6 +127,20 @@ function JoinBatchFlow() {
     if (!newName.trim()) { toast.error("Please enter your name"); return; }
     setSubmitting(true);
     try {
+      // Check if user with this phone already exists
+      const { data: existingUsers } = await supabase.from("users").select("id").eq("organization_id", 1).ilike("phone", `%${newPhone}`);
+      if (existingUsers && existingUsers.length > 0) {
+        // Auto-recover: find linked student
+        const { data: existingStudents } = await supabase.from("students").select("*, users(*)").eq("user_id", existingUsers[0].id);
+        if (existingStudents && existingStudents.length > 0) {
+          setUser(existingStudents[0].users);
+          setStudent(existingStudents[0]);
+          toast.info("Account already exists! Proceeding with your profile.");
+          setStep("pay");
+          return;
+        }
+      }
+
       // Create user
       const { data: newUser, error: userErr } = await supabase.from("users").insert({
         organization_id: 1, name: newName.trim(), phone: newPhone,
