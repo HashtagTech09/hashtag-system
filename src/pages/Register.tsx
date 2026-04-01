@@ -381,11 +381,26 @@ function JoinBatchFlow() {
               <Select value={paymentMode} onValueChange={setPaymentMode}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-              <SelectItem value="cash">Cash</SelectItem>
+                  <SelectItem value="cash">Cash</SelectItem>
                   <SelectItem value="razorpay">Razorpay</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+
+            {paymentMode === "cash" && (
+              <div>
+                <Label>Confirm with Staff</Label>
+                <Select value={selectedStaffId} onValueChange={setSelectedStaffId}>
+                  <SelectTrigger><SelectValue placeholder="Select staff member" /></SelectTrigger>
+                  <SelectContent>
+                    {staffList.map(s => (
+                      <SelectItem key={s.id} value={String(s.id)}>{s.name}{s.email ? ` (${s.email})` : ""}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1">A confirmation email will be sent to this staff member.</p>
+              </div>
+            )}
 
             {breakdown && assignment && (
               <FeeBreakdownDisplay breakdown={breakdown} regularCycles={assignment.regularCount} gridCycles={assignment.gridCount} detectedStatus={detectedStatus} />
