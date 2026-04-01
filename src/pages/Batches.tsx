@@ -39,14 +39,23 @@ const BatchesPage = () => {
   };
 
   const fetchData = async () => {
-    const [batchRes, studioRes, instrRes] = await Promise.all([
-      supabase.from("batches").select("*, studios(name), users(name)").eq("organization_id", 1).order("created_at", { ascending: false }),
-      supabase.from("studios").select("*").eq("organization_id", 1),
-      supabase.from("users").select("*, user_roles!inner(roles!inner(name))").eq("organization_id", 1).eq("user_roles.roles.name", "instructor"),
-    ]);
-    setBatches(batchRes.data || []);
-    setStudios(studioRes.data || []);
-    setInstructors(instrRes.data || []);
+    try {
+      const [batchRes, studioRes, instrRes] = await Promise.all([
+        supabase.from("batches").select("*, studios(name), users(name)").eq("organization_id", 1).order("created_at", { ascending: false }),
+        supabase.from("studios").select("*").eq("organization_id", 1),
+        supabase.from("users").select("*, user_roles!inner(roles!inner(name))").eq("organization_id", 1).eq("user_roles.roles.name", "instructor"),
+      ]);
+      if (batchRes.error) throw batchRes.error;
+      if (studioRes.error) throw studioRes.error;
+      if (instrRes.error) throw instrRes.error;
+      setBatches(batchRes.data || []);
+      setStudios(studioRes.data || []);
+      setInstructors(instrRes.data || []);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to load data");
+    } finally {
+      setPageLoading(false);
+    }
   };
 
   useEffect(() => { fetchData(); }, []);
