@@ -20,6 +20,7 @@ export default function PhoneEntry({ onStudentFound, onNewUser }: PhoneEntryProp
   const [verifying, setVerifying] = useState(false);
   const [testOtp, setTestOtp] = useState<string | null>(null);
   const [cleanedPhone, setCleanedPhone] = useState("");
+  const [lookingUp, setLookingUp] = useState(false);
 
   const handleSendOtp = async () => {
     const cleaned = phone.replace(/\D/g, "");
