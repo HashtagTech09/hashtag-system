@@ -269,8 +269,8 @@ function JoinBatchFlow() {
         amount: breakdown.subtotal,
         gst: breakdown.gst,
         final_amount: breakdown.total,
-        enrollment_data: { enrollments: enrollmentRecords, payment_allocations: allocations },
-        batch_ids: selectedBatchIds.map(Number),
+        enrollment_data: { enrollments: enrollmentRecords, payment_allocations: allocations } as unknown as import("@/integrations/supabase/types").Json,
+        batch_ids: selectedBatchIds.map(Number) as unknown as import("@/integrations/supabase/types").Json,
       }).select().single();
       if (cashErr) throw cashErr;
 
