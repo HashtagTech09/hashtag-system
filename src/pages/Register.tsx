@@ -412,6 +412,22 @@ function JoinBatchFlow() {
           </CardContent>
         </Card>
       )}
+      {step === "waiting" && (
+        <Card className="glass-card">
+          <CardContent className="p-6 text-center space-y-4">
+            <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
+              <Music className="h-6 w-6 text-primary animate-pulse" />
+            </div>
+            <h3 className="font-display font-semibold text-foreground">Waiting for Staff Confirmation</h3>
+            <p className="text-sm text-muted-foreground">
+              A confirmation email has been sent to the selected staff member. Once they confirm the cash payment, your enrollment will be completed.
+            </p>
+            <Button variant="outline" onClick={() => { setStep("browse"); setSelectedBatchIds([]); setStudent(null); setUser(null); setSelectedPlanId(""); setSelectedStaffId(""); }}>
+              Start New Registration
+            </Button>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
