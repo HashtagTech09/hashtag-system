@@ -1,0 +1,2 @@
+ALTER TABLE public.students DROP CONSTRAINT IF EXISTS students_organization_id_phone_key;
+ALTER TABLE public.students ADD CONSTRAINT students_organization_id_name_phone_key UNIQUE (organization_id, name, phone);
