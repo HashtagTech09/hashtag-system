@@ -63,7 +63,7 @@ const RegisterPage = () => {
 
 // ─── Flow 1: Join a Batch ────────────────────────────────
 function JoinBatchFlow() {
-  const [step, setStep] = useState<"browse" | "phone" | "details" | "pay">("browse");
+  const [step, setStep] = useState<"browse" | "phone" | "details" | "pay" | "waiting">("browse");
   const [selectedBatchIds, setSelectedBatchIds] = useState<string[]>([]);
   const [student, setStudent] = useState<any>(null);
   const [user, setUser] = useState<any>(null);
@@ -77,9 +77,24 @@ function JoinBatchFlow() {
   const [allBatches, setAllBatches] = useState<any[]>([]);
   const [detectedStatus, setDetectedStatus] = useState<string>("NEW");
   const [latestEndDate, setLatestEndDate] = useState<string | null>(null);
+  const [staffList, setStaffList] = useState<any[]>([]);
+  const [selectedStaffId, setSelectedStaffId] = useState("");
 
   useEffect(() => {
     supabase.from("batches").select("*").eq("organization_id", 1).then(({ data }) => setAllBatches(data || []));
+    // Fetch staff (users with org roles: admin, manager, frontdesk, instructor)
+    const fetchStaff = async () => {
+      const { data: roleData } = await supabase
+        .from("user_roles")
+        .select("user_id, roles(name, type)")
+        .eq("organization_id", 1);
+      if (!roleData) return;
+      const staffUserIds = [...new Set(roleData.filter((r: any) => r.roles?.type === "organization").map((r: any) => r.user_id))];
+      if (staffUserIds.length === 0) return;
+      const { data: users } = await supabase.from("users").select("id, name, email").in("id", staffUserIds);
+      setStaffList(users || []);
+    };
+    fetchStaff();
   }, []);
 
   useEffect(() => {
@@ -238,31 +253,41 @@ function JoinBatchFlow() {
         return;
       }
 
-      // Cash flow
-      const { data: payment, error: payError } = await supabase.from("payments").insert({
-        organization_id: 1, student_id: student.id, amount: breakdown.subtotal,
-        gst: breakdown.gst, final_amount: breakdown.total,
-        payment_mode: paymentMode, status: "success",
-      }).select().single();
-      if (payError) throw payError;
-
-      const records = enrollmentRecords.map(r => ({ ...r, payment_id: payment.id }));
-      const { error } = await supabase.from("enrollments").insert(records);
-      if (error) throw error;
-
-      // Insert payment allocations
-      if (allocations.length > 0) {
-        await supabase.from("payment_allocations").insert(
-          allocations.map(a => ({ ...a, payment_id: payment.id }))
-        );
+      // Cash flow — create a cash payment request for staff confirmation
+      if (!selectedStaffId) {
+        toast.error("Please select a staff member to confirm the cash payment.");
+        setSubmitting(false);
+        return;
       }
 
-      toast.success(`Enrolled successfully! Amount: ₹${breakdown.total.toLocaleString()}`);
-      setStep("browse");
-      setSelectedBatchIds([]);
-      setStudent(null);
-      setUser(null);
-      setSelectedPlanId("");
+      const selectedStaff = staffList.find(s => String(s.id) === selectedStaffId);
+
+      const { data: cashReq, error: cashErr } = await supabase.from("cash_payment_requests").insert({
+        organization_id: 1,
+        student_id: student.id,
+        staff_user_id: Number(selectedStaffId),
+        amount: breakdown.subtotal,
+        gst: breakdown.gst,
+        final_amount: breakdown.total,
+        enrollment_data: { enrollments: enrollmentRecords, payment_allocations: allocations } as unknown as import("@/integrations/supabase/types").Json,
+        batch_ids: selectedBatchIds.map(Number) as unknown as import("@/integrations/supabase/types").Json,
+      }).select().single();
+      if (cashErr) throw cashErr;
+
+      // Send email to staff with confirmation link
+      const confirmUrl = `${window.location.origin}/confirm-cash?token=${cashReq.token}`;
+      await supabase.functions.invoke("send-cash-confirmation", {
+        body: {
+          staff_email: selectedStaff?.email,
+          staff_name: selectedStaff?.name || "Staff",
+          student_name: student.name,
+          amount: breakdown.total.toLocaleString("en-IN"),
+          confirmation_url: confirmUrl,
+        },
+      });
+
+      toast.success("Cash payment request sent to staff for confirmation!");
+      setStep("waiting");
     } catch {
       toast.error("Enrollment failed. Please try again.");
     } finally {
@@ -356,11 +381,26 @@ function JoinBatchFlow() {
               <Select value={paymentMode} onValueChange={setPaymentMode}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-              <SelectItem value="cash">Cash</SelectItem>
+                  <SelectItem value="cash">Cash</SelectItem>
                   <SelectItem value="razorpay">Razorpay</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+
+            {paymentMode === "cash" && (
+              <div>
+                <Label>Confirm with Staff</Label>
+                <Select value={selectedStaffId} onValueChange={setSelectedStaffId}>
+                  <SelectTrigger><SelectValue placeholder="Select staff member" /></SelectTrigger>
+                  <SelectContent>
+                    {staffList.map(s => (
+                      <SelectItem key={s.id} value={String(s.id)}>{s.name}{s.email ? ` (${s.email})` : ""}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1">A confirmation email will be sent to this staff member.</p>
+              </div>
+            )}
 
             {breakdown && assignment && (
               <FeeBreakdownDisplay breakdown={breakdown} regularCycles={assignment.regularCount} gridCycles={assignment.gridCount} detectedStatus={detectedStatus} />
@@ -368,6 +408,22 @@ function JoinBatchFlow() {
 
             <Button className="w-full gradient-primary" onClick={handleEnroll} disabled={submitting || !breakdown}>
               {submitting ? "Processing..." : `Confirm & Pay ₹${breakdown?.total.toLocaleString() || "0"}`}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+      {step === "waiting" && (
+        <Card className="glass-card">
+          <CardContent className="p-6 text-center space-y-4">
+            <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
+              <Music className="h-6 w-6 text-primary animate-pulse" />
+            </div>
+            <h3 className="font-display font-semibold text-foreground">Waiting for Staff Confirmation</h3>
+            <p className="text-sm text-muted-foreground">
+              A confirmation email has been sent to the selected staff member. Once they confirm the cash payment, your enrollment will be completed.
+            </p>
+            <Button variant="outline" onClick={() => { setStep("browse"); setSelectedBatchIds([]); setStudent(null); setUser(null); setSelectedPlanId(""); setSelectedStaffId(""); }}>
+              Start New Registration
             </Button>
           </CardContent>
         </Card>

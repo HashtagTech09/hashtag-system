@@ -196,6 +196,54 @@ export type Database = {
           },
         ]
       }
+      cash_payment_requests: {
+        Row: {
+          amount: number
+          batch_ids: Json
+          confirmed_at: string | null
+          created_at: string
+          enrollment_data: Json
+          final_amount: number
+          gst: number
+          id: number
+          organization_id: number
+          staff_user_id: number
+          status: string
+          student_id: number
+          token: string
+        }
+        Insert: {
+          amount: number
+          batch_ids: Json
+          confirmed_at?: string | null
+          created_at?: string
+          enrollment_data: Json
+          final_amount: number
+          gst?: number
+          id?: number
+          organization_id?: number
+          staff_user_id: number
+          status?: string
+          student_id: number
+          token?: string
+        }
+        Update: {
+          amount?: number
+          batch_ids?: Json
+          confirmed_at?: string | null
+          created_at?: string
+          enrollment_data?: Json
+          final_amount?: number
+          gst?: number
+          id?: number
+          organization_id?: number
+          staff_user_id?: number
+          status?: string
+          student_id?: number
+          token?: string
+        }
+        Relationships: []
+      }
       cycle_adjustments: {
         Row: {
           adjustment_type: string
@@ -557,6 +605,7 @@ export type Database = {
       payments: {
         Row: {
           amount: number
+          confirmed_by_staff_id: number | null
           created_at: string
           final_amount: number | null
           gateway_order_id: string | null
@@ -572,6 +621,7 @@ export type Database = {
         }
         Insert: {
           amount: number
+          confirmed_by_staff_id?: number | null
           created_at?: string
           final_amount?: number | null
           gateway_order_id?: string | null
@@ -587,6 +637,7 @@ export type Database = {
         }
         Update: {
           amount?: number
+          confirmed_by_staff_id?: number | null
           created_at?: string
           final_amount?: number | null
           gateway_order_id?: string | null

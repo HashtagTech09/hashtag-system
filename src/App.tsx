@@ -18,6 +18,7 @@ import PlanCyclesPage from "./pages/PlanCycles";
 import DropInsPage from "./pages/DropIns";
 import ImportPage from "./pages/Import";
 import RegisterPage from "./pages/Register";
+import ConfirmCashPage from "./pages/ConfirmCash";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -52,6 +53,7 @@ const AppRoutes = () => (
     <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
     <Route path="/import" element={<ProtectedRoute><ImportPage /></ProtectedRoute>} />
     <Route path="/register" element={<RegisterPage />} />
+    <Route path="/confirm-cash" element={<ConfirmCashPage />} />
     <Route path="*" element={<NotFound />} />
   </Routes>
 );
