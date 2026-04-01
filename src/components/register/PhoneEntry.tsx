@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { Badge } from "@/components/ui/badge";
+import { Loader2 } from "lucide-react";
 
 interface PhoneEntryProps {
   onStudentFound: (student: any, user: any) => void;
@@ -20,6 +21,7 @@ export default function PhoneEntry({ onStudentFound, onNewUser }: PhoneEntryProp
   const [verifying, setVerifying] = useState(false);
   const [testOtp, setTestOtp] = useState<string | null>(null);
   const [cleanedPhone, setCleanedPhone] = useState("");
+  const [lookingUp, setLookingUp] = useState(false);
 
   const handleSendOtp = async () => {
     const cleaned = phone.replace(/\D/g, "");
@@ -77,18 +79,21 @@ export default function PhoneEntry({ onStudentFound, onNewUser }: PhoneEntryProp
   };
 
   const lookupStudent = async (searchPhone: string) => {
+    setLookingUp(true);
     try {
-      const { data: students } = await supabase
+      // Query 1: Search students table directly by phone
+      const { data: studentsByPhone } = await supabase
         .from("students")
         .select("*, users(*)")
         .eq("organization_id", 1)
-        .or(`phone.ilike.%${searchPhone},users.phone.ilike.%${searchPhone}`);
+        .ilike("phone", `%${searchPhone}`);
 
-      if (students && students.length > 0) {
-        onStudentFound(students[0], students[0].users);
+      if (studentsByPhone && studentsByPhone.length > 0) {
+        onStudentFound(studentsByPhone[0], studentsByPhone[0].users);
         return;
       }
 
+      // Query 2: Search users table by phone, then find linked students
       const { data: users } = await supabase
         .from("users")
         .select("*")
@@ -110,8 +115,19 @@ export default function PhoneEntry({ onStudentFound, onNewUser }: PhoneEntryProp
       onNewUser(searchPhone);
     } catch {
       toast.error("Lookup failed");
+    } finally {
+      setLookingUp(false);
     }
   };
+
+  if (lookingUp) {
+    return (
+      <div className="flex flex-col items-center justify-center py-8 gap-3">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground">Looking up your account...</p>
+      </div>
+    );
+  }
 
   if (otpSent) {
     return (
