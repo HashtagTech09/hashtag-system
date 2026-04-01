@@ -9,7 +9,7 @@ export function getBatchDiscount(position: number): number {
 
 export const REGULAR_PRICE = 3200;
 export const GRID_PRICE = 7667;
-export const REG_FEE = 500;
+export const REG_FEE = 424; // Base registration fee (₹500 after 18% GST)
 export const GST_RATE = 0.18;
 
 /** Fixed after-GST per-batch totals for specific plans (hidden discount) */
