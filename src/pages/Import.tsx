@@ -409,6 +409,182 @@ export default function ImportPage() {
     };
   };
 
+  /** Build batch_code from style_level + studio_code: "Jazz 3" + "NDA" → "Jazz3-NDA" */
+  function buildBatchCodeFromInput(styleLevel: string, studioCode: string): string {
+    return `${styleLevel.replace(/\s+/g, '')}-${studioCode.trim()}`;
+  }
+
+  /** Match a cycle token like "April", "Grid", "January'27" to a plan_cycle row */
+  function matchCycleToken(token: string, allCycles: any[]): any | null {
+    const t = token.trim();
+    // Direct match
+    let match = allCycles.find(c => c.name.toLowerCase() === t.toLowerCase());
+    if (match) return match;
+    // Year suffix: "January'27" → try "January 27", then just "January"
+    const yearMatch = t.match(/^(.+?)['']\s*(\d{2,4})$/);
+    if (yearMatch) {
+      const base = yearMatch[1].trim();
+      const year = yearMatch[2];
+      match = allCycles.find(c => c.name.toLowerCase() === `${base} ${year}`.toLowerCase());
+      if (match) return match;
+      match = allCycles.find(c => c.name.toLowerCase() === `${base}'${year}`.toLowerCase());
+      if (match) return match;
+      // Fallback: match just the base name
+      match = allCycles.find(c => c.name.toLowerCase() === base.toLowerCase());
+      if (match) return match;
+    }
+    return null;
+  }
+
+  const importSmartEnrollments = async (rows: Record<string, string>[]): Promise<ImportResult> => {
+    let success = 0, errors = 0;
+    const errorMessages: string[] = [];
+    let usersCreated = 0, studentsCreated = 0;
+
+    // Fetch reference data
+    const [batchesRes, cyclesRes, plansRes, usersRes, studentsRes] = await Promise.all([
+      supabase.from("batches").select("id, batch_code, style_base, level").eq("organization_id", ORG_ID),
+      supabase.from("plan_cycles").select("*").eq("organization_id", ORG_ID).order("start_date"),
+      supabase.from("subscription_plans").select("*").eq("organization_id", ORG_ID),
+      supabase.from("users").select("id, phone").eq("organization_id", ORG_ID),
+      supabase.from("students").select("id, phone, name").eq("organization_id", ORG_ID),
+    ]);
+
+    const allBatches = batchesRes.data || [];
+    const allCycles = cyclesRes.data || [];
+    const allPlans = plansRes.data || [];
+
+    const codeToBatch = new Map<string, any>();
+    allBatches.forEach(b => { if (b.batch_code) codeToBatch.set(b.batch_code.toLowerCase(), b); });
+
+    const phoneToUserId = new Map<string, number>();
+    (usersRes.data || []).forEach(u => { if (u.phone) phoneToUserId.set(u.phone, u.id); });
+
+    const phoneToStudentId = new Map<string, number>();
+    (studentsRes.data || []).forEach(s => { if (s.phone) phoneToStudentId.set(s.phone, s.id); });
+
+    // Auto-create users
+    const uniquePhones = new Map<string, { name: string; email: string }>();
+    for (const r of rows) {
+      if (r.student_phone && r.student_name && !uniquePhones.has(r.student_phone) && !phoneToUserId.has(r.student_phone)) {
+        uniquePhones.set(r.student_phone, { name: r.student_name, email: r.student_email || "" });
+      }
+    }
+    for (const batch of chunk([...uniquePhones.entries()], 50)) {
+      const insertRows = batch.map(([phone, { name, email }]) => ({
+        name, phone, email: email || null, source: "import", organization_id: ORG_ID,
+      }));
+      const { data, error } = await supabase.from("users").insert(insertRows).select();
+      if (error) { errorMessages.push(`User create error: ${error.message}`); }
+      else {
+        usersCreated += data.length;
+        data.forEach(u => { if (u.phone) phoneToUserId.set(u.phone, u.id); });
+      }
+    }
+
+    // Auto-create students
+    const studentKey = (name: string, phone: string) => `${name.toLowerCase().trim()}|${phone}`;
+    const existingStudentKeys = new Set((studentsRes.data || []).map(s => s.phone ? studentKey(s.name, s.phone) : ""));
+    const uniqueStudents = new Map<string, { name: string; phone: string; email: string }>();
+    for (const r of rows) {
+      if (r.student_name && r.student_phone) {
+        const key = studentKey(r.student_name, r.student_phone);
+        if (!uniqueStudents.has(key) && !existingStudentKeys.has(key)) {
+          uniqueStudents.set(key, { name: r.student_name, phone: r.student_phone, email: r.student_email || "" });
+        }
+      }
+    }
+    for (const batch of chunk([...uniqueStudents.values()], 50)) {
+      const insertRows = batch.filter(s => phoneToUserId.has(s.phone)).map(s => ({
+        name: s.name, phone: s.phone, email: s.email || null, user_id: phoneToUserId.get(s.phone)!, organization_id: ORG_ID,
+      }));
+      if (insertRows.length === 0) continue;
+      const { data, error } = await supabase.from("students").insert(insertRows).select();
+      if (error) { errorMessages.push(`Student create error: ${error.message}`); }
+      else {
+        studentsCreated += data.length;
+        data.forEach(s => { if (s.phone) phoneToStudentId.set(s.phone, s.id); });
+      }
+    }
+
+    // Refresh student lookup
+    if (studentsCreated > 0) {
+      const { data: allStudents } = await supabase.from("students").select("id, phone").eq("organization_id", ORG_ID);
+      (allStudents || []).forEach(s => { if (s.phone) phoneToStudentId.set(s.phone, s.id); });
+    }
+
+    // Process each row
+    for (const row of rows) {
+      try {
+        const studentId = phoneToStudentId.get(row.student_phone);
+        if (!studentId) { errors++; errorMessages.push(`No student for phone: ${row.student_phone}`); continue; }
+
+        // Resolve batch_code
+        const batchCode = buildBatchCodeFromInput(row.style_level || "", row.studio_code || "");
+        const batch = codeToBatch.get(batchCode.toLowerCase());
+        if (!batch) { errors++; errorMessages.push(`No batch with code: ${batchCode} (from "${row.style_level}" + "${row.studio_code}")`); continue; }
+
+        // Parse cycles
+        const cycleTokens = (row.cycles || "").split(",").map(t => t.trim()).filter(Boolean);
+        if (cycleTokens.length === 0) { errors++; errorMessages.push(`No cycles for ${row.student_name}`); continue; }
+
+        const matchedCycles: any[] = [];
+        const unmatchedTokens: string[] = [];
+        for (const token of cycleTokens) {
+          const matched = matchCycleToken(token, allCycles);
+          if (matched) matchedCycles.push(matched);
+          else unmatchedTokens.push(token);
+        }
+
+        if (unmatchedTokens.length > 0) {
+          errors++;
+          errorMessages.push(`Unmatched cycles for ${row.student_name}: ${unmatchedTokens.join(", ")}`);
+          continue;
+        }
+
+        // Sort by start_date and derive validity
+        matchedCycles.sort((a, b) => a.start_date.localeCompare(b.start_date));
+        const startDate = matchedCycles[0].start_date;
+        const endDate = matchedCycles[matchedCycles.length - 1].end_date || matchedCycles[matchedCycles.length - 1].start_date;
+
+        // Auto-detect subscription plan
+        const regularCount = matchedCycles.filter(c => c.plan_type === "regular").length;
+        const gridCount = matchedCycles.filter(c => c.plan_type === "grid").length;
+        const subPlan = allPlans.find(p =>
+          p.total_regular_cycles === regularCount && p.total_grid_cycles === gridCount
+        );
+
+        const { data: enrollment, error } = await supabase.from("enrollments").insert({
+          student_id: studentId,
+          batch_id: batch.id,
+          organization_id: ORG_ID,
+          start_date: startDate,
+          end_date: endDate,
+          status_type: "NEW",
+          start_cycle_id: matchedCycles[0].id,
+          end_cycle_id: matchedCycles[matchedCycles.length - 1].id,
+          subscription_plan_id: subPlan?.id || null,
+        }).select().single();
+
+        if (error) { errors++; errorMessages.push(error.message); continue; }
+
+        // Insert enrollment_cycles
+        const allocatedCycles = matchedCycles.map(c => ({ cycle_id: c.id, cycle_type: c.plan_type }));
+        await insertEnrollmentCycles(enrollment.id, studentId, batch.id, allocatedCycles);
+
+        success++;
+      } catch (err: any) {
+        errors++;
+        errorMessages.push(err.message);
+      }
+    }
+
+    return {
+      success, errors, errorMessages,
+      extra: `Auto-created ${usersCreated} users, ${studentsCreated} students. Resolved batch codes & cycles from style+studio format.`,
+    };
+  };
+
   return (
     <AdminLayout title="Import Data">
       <div className="p-4 md:p-6 space-y-4">
@@ -420,6 +596,7 @@ export default function ImportPage() {
             <TabsTrigger value="users">Users</TabsTrigger>
             <TabsTrigger value="students">Students</TabsTrigger>
             <TabsTrigger value="enrollments">Enrollments</TabsTrigger>
+            <TabsTrigger value="smart-enrollments">Smart Enrollments</TabsTrigger>
           </TabsList>
           <TabsContent value="users">
             <CSVImportTab label="Users" dbColumns={USER_DB_COLUMNS} onImport={importUsers} />
@@ -429,6 +606,9 @@ export default function ImportPage() {
           </TabsContent>
           <TabsContent value="enrollments">
             <CSVImportTab label="Enrollments" dbColumns={ENROLLMENT_DB_COLUMNS} onImport={importEnrollments} />
+          </TabsContent>
+          <TabsContent value="smart-enrollments">
+            <CSVImportTab label="Smart Enrollments" dbColumns={SMART_ENROLLMENT_COLUMNS} onImport={importSmartEnrollments} />
           </TabsContent>
         </Tabs>
       </div>
