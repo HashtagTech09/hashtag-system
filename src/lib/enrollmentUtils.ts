@@ -176,46 +176,42 @@ export function computeFeeBreakdown(params: {
   const isLateRenewal = detectedStatus === "REN" && latestEndDate ? todayStr > latestEndDate : false;
 
   let perBatchFee: number;
-  let discountPct: number;
   let discountAmount: number;
   let totalBatchFee: number;
-  let primaryFee: number;
-  let discountedPerBatch: number;
 
   if (isFixedPricePlan) {
-    // Back-calculate subtotal from fixed after-GST total
     perBatchFee = Math.round(fixedTotal / (1 + GST_RATE));
-    primaryFee = perBatchFee;
-    discountPct = getDiscount(batchCount);
-    discountedPerBatch = Math.round(perBatchFee * (1 - discountPct));
-    totalBatchFee = batchCount === 1 ? primaryFee : primaryFee + discountedPerBatch * (batchCount - 1);
-    discountAmount = batchCount > 1 ? (perBatchFee * batchCount) - totalBatchFee : 0;
   } else {
     perBatchFee = (regularCycles * REGULAR_PRICE) + (gridCycles * GRID_PRICE);
-    discountPct = getDiscount(batchCount);
-    discountedPerBatch = Math.round(perBatchFee * (1 - discountPct));
-    primaryFee = perBatchFee;
-    totalBatchFee = batchCount === 1 ? primaryFee : primaryFee + discountedPerBatch * (batchCount - 1);
-    discountAmount = (perBatchFee * batchCount) - totalBatchFee;
   }
+
+  // Build per-batch allocations with incremental discounts
+  const batchAllocations: BatchAllocation[] = (sortedBatches || []).map((b, idx) => {
+    const position = idx + 1;
+    const disc = getBatchDiscount(position);
+    const amount = position === 1 ? perBatchFee : Math.round(perBatchFee * (1 - disc));
+    return {
+      batch_id: b.id,
+      batch_name: b.name,
+      style_base: b.style_base || "",
+      is_primary: idx === 0,
+      amount,
+      discountPct: disc,
+    };
+  });
+
+  totalBatchFee = batchAllocations.length > 0
+    ? batchAllocations.reduce((sum, a) => sum + a.amount, 0)
+    : perBatchFee * batchCount;
+  discountAmount = (perBatchFee * batchCount) - totalBatchFee;
 
   const subtotal = Math.max(0, totalBatchFee + regFee - dropInAmount);
   const gst = Math.round(subtotal * GST_RATE);
   let total = subtotal + gst;
 
-  // For non-fixed plans, round to nearest 100
   if (!isFixedPricePlan) {
     total = roundToNearest100(total);
   }
-
-  // Build per-batch allocations
-  const batchAllocations: BatchAllocation[] = (sortedBatches || []).map((b, idx) => ({
-    batch_id: b.id,
-    batch_name: b.name,
-    style_base: b.style_base || "",
-    is_primary: idx === 0,
-    amount: idx === 0 ? primaryFee : discountedPerBatch,
-  }));
 
   return { batchCount, perBatchFee, discountPct, discountAmount, totalBatchFee, regFee, dropInAdj: dropInAmount, subtotal, gst, total, applyRegFee, isLateRenewal, isFixedPricePlan, planKey, batchAllocations };
 }
