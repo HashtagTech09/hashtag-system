@@ -79,32 +79,41 @@ const BatchesPage = () => {
 
   const handleSave = async () => {
     if (!form.name.trim()) { toast.error("Name is required"); return; }
-    const batchCode = generateBatchCode(form.name, form.studio_id);
-    const displayStyle = buildDisplayStyle(form.style_base, form.level);
-    const eligibilityKey = buildEligibilityKey(form.style_base, form.level);
-    const payload = {
-      organization_id: 1, name: form.name,
-      style: displayStyle || null,
-      style_base: form.style_base || null,
-      level: form.level || null,
-      eligibility_key: eligibilityKey || null,
-      schedule: form.schedule.length > 0 ? form.schedule : null,
-      studio_id: form.studio_id ? Number(form.studio_id) : null,
-      instructor_id: form.instructor_id ? Number(form.instructor_id) : null,
-      instructor_2_id: form.instructor_2_id ? Number(form.instructor_2_id) : null,
-      capacity: form.capacity ? Number(form.capacity) : null,
-      batch_code: batchCode || null,
-    };
-    if (editId) {
-      const { organization_id, ...updatePayload } = payload;
-      await supabase.from("batches").update(updatePayload).eq("id", editId);
-      toast.success("Batch updated");
-    } else {
-      await supabase.from("batches").insert(payload);
-      toast.success("Batch added");
+    setSaving(true);
+    try {
+      const batchCode = generateBatchCode(form.name, form.studio_id);
+      const displayStyle = buildDisplayStyle(form.style_base, form.level);
+      const eligibilityKey = buildEligibilityKey(form.style_base, form.level);
+      const payload = {
+        organization_id: 1, name: form.name,
+        style: displayStyle || null,
+        style_base: form.style_base || null,
+        level: form.level || null,
+        eligibility_key: eligibilityKey || null,
+        schedule: form.schedule.length > 0 ? form.schedule : null,
+        studio_id: form.studio_id ? Number(form.studio_id) : null,
+        instructor_id: form.instructor_id ? Number(form.instructor_id) : null,
+        instructor_2_id: form.instructor_2_id ? Number(form.instructor_2_id) : null,
+        capacity: form.capacity ? Number(form.capacity) : null,
+        batch_code: batchCode || null,
+      };
+      if (editId) {
+        const { organization_id, ...updatePayload } = payload;
+        const { error } = await supabase.from("batches").update(updatePayload).eq("id", editId);
+        if (error) { toast.error(error.message); return; }
+        toast.success("Batch updated");
+      } else {
+        const { error } = await supabase.from("batches").insert(payload);
+        if (error) { toast.error(error.message); return; }
+        toast.success("Batch added");
+      }
+      resetForm();
+      fetchData();
+    } catch (err: any) {
+      toast.error(err.message || "Save failed");
+    } finally {
+      setSaving(false);
     }
-    resetForm();
-    fetchData();
   };
 
   const resetForm = () => { setForm({ name: "", style_base: "", level: "", schedule: [], studio_id: "", instructor_id: "", instructor_2_id: "", capacity: "" }); setEditId(null); setDialogOpen(false); };
