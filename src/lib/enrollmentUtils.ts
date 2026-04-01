@@ -213,7 +213,7 @@ export function computeFeeBreakdown(params: {
     total = roundToNearest100(total);
   }
 
-  return { batchCount, perBatchFee, discountPct, discountAmount, totalBatchFee, regFee, dropInAdj: dropInAmount, subtotal, gst, total, applyRegFee, isLateRenewal, isFixedPricePlan, planKey, batchAllocations };
+  return { batchCount, perBatchFee, discountPct: 0, discountAmount, totalBatchFee, regFee, dropInAdj: dropInAmount, subtotal, gst, total, applyRegFee, isLateRenewal, isFixedPricePlan, planKey, batchAllocations };
 }
 
 /** Detect student enrollment status: NEW, REN, or REV */

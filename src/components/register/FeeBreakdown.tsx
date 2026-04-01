@@ -30,7 +30,7 @@ export default function FeeBreakdownDisplay({ breakdown, regularCycles, gridCycl
           {breakdown.batchAllocations.map((alloc, idx) => (
             <div key={idx} className="flex justify-between text-xs">
               <span className={alloc.is_primary ? "text-foreground font-medium" : "text-muted-foreground"}>
-                {alloc.batch_name} {alloc.is_primary ? "(Primary)" : !breakdown.isFixedPricePlan ? `(${Math.round(breakdown.discountPct * 100)}% off)` : "(Discounted)"}
+                {alloc.batch_name} {alloc.is_primary ? "(Primary)" : alloc.discountPct > 0 ? `(${Math.round(alloc.discountPct * 100)}% off)` : "(Discounted)"}
               </span>
               <span className={alloc.is_primary ? "" : "text-success"}>₹{alloc.amount.toLocaleString()}</span>
             </div>
