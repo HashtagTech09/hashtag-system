@@ -1,7 +1,11 @@
 import { todayIST } from "@/lib/dateUtils";
 
-export const DISCOUNT_TIERS: Record<number, number> = { 1: 0, 2: 0.12, 3: 0.13, 4: 0.14 };
-export const getDiscount = (count: number) => DISCOUNT_TIERS[count] ?? 0.15;
+/** Per-position discount: 1st=0%, 2nd=12%, 3rd=13%, 4th=14%, 5th+=15% */
+export function getBatchDiscount(position: number): number {
+  if (position <= 1) return 0;
+  const tiers: Record<number, number> = { 2: 0.12, 3: 0.13, 4: 0.14 };
+  return tiers[position] ?? 0.15;
+}
 
 export const REGULAR_PRICE = 3200;
 export const GRID_PRICE = 7667;
