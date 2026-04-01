@@ -423,7 +423,7 @@ const EnrollmentsPage = () => {
     const gst = Math.round(subtotal * 0.18);
     const total = subtotal + gst;
 
-    return { totalBatchCount, newBatchCount, perBatchFee, discountPct, discountAmount, totalNewFee, dropInAdj, subtotal, gst, total, regularCycles, gridCycles };
+    return { totalBatchCount, newBatchCount, perBatchFee, discountPct: 0, discountAmount, totalNewFee, dropInAdj, subtotal, gst, total, regularCycles, gridCycles };
   };
 
   const addBatchFee = computeAddBatchFee();
