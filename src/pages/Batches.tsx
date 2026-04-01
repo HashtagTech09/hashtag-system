@@ -235,7 +235,10 @@ const BatchesPage = () => {
                 </Select>
               </div>
               <div><Label>Capacity</Label><Input type="number" value={form.capacity} onChange={(e) => setForm({ ...form, capacity: e.target.value })} /></div>
-              <Button className="w-full gradient-primary" onClick={handleSave}>Save</Button>
+              <Button className="w-full gradient-primary" onClick={handleSave} disabled={saving}>
+                {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                {saving ? "Saving..." : "Save"}
+              </Button>
             </div>
           </DialogContent>
         </Dialog>
