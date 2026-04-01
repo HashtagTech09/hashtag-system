@@ -10,9 +10,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Trash2, Edit, X, Calendar } from "lucide-react";
+import { Plus, Search, Trash2, Edit, X, Calendar, Loader2 } from "lucide-react";
 import BatchSessionsDialog from "@/components/BatchSessionsDialog";
 import { TimePickerPopover } from "@/components/ui/time-picker";
+import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -28,6 +29,8 @@ const BatchesPage = () => {
   const [form, setForm] = useState({ name: "", style_base: "", level: "", schedule: [] as ScheduleEntry[], studio_id: "", instructor_id: "", instructor_2_id: "", capacity: "" });
   const [editId, setEditId] = useState<number | null>(null);
   const [sessionsBatch, setSessionsBatch] = useState<any>(null);
+  const [pageLoading, setPageLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
   const generateBatchCode = (name: string, studioId: string) => {
     const studio = studios.find((s) => String(s.id) === studioId);
