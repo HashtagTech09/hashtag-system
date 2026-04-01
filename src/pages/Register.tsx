@@ -79,7 +79,6 @@ function JoinBatchFlow() {
   const [latestEndDate, setLatestEndDate] = useState<string | null>(null);
   const [staffList, setStaffList] = useState<any[]>([]);
   const [selectedStaffId, setSelectedStaffId] = useState("");
-  const [latestEndDate, setLatestEndDate] = useState<string | null>(null);
 
   useEffect(() => {
     supabase.from("batches").select("*").eq("organization_id", 1).then(({ data }) => setAllBatches(data || []));
