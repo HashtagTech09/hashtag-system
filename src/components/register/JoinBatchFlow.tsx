@@ -1,0 +1,370 @@
+import { useState, useEffect } from "react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { Music } from "lucide-react";
+import { initiateRazorpayPayment } from "@/lib/razorpayUtils";
+import { isPlanValid, computeCycleAssignment, computeFeeBreakdown, detectStudentStatus, getStartCycleIndex } from "@/lib/enrollmentUtils";
+import type { PlanCycle, SubPlan } from "@/lib/enrollmentUtils";
+import { sortBatchesByHierarchy, computePaymentAllocations } from "@/lib/styleHierarchy";
+import StyleSelection from "./StyleSelection";
+import StudioSelection from "./StudioSelection";
+import BatchSelection from "./BatchSelection";
+import PhoneEntry from "./PhoneEntry";
+import FeeBreakdownDisplay from "./FeeBreakdown";
+
+type Step = "style" | "studio" | "batch" | "phone" | "details" | "pay" | "waiting";
+
+export default function JoinBatchFlow() {
+  const [step, setStep] = useState<Step>("style");
+  const [selectedStyle, setSelectedStyle] = useState("");
+  const [selectedStudioId, setSelectedStudioId] = useState<number | null>(null);
+  const [selectedBatchIds, setSelectedBatchIds] = useState<string[]>([]);
+  const [student, setStudent] = useState<any>(null);
+  const [user, setUser] = useState<any>(null);
+  const [newPhone, setNewPhone] = useState("");
+  const [newName, setNewName] = useState("");
+  const [planCycles, setPlanCycles] = useState<PlanCycle[]>([]);
+  const [subPlans, setSubPlans] = useState<SubPlan[]>([]);
+  const [selectedPlanId, setSelectedPlanId] = useState("");
+  const [paymentMode, setPaymentMode] = useState("cash");
+  const [submitting, setSubmitting] = useState(false);
+  const [allBatches, setAllBatches] = useState<any[]>([]);
+  const [detectedStatus, setDetectedStatus] = useState<string>("NEW");
+  const [latestEndDate, setLatestEndDate] = useState<string | null>(null);
+  const [staffList, setStaffList] = useState<any[]>([]);
+  const [selectedStaffId, setSelectedStaffId] = useState("");
+
+  useEffect(() => {
+    supabase.from("batches").select("*").eq("organization_id", 1).then(({ data }) => setAllBatches(data || []));
+    const fetchStaff = async () => {
+      const { data: roleData } = await supabase
+        .from("user_roles")
+        .select("user_id, roles(name, type)")
+        .eq("organization_id", 1);
+      if (!roleData) return;
+      const staffUserIds = [...new Set(roleData.filter((r: any) => r.roles?.type === "organization").map((r: any) => r.user_id))];
+      if (staffUserIds.length === 0) return;
+      const { data: users } = await supabase.from("users").select("id, name, email").in("id", staffUserIds);
+      setStaffList(users || []);
+    };
+    fetchStaff();
+  }, []);
+
+  useEffect(() => {
+    const fetch = async () => {
+      const [planRes, cycleRes] = await Promise.all([
+        supabase.from("subscription_plans").select("*").eq("organization_id", 1).eq("is_active", true).order("id"),
+        supabase.from("plan_cycles").select("*").eq("organization_id", 1).order("start_date"),
+      ]);
+      setSubPlans(planRes.data || []);
+      setPlanCycles(cycleRes.data || []);
+    };
+    fetch();
+  }, []);
+
+  const startCycleIdx = planCycles.length > 0 ? getStartCycleIndex(planCycles) : 0;
+  const validPlans = subPlans.filter(p => isPlanValid(p, planCycles, startCycleIdx));
+
+  useEffect(() => {
+    if (step === "pay" && validPlans.length > 0 && !selectedPlanId) {
+      setSelectedPlanId(String(validPlans[0].id));
+    }
+  }, [step, validPlans, selectedPlanId]);
+
+  const assignment = selectedPlanId ? computeCycleAssignment(subPlans.find(p => p.id === Number(selectedPlanId))!, planCycles, startCycleIdx) : null;
+
+  const selectedBatchObjects = selectedBatchIds.map(id => allBatches.find(b => b.id === Number(id))).filter(Boolean);
+  const sortedSelectedBatches = sortBatchesByHierarchy(selectedBatchObjects);
+
+  useEffect(() => {
+    const detectStatus = async () => {
+      if (!student) { setDetectedStatus("NEW"); setLatestEndDate(null); return; }
+      const { data: enrollments } = await supabase
+        .from("enrollments").select("end_date").eq("student_id", student.id).order("end_date", { ascending: false });
+      const result = detectStudentStatus(enrollments || [], planCycles);
+      setDetectedStatus(result.status);
+      setLatestEndDate(result.latestEndDate);
+    };
+    detectStatus();
+  }, [student, planCycles]);
+
+  const breakdown = selectedBatchIds.length > 0 && assignment ? computeFeeBreakdown({
+    batchCount: selectedBatchIds.length,
+    regularCycles: assignment.regularCount,
+    gridCycles: assignment.gridCount,
+    detectedStatus,
+    latestEndDate,
+    dropInAmount: 0,
+    sortedBatches: sortedSelectedBatches.map(b => ({ id: b.id, name: b.name, style_base: b.style_base })),
+  }) : null;
+
+  const toggleBatch = (id: string) => {
+    setSelectedBatchIds(prev => prev.includes(id) ? prev.filter(b => b !== id) : [...prev, id]);
+  };
+
+  const handleCreateAndProceed = async () => {
+    if (!newName.trim()) { toast.error("Please enter your name"); return; }
+    setSubmitting(true);
+    try {
+      const { data: existingUsers } = await supabase.from("users").select("id").eq("organization_id", 1).ilike("phone", `%${newPhone}`);
+      if (existingUsers && existingUsers.length > 0) {
+        const { data: existingStudents } = await supabase.from("students").select("*, users(*)").eq("user_id", existingUsers[0].id);
+        if (existingStudents && existingStudents.length > 0) {
+          setUser(existingStudents[0].users);
+          setStudent(existingStudents[0]);
+          toast.info("Account already exists! Proceeding with your profile.");
+          setStep("pay");
+          return;
+        }
+      }
+      const { data: newUser, error: userErr } = await supabase.from("users").insert({ organization_id: 1, name: newName.trim(), phone: newPhone }).select().single();
+      if (userErr) throw userErr;
+      const { data: newStudent, error: studErr } = await supabase.from("students").insert({ organization_id: 1, name: newName.trim(), phone: newPhone, user_id: newUser.id }).select().single();
+      if (studErr) throw studErr;
+      setUser(newUser);
+      setStudent(newStudent);
+      setStep("pay");
+    } catch (e: any) {
+      toast.error("Failed to create account: " + e.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleEnroll = async () => {
+    if (!student || selectedBatchIds.length === 0 || !assignment || !breakdown) return;
+    setSubmitting(true);
+    try {
+      const enrollmentRecords = sortedSelectedBatches.map(batch => ({
+        organization_id: 1, student_id: student.id, batch_id: batch.id,
+        status_type: detectedStatus,
+        registration_fee_applied: breakdown.applyRegFee, late_renewal: false,
+        start_date: assignment.startCycle.start_date,
+        end_date: assignment.endCycle.end_date || assignment.startCycle.start_date,
+        subscription_plan_id: Number(selectedPlanId),
+        start_cycle_id: assignment.startCycle.id, end_cycle_id: assignment.endCycle.id,
+        previous_batch_id: null,
+      }));
+
+      const allocations = computePaymentAllocations(
+        sortedSelectedBatches.map(b => ({ id: b.id, studio_id: b.studio_id })),
+        breakdown.perBatchFee, breakdown.discountPct
+      );
+
+      if (paymentMode === "razorpay") {
+        const batchNames = selectedBatchIds.map(id => "Batch#" + id).join(", ");
+        const planName = subPlans.find(p => p.id === Number(selectedPlanId))?.name || "";
+        await initiateRazorpayPayment({
+          orderParams: {
+            student_id: student.id, organization_id: 1, batch_ids: selectedBatchIds.map(Number),
+            amount: breakdown.subtotal, gst: breakdown.gst, final_amount: breakdown.total,
+            enrollment_data: { enrollments: enrollmentRecords, enrollment_cycles_template: [], payment_allocations: allocations },
+            student_name: student.name, student_phone: student.phone || "", batch_names: batchNames, plan_name: planName,
+          },
+          onSuccess: () => {
+            toast.success("Payment initiated! Enrollment will be confirmed once payment is captured.");
+            resetFlow();
+          },
+          onFailure: (err) => toast.error(err),
+        });
+        setSubmitting(false);
+        return;
+      }
+
+      // Cash flow
+      if (!selectedStaffId) {
+        toast.error("Please select a staff member to confirm the cash payment.");
+        setSubmitting(false);
+        return;
+      }
+
+      const selectedStaff = staffList.find(s => String(s.id) === selectedStaffId);
+      const { data: cashReq, error: cashErr } = await supabase.from("cash_payment_requests").insert({
+        organization_id: 1, student_id: student.id, staff_user_id: Number(selectedStaffId),
+        amount: breakdown.subtotal, gst: breakdown.gst, final_amount: breakdown.total,
+        enrollment_data: { enrollments: enrollmentRecords, payment_allocations: allocations } as any,
+        batch_ids: selectedBatchIds.map(Number) as any,
+      }).select().single();
+      if (cashErr) throw cashErr;
+
+      const confirmUrl = `${window.location.origin}/confirm-cash?token=${cashReq.token}`;
+      await supabase.functions.invoke("send-cash-confirmation", {
+        body: {
+          staff_email: selectedStaff?.email, staff_name: selectedStaff?.name || "Staff",
+          student_name: student.name, amount: breakdown.total.toLocaleString("en-IN"), confirmation_url: confirmUrl,
+        },
+      });
+
+      toast.success("Cash payment request sent to staff for confirmation!");
+      setStep("waiting");
+    } catch {
+      toast.error("Enrollment failed. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const resetFlow = () => {
+    setStep("style");
+    setSelectedStyle("");
+    setSelectedStudioId(null);
+    setSelectedBatchIds([]);
+    setStudent(null);
+    setUser(null);
+    setSelectedPlanId("");
+    setSelectedStaffId("");
+  };
+
+  // Step indicator
+  const stepLabels = ["Style", "Studio", "Batch", "Verify", "Pay"];
+  const stepIdx = { style: 0, studio: 1, batch: 2, phone: 3, details: 3, pay: 4, waiting: 4 }[step];
+
+  return (
+    <div className="space-y-6">
+      {/* Step indicators */}
+      <div className="flex items-center justify-center gap-1 text-xs">
+        {stepLabels.map((s, i) => (
+          <div key={s} className="flex items-center gap-1">
+            <div className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-medium transition-colors ${i <= stepIdx ? "gradient-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+              {i + 1}
+            </div>
+            <span className={`hidden sm:inline ${i <= stepIdx ? "text-foreground" : "text-muted-foreground"}`}>{s}</span>
+            {i < stepLabels.length - 1 && <div className={`h-px w-4 sm:w-6 ${i < stepIdx ? "bg-primary" : "bg-border"}`} />}
+          </div>
+        ))}
+      </div>
+
+      {step === "style" && <StyleSelection onSelectStyle={s => { setSelectedStyle(s); setStep("studio"); }} />}
+
+      {step === "studio" && (
+        <StudioSelection
+          selectedStyle={selectedStyle}
+          onSelectStudio={id => { setSelectedStudioId(id); setStep("batch"); }}
+          onBack={() => setStep("style")}
+        />
+      )}
+
+      {step === "batch" && selectedStudioId && (
+        <BatchSelection
+          selectedStyle={selectedStyle}
+          studioId={selectedStudioId}
+          selectedBatchIds={selectedBatchIds}
+          onToggleBatch={toggleBatch}
+          onContinue={() => setStep("phone")}
+          onBack={() => setStep("studio")}
+        />
+      )}
+
+      {step === "phone" && (
+        <Card className="glass-card">
+          <CardContent className="p-6">
+            <PhoneEntry
+              onStudentFound={(s, u) => { setStudent(s); setUser(u); setStep("pay"); }}
+              onNewUser={(phone) => { setNewPhone(phone); setStep("details"); }}
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {step === "details" && (
+        <Card className="glass-card">
+          <CardContent className="p-6 space-y-4">
+            <h3 className="font-display font-semibold text-foreground">Create Your Account</h3>
+            <p className="text-sm text-muted-foreground">Phone: {newPhone}</p>
+            <div>
+              <Label>Your Name</Label>
+              <Input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Enter your full name" className="mt-1" />
+            </div>
+            <Button className="w-full gradient-primary" onClick={handleCreateAndProceed} disabled={submitting}>
+              {submitting ? "Creating..." : "Continue"}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {step === "pay" && (
+        <Card className="glass-card">
+          <CardContent className="p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-display font-semibold text-foreground">Review & Pay</h3>
+              <Button variant="ghost" size="sm" onClick={resetFlow}>← Start Over</Button>
+            </div>
+            <p className="text-sm text-muted-foreground">Welcome, <span className="text-foreground font-medium">{student?.name}</span></p>
+
+            <div>
+              <Label>Subscription Plan</Label>
+              <Select value={selectedPlanId} onValueChange={setSelectedPlanId}>
+                <SelectTrigger><SelectValue placeholder="Select plan" /></SelectTrigger>
+                <SelectContent>
+                  {validPlans.map(p => {
+                    const perBatchFee = (p.total_regular_cycles || 0) * 3767 + (p.total_grid_cycles || 0) * 5300;
+                    return <SelectItem key={p.id} value={String(p.id)}>{p.name} — ₹{perBatchFee.toLocaleString("en-IN")}/batch</SelectItem>;
+                  })}
+                </SelectContent>
+              </Select>
+              {assignment && (
+                <div className="mt-2 p-2 rounded border border-border text-sm">
+                  <p className="text-muted-foreground">Validity: <span className="text-foreground font-medium">{assignment.startCycle.name}</span> → <span className="text-foreground font-medium">{assignment.endCycle.name}</span></p>
+                </div>
+              )}
+            </div>
+
+            <div>
+              <Label>Payment Mode</Label>
+              <Select value={paymentMode} onValueChange={setPaymentMode}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cash">Cash</SelectItem>
+                  <SelectItem value="razorpay">Razorpay</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {paymentMode === "cash" && (
+              <div>
+                <Label>Confirm with Staff</Label>
+                <Select value={selectedStaffId} onValueChange={setSelectedStaffId}>
+                  <SelectTrigger><SelectValue placeholder="Select staff member" /></SelectTrigger>
+                  <SelectContent>
+                    {staffList.map(s => (
+                      <SelectItem key={s.id} value={String(s.id)}>{s.name}{s.email ? ` (${s.email})` : ""}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1">A confirmation email will be sent to this staff member.</p>
+              </div>
+            )}
+
+            {breakdown && assignment && (
+              <FeeBreakdownDisplay breakdown={breakdown} regularCycles={assignment.regularCount} gridCycles={assignment.gridCount} detectedStatus={detectedStatus} />
+            )}
+
+            <Button className="w-full gradient-primary" onClick={handleEnroll} disabled={submitting || !breakdown}>
+              {submitting ? "Processing..." : `Confirm & Pay ₹${breakdown?.total.toLocaleString() || "0"}`}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {step === "waiting" && (
+        <Card className="glass-card">
+          <CardContent className="p-6 text-center space-y-4">
+            <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
+              <Music className="h-6 w-6 text-primary animate-pulse" />
+            </div>
+            <h3 className="font-display font-semibold text-foreground">Waiting for Staff Confirmation</h3>
+            <p className="text-sm text-muted-foreground">
+              A confirmation email has been sent to the selected staff member. Once they confirm the cash payment, your enrollment will be completed.
+            </p>
+            <Button variant="outline" onClick={resetFlow}>Start New Registration</Button>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
