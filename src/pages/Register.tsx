@@ -82,6 +82,19 @@ function JoinBatchFlow() {
 
   useEffect(() => {
     supabase.from("batches").select("*").eq("organization_id", 1).then(({ data }) => setAllBatches(data || []));
+    // Fetch staff (users with org roles: admin, manager, frontdesk, instructor)
+    const fetchStaff = async () => {
+      const { data: roleData } = await supabase
+        .from("user_roles")
+        .select("user_id, roles(name, type)")
+        .eq("organization_id", 1);
+      if (!roleData) return;
+      const staffUserIds = [...new Set(roleData.filter((r: any) => r.roles?.type === "organization").map((r: any) => r.user_id))];
+      if (staffUserIds.length === 0) return;
+      const { data: users } = await supabase.from("users").select("id, name, email").in("id", staffUserIds);
+      setStaffList(users || []);
+    };
+    fetchStaff();
   }, []);
 
   useEffect(() => {
