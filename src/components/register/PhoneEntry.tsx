@@ -78,18 +78,21 @@ export default function PhoneEntry({ onStudentFound, onNewUser }: PhoneEntryProp
   };
 
   const lookupStudent = async (searchPhone: string) => {
+    setLookingUp(true);
     try {
-      const { data: students } = await supabase
+      // Query 1: Search students table directly by phone
+      const { data: studentsByPhone } = await supabase
         .from("students")
         .select("*, users(*)")
         .eq("organization_id", 1)
-        .or(`phone.ilike.%${searchPhone},users.phone.ilike.%${searchPhone}`);
+        .ilike("phone", `%${searchPhone}`);
 
-      if (students && students.length > 0) {
-        onStudentFound(students[0], students[0].users);
+      if (studentsByPhone && studentsByPhone.length > 0) {
+        onStudentFound(studentsByPhone[0], studentsByPhone[0].users);
         return;
       }
 
+      // Query 2: Search users table by phone, then find linked students
       const { data: users } = await supabase
         .from("users")
         .select("*")
@@ -111,6 +114,8 @@ export default function PhoneEntry({ onStudentFound, onNewUser }: PhoneEntryProp
       onNewUser(searchPhone);
     } catch {
       toast.error("Lookup failed");
+    } finally {
+      setLookingUp(false);
     }
   };
 
