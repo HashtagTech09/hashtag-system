@@ -1,71 +1,32 @@
 
 
-# Incremental Per-Batch Discounts
+# Fix Registration Fee for NEW Students
 
-## Current behavior
-All non-primary batches get the **same** discount based on total batch count (e.g., 3 batches → all non-primary get 13%).
+## Problems
 
-## Desired behavior
-Each batch position gets its own discount:
-- 1st batch (primary): 0%
-- 2nd batch: 12%
-- 3rd batch: 13%
-- 4th batch: 14%
-- 5th+ batch: 15%
+1. **Reg fee not showing**: In `Register.tsx` line 111, `detectedStatus = student ? "REN" : "NEW"`. Once a new student creates their account in the "details" step, the `student` object gets set, so the status flips to "REN" — hiding the ₹500 fee. The fix is to use `detectStudentStatus()` with the student's actual enrollment history (which will be empty for new students → "NEW").
+
+2. **₹500 should be after GST**: Currently `REG_FEE = 500` is added to the pre-GST subtotal, then 18% GST is applied on top (making it ~₹590). The user wants ₹500 to be the final after-GST amount, so the base fee should be `Math.round(500 / 1.18)` ≈ ₹424.
 
 ## Changes
 
 ### `src/lib/enrollmentUtils.ts`
+- Change `REG_FEE` to `424` (so that 424 + 18% GST ≈ ₹500)
+- Add a comment: `// Base registration fee (₹500 after 18% GST)`
 
-1. **Replace `getDiscount(count)`** with a **per-position** helper:
-```typescript
-export function getBatchDiscount(position: number): number {
-  // position is 1-indexed: 1=primary, 2=12%, 3=13%, etc.
-  if (position <= 1) return 0;
-  const tiers: Record<number, number> = { 2: 0.12, 3: 0.13, 4: 0.14 };
-  return tiers[position] ?? 0.15;
-}
-```
+### `src/pages/Register.tsx`
+- **JoinBatchFlow**: Replace `const detectedStatus = student ? "REN" : "NEW"` with proper enrollment-based detection:
+  - If `student` exists, query their enrollments and use `detectStudentStatus()`
+  - If no student, status = "NEW"
+  - Store this in state so it persists correctly through the flow
 
-2. **Rewrite `computeFeeBreakdown`** to loop over batches and sum individually instead of using `primaryFee + discountedPerBatch * (N-1)`:
-```text
-totalBatchFee = 0
-for each batch at position i (1-indexed):
-  discount = getBatchDiscount(i)
-  batchAmount = round(perBatchFee * (1 - discount))
-  totalBatchFee += batchAmount
-  store batchAmount in allocation
-discountAmount = (perBatchFee * batchCount) - totalBatchFee
-```
-
-3. **Update `batchAllocations`** to use position-specific amounts instead of a single `discountedPerBatch`.
-
-4. **Update `FeeBreakdown` interface**: remove single `discountPct` field (no longer meaningful as one number) or keep it as 0 for backward compat.
+- **DropInFlow**: Apply the same fix if applicable
 
 ### `src/components/register/FeeBreakdown.tsx`
-
-Update the per-batch line items to show each batch's specific discount percentage instead of one flat rate:
-```text
-Jazz Batch (Primary)         ₹X
-Ballet Batch (12% off)       ₹Y
-Hip Hop Batch (13% off)      ₹Z
-```
-
-This requires adding a `discountPct` field to `BatchAllocation` so the UI can display it.
-
-### `BatchAllocation` interface update
-```typescript
-export interface BatchAllocation {
-  batch_id: number;
-  batch_name: string;
-  style_base: string;
-  is_primary: boolean;
-  amount: number;
-  discountPct: number; // new: 0 for primary, 0.12 for 2nd, etc.
-}
-```
+- Update the registration fee display label to show "₹500 incl. GST" for clarity, since the line item will show ₹424 (pre-GST) but the user expects to see ₹500
 
 ## Files changed
-- `src/lib/enrollmentUtils.ts` — new per-position discount logic, updated fee computation
-- `src/components/register/FeeBreakdown.tsx` — display per-batch discount percentage
+- `src/lib/enrollmentUtils.ts` — adjust REG_FEE constant
+- `src/pages/Register.tsx` — fix detectedStatus logic for new students
+- `src/components/register/FeeBreakdown.tsx` — update label
 
