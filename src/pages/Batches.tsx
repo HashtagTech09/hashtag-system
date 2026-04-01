@@ -258,44 +258,55 @@ const BatchesPage = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((batch) => (
-                <TableRow key={batch.id}>
-                  <TableCell className="font-mono text-xs text-muted-foreground">{batch.batch_code || "—"}</TableCell>
-                  <TableCell className="font-medium">{batch.name}</TableCell>
-                  <TableCell className="text-muted-foreground">{batch.style || "—"}</TableCell>
-                  <TableCell className="hidden md:table-cell text-muted-foreground text-sm">{formatScheduleDisplay(batch)}</TableCell>
-                  <TableCell className="hidden lg:table-cell text-muted-foreground">
-                    {(() => {
-                      const i1 = instructors.find((i) => i.id === batch.instructor_id);
-                      const i2 = instructors.find((i) => i.id === batch.instructor_2_id);
-                      const names = [i1?.name, i2?.name].filter(Boolean).join(", ");
-                      return names || "—";
-                    })()}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex gap-1">
-                      <Button variant="ghost" size="icon" title="Sessions" onClick={() => setSessionsBatch(batch)}>
-                        <Calendar className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" onClick={() => {
-                        const sched = getSchedule(batch);
-                        setForm({
-                          name: batch.name, style_base: batch.style_base || "", level: batch.level || "",
-                          schedule: sched,
-                          studio_id: batch.studio_id ? String(batch.studio_id) : "",
-                          instructor_id: batch.instructor_id ? String(batch.instructor_id) : "",
-                          instructor_2_id: batch.instructor_2_id ? String(batch.instructor_2_id) : "",
-                          capacity: batch.capacity ? String(batch.capacity) : "",
-                        });
-                        setEditId(batch.id);
-                        setDialogOpen(true);
-                      }}><Edit className="h-4 w-4" /></Button>
-                      <Button variant="ghost" size="icon" onClick={() => handleDelete(batch.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {filtered.length === 0 && <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No batches found</TableCell></TableRow>}
+              {pageLoading ? (
+                Array.from({ length: 4 }).map((_, i) => (
+                  <TableRow key={i}>
+                    {Array.from({ length: 6 }).map((_, j) => (
+                      <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              ) : filtered.length === 0 ? (
+                <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No batches found</TableCell></TableRow>
+              ) : (
+                filtered.map((batch) => (
+                  <TableRow key={batch.id}>
+                    <TableCell className="font-mono text-xs text-muted-foreground">{batch.batch_code || "—"}</TableCell>
+                    <TableCell className="font-medium">{batch.name}</TableCell>
+                    <TableCell className="text-muted-foreground">{batch.style || "—"}</TableCell>
+                    <TableCell className="hidden md:table-cell text-muted-foreground text-sm">{formatScheduleDisplay(batch)}</TableCell>
+                    <TableCell className="hidden lg:table-cell text-muted-foreground">
+                      {(() => {
+                        const i1 = instructors.find((i) => i.id === batch.instructor_id);
+                        const i2 = instructors.find((i) => i.id === batch.instructor_2_id);
+                        const names = [i1?.name, i2?.name].filter(Boolean).join(", ");
+                        return names || "—";
+                      })()}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex gap-1">
+                        <Button variant="ghost" size="icon" title="Sessions" onClick={() => setSessionsBatch(batch)}>
+                          <Calendar className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => {
+                          const sched = getSchedule(batch);
+                          setForm({
+                            name: batch.name, style_base: batch.style_base || "", level: batch.level || "",
+                            schedule: sched,
+                            studio_id: batch.studio_id ? String(batch.studio_id) : "",
+                            instructor_id: batch.instructor_id ? String(batch.instructor_id) : "",
+                            instructor_2_id: batch.instructor_2_id ? String(batch.instructor_2_id) : "",
+                            capacity: batch.capacity ? String(batch.capacity) : "",
+                          });
+                          setEditId(batch.id);
+                          setDialogOpen(true);
+                        }}><Edit className="h-4 w-4" /></Button>
+                        <Button variant="ghost" size="icon" onClick={() => handleDelete(batch.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </CardContent>
