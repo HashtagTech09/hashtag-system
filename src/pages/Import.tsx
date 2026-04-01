@@ -516,8 +516,8 @@ export default function ImportPage() {
     // Process each row
     for (const row of rows) {
       try {
-        const studentId = phoneToStudentId.get(row.student_phone);
-        if (!studentId) { errors++; errorMessages.push(`No student for phone: ${row.student_phone}`); continue; }
+        const studentId = namePhoneToStudentId.get(studentKey(row.student_name, row.student_phone));
+        if (!studentId) { errors++; errorMessages.push(`No student for: ${row.student_name} / ${row.student_phone}`); continue; }
 
         // Resolve batch_code
         const batchCode = buildBatchCodeFromInput(row.style_level || "", row.studio_code || "");
