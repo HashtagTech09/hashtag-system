@@ -63,7 +63,7 @@ const RegisterPage = () => {
 
 // ─── Flow 1: Join a Batch ────────────────────────────────
 function JoinBatchFlow() {
-  const [step, setStep] = useState<"browse" | "phone" | "details" | "pay">("browse");
+  const [step, setStep] = useState<"browse" | "phone" | "details" | "pay" | "waiting">("browse");
   const [selectedBatchIds, setSelectedBatchIds] = useState<string[]>([]);
   const [student, setStudent] = useState<any>(null);
   const [user, setUser] = useState<any>(null);
@@ -76,6 +76,9 @@ function JoinBatchFlow() {
   const [submitting, setSubmitting] = useState(false);
   const [allBatches, setAllBatches] = useState<any[]>([]);
   const [detectedStatus, setDetectedStatus] = useState<string>("NEW");
+  const [latestEndDate, setLatestEndDate] = useState<string | null>(null);
+  const [staffList, setStaffList] = useState<any[]>([]);
+  const [selectedStaffId, setSelectedStaffId] = useState("");
   const [latestEndDate, setLatestEndDate] = useState<string | null>(null);
 
   useEffect(() => {
