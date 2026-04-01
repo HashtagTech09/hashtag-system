@@ -134,6 +134,7 @@ export interface BatchAllocation {
   style_base: string;
   is_primary: boolean;
   amount: number;
+  discountPct: number;
 }
 
 export interface FeeBreakdown {
