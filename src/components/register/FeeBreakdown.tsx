@@ -50,7 +50,7 @@ export default function FeeBreakdownDisplay({ breakdown, regularCycles, gridCycl
       </div>
       {breakdown.regFee > 0 && (
         <div className="flex justify-between">
-          <span className="text-muted-foreground">Registration fee ({detectedStatus}{breakdown.isLateRenewal ? " - Late" : ""})</span>
+          <span className="text-muted-foreground">Registration fee ({detectedStatus}{breakdown.isLateRenewal ? " - Late" : ""}) — ₹500 incl. GST</span>
           <span>₹{breakdown.regFee}</span>
         </div>
       )}

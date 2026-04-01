@@ -75,6 +75,8 @@ function JoinBatchFlow() {
   const [paymentMode, setPaymentMode] = useState("cash");
   const [submitting, setSubmitting] = useState(false);
   const [allBatches, setAllBatches] = useState<any[]>([]);
+  const [detectedStatus, setDetectedStatus] = useState<string>("NEW");
+  const [latestEndDate, setLatestEndDate] = useState<string | null>(null);
 
   useEffect(() => {
     supabase.from("batches").select("*").eq("organization_id", 1).then(({ data }) => setAllBatches(data || []));
