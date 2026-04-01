@@ -569,7 +569,7 @@ export default function ImportPage() {
         if (error) { errors++; errorMessages.push(error.message); continue; }
 
         // Insert enrollment_cycles
-        const allocatedCycles = matchedCycles.map(c => ({ cycle_id: c.id, cycle_type: c.plan_type }));
+        const allocatedCycles = matchedCycles.map(c => ({ cycleId: c.id, cycleType: c.plan_type }));
         await insertEnrollmentCycles(enrollment.id, studentId, batch.id, allocatedCycles);
 
         success++;
