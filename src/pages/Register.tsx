@@ -253,31 +253,41 @@ function JoinBatchFlow() {
         return;
       }
 
-      // Cash flow
-      const { data: payment, error: payError } = await supabase.from("payments").insert({
-        organization_id: 1, student_id: student.id, amount: breakdown.subtotal,
-        gst: breakdown.gst, final_amount: breakdown.total,
-        payment_mode: paymentMode, status: "success",
-      }).select().single();
-      if (payError) throw payError;
-
-      const records = enrollmentRecords.map(r => ({ ...r, payment_id: payment.id }));
-      const { error } = await supabase.from("enrollments").insert(records);
-      if (error) throw error;
-
-      // Insert payment allocations
-      if (allocations.length > 0) {
-        await supabase.from("payment_allocations").insert(
-          allocations.map(a => ({ ...a, payment_id: payment.id }))
-        );
+      // Cash flow — create a cash payment request for staff confirmation
+      if (!selectedStaffId) {
+        toast.error("Please select a staff member to confirm the cash payment.");
+        setSubmitting(false);
+        return;
       }
 
-      toast.success(`Enrolled successfully! Amount: ₹${breakdown.total.toLocaleString()}`);
-      setStep("browse");
-      setSelectedBatchIds([]);
-      setStudent(null);
-      setUser(null);
-      setSelectedPlanId("");
+      const selectedStaff = staffList.find(s => String(s.id) === selectedStaffId);
+
+      const { data: cashReq, error: cashErr } = await supabase.from("cash_payment_requests").insert({
+        organization_id: 1,
+        student_id: student.id,
+        staff_user_id: Number(selectedStaffId),
+        amount: breakdown.subtotal,
+        gst: breakdown.gst,
+        final_amount: breakdown.total,
+        enrollment_data: { enrollments: enrollmentRecords, payment_allocations: allocations },
+        batch_ids: selectedBatchIds.map(Number),
+      }).select().single();
+      if (cashErr) throw cashErr;
+
+      // Send email to staff with confirmation link
+      const confirmUrl = `${window.location.origin}/confirm-cash?token=${cashReq.token}`;
+      await supabase.functions.invoke("send-cash-confirmation", {
+        body: {
+          staff_email: selectedStaff?.email,
+          staff_name: selectedStaff?.name || "Staff",
+          student_name: student.name,
+          amount: breakdown.total.toLocaleString("en-IN"),
+          confirmation_url: confirmUrl,
+        },
+      });
+
+      toast.success("Cash payment request sent to staff for confirmation!");
+      setStep("waiting");
     } catch {
       toast.error("Enrollment failed. Please try again.");
     } finally {
