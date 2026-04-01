@@ -312,8 +312,8 @@ export default function ImportPage() {
     const { data: existingStudents } = await supabase.from("students").select("id, phone, name").eq("organization_id", ORG_ID);
     const studentKey = (name: string, phone: string) => `${name.toLowerCase().trim()}|${phone}`;
     const existingStudentKeys = new Set((existingStudents || []).map(s => s.phone ? studentKey(s.name, s.phone) : ""));
-    const phoneToStudentId = new Map<string, number>();
-    (existingStudents || []).forEach(s => { if (s.phone) phoneToStudentId.set(s.phone, s.id); });
+    const namePhoneToStudentId = new Map<string, number>();
+    (existingStudents || []).forEach(s => { if (s.phone) namePhoneToStudentId.set(studentKey(s.name, s.phone), s.id); });
 
     const uniqueStudents = new Map<string, { name: string; phone: string }>();
     for (const r of rows) {
@@ -334,14 +334,14 @@ export default function ImportPage() {
       if (error) { errorMessages.push(`Student create error: ${error.message}`); }
       else {
         studentsCreated += data.length;
-        data.forEach(s => { if (s.phone) phoneToStudentId.set(s.phone, s.id); });
+        data.forEach(s => { if (s.phone) namePhoneToStudentId.set(studentKey(s.name, s.phone), s.id); });
       }
     }
 
     // Refresh student lookup after inserts
     if (studentsCreated > 0) {
-      const { data: allStudents } = await supabase.from("students").select("id, phone").eq("organization_id", ORG_ID);
-      (allStudents || []).forEach(s => { if (s.phone) phoneToStudentId.set(s.phone, s.id); });
+      const { data: allStudents } = await supabase.from("students").select("id, phone, name").eq("organization_id", ORG_ID);
+      (allStudents || []).forEach(s => { if (s.phone) namePhoneToStudentId.set(studentKey(s.name, s.phone), s.id); });
     }
 
     // Step 3: Create Enrollments
