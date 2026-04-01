@@ -1,35 +1,71 @@
 
 
-# Fix OTP Verification & Duplicate Student Detection
+# Incremental Per-Batch Discounts
 
-## Problems
-1. **`lookupStudent` query is broken** — The `.or()` filter uses `users.phone.ilike.%${searchPhone}` which doesn't work with PostgREST joined tables. This causes the lookup to fail silently, sending existing students to the "Create Account" flow instead of recognizing them.
-2. **No duplicate check on account creation** — When an existing student enters the "Create Account" step, the insert fails with a database error but no user-friendly message like "You're already registered."
+## Current behavior
+All non-primary batches get the **same** discount based on total batch count (e.g., 3 batches → all non-primary get 13%).
 
-## Root Cause
-Line 85 in `PhoneEntry.tsx`:
+## Desired behavior
+Each batch position gets its own discount:
+- 1st batch (primary): 0%
+- 2nd batch: 12%
+- 3rd batch: 13%
+- 4th batch: 14%
+- 5th+ batch: 15%
+
+## Changes
+
+### `src/lib/enrollmentUtils.ts`
+
+1. **Replace `getDiscount(count)`** with a **per-position** helper:
 ```typescript
-.or(`phone.ilike.%${searchPhone},users.phone.ilike.%${searchPhone}`)
+export function getBatchDiscount(position: number): number {
+  // position is 1-indexed: 1=primary, 2=12%, 3=13%, etc.
+  if (position <= 1) return 0;
+  const tiers: Record<number, number> = { 2: 0.12, 3: 0.13, 4: 0.14 };
+  return tiers[position] ?? 0.15;
+}
 ```
-`users.phone` is a joined table column — PostgREST ignores or errors on this, so the query only matches `students.phone`, missing students whose phone is on the `users` table only.
 
-## Fix — `src/components/register/PhoneEntry.tsx`
+2. **Rewrite `computeFeeBreakdown`** to loop over batches and sum individually instead of using `primaryFee + discountedPerBatch * (N-1)`:
+```text
+totalBatchFee = 0
+for each batch at position i (1-indexed):
+  discount = getBatchDiscount(i)
+  batchAmount = round(perBatchFee * (1 - discount))
+  totalBatchFee += batchAmount
+  store batchAmount in allocation
+discountAmount = (perBatchFee * batchCount) - totalBatchFee
+```
 
-### 1. Rewrite `lookupStudent` with two separate queries
-- Query 1: Search `students` table by `phone`
-- Query 2: Search `users` table by `phone`, then look up linked students
-- If either finds a match → call `onStudentFound`
-- If no match → call `onNewUser`
+3. **Update `batchAllocations`** to use position-specific amounts instead of a single `discountedPerBatch`.
 
-### 2. Add duplicate detection in `JoinBatchFlow` and `DropInFlow` (`src/pages/Register.tsx`)
-- In `handleCreateAndProceed`, before inserting, check if a user with that phone already exists
-- If found, show toast: "This phone number is already registered. Please go back and verify again."
-- Or better: auto-recover by looking up the student and proceeding to the pay step
+4. **Update `FeeBreakdown` interface**: remove single `discountPct` field (no longer meaningful as one number) or keep it as 0 for backward compat.
 
-### 3. Add loading state to `lookupStudent`
-- Show a "Looking up your account..." state after OTP verification while the lookup runs
+### `src/components/register/FeeBreakdown.tsx`
 
-## Files Changed
-- `src/components/register/PhoneEntry.tsx` — fix lookupStudent query, add loading state
-- `src/pages/Register.tsx` — add duplicate phone check in both `handleCreateAndProceed` functions
+Update the per-batch line items to show each batch's specific discount percentage instead of one flat rate:
+```text
+Jazz Batch (Primary)         ₹X
+Ballet Batch (12% off)       ₹Y
+Hip Hop Batch (13% off)      ₹Z
+```
+
+This requires adding a `discountPct` field to `BatchAllocation` so the UI can display it.
+
+### `BatchAllocation` interface update
+```typescript
+export interface BatchAllocation {
+  batch_id: number;
+  batch_name: string;
+  style_base: string;
+  is_primary: boolean;
+  amount: number;
+  discountPct: number; // new: 0 for primary, 0.12 for 2nd, etc.
+}
+```
+
+## Files changed
+- `src/lib/enrollmentUtils.ts` — new per-position discount logic, updated fee computation
+- `src/components/register/FeeBreakdown.tsx` — display per-batch discount percentage
 
