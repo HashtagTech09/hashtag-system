@@ -120,6 +120,15 @@ export default function PhoneEntry({ onStudentFound, onNewUser }: PhoneEntryProp
     }
   };
 
+  if (lookingUp) {
+    return (
+      <div className="flex flex-col items-center justify-center py-8 gap-3">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground">Looking up your account...</p>
+      </div>
+    );
+  }
+
   if (otpSent) {
     return (
       <div className="space-y-4">
