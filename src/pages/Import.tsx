@@ -460,10 +460,11 @@ export default function ImportPage() {
     const phoneToUserId = new Map<string, number>();
     (usersRes.data || []).forEach(u => { if (u.phone) phoneToUserId.set(u.phone, u.id); });
 
-    const phoneToStudentId = new Map<string, number>();
-    (studentsRes.data || []).forEach(s => { if (s.phone) phoneToStudentId.set(s.phone, s.id); });
+    const studentKey = (name: string, phone: string) => `${name.toLowerCase().trim()}|${phone}`;
+    const namePhoneToStudentId = new Map<string, number>();
+    (studentsRes.data || []).forEach(s => { if (s.phone) namePhoneToStudentId.set(studentKey(s.name, s.phone), s.id); });
 
-    // Auto-create users
+    // Auto-create users (one per unique phone, first occurrence name)
     const uniquePhones = new Map<string, { name: string; email: string }>();
     for (const r of rows) {
       if (r.student_phone && r.student_name && !uniquePhones.has(r.student_phone) && !phoneToUserId.has(r.student_phone)) {
@@ -482,8 +483,7 @@ export default function ImportPage() {
       }
     }
 
-    // Auto-create students
-    const studentKey = (name: string, phone: string) => `${name.toLowerCase().trim()}|${phone}`;
+    // Auto-create students (one per unique name+phone)
     const existingStudentKeys = new Set((studentsRes.data || []).map(s => s.phone ? studentKey(s.name, s.phone) : ""));
     const uniqueStudents = new Map<string, { name: string; phone: string; email: string }>();
     for (const r of rows) {
@@ -503,14 +503,14 @@ export default function ImportPage() {
       if (error) { errorMessages.push(`Student create error: ${error.message}`); }
       else {
         studentsCreated += data.length;
-        data.forEach(s => { if (s.phone) phoneToStudentId.set(s.phone, s.id); });
+        data.forEach(s => { if (s.phone) namePhoneToStudentId.set(studentKey(s.name, s.phone), s.id); });
       }
     }
 
     // Refresh student lookup
     if (studentsCreated > 0) {
-      const { data: allStudents } = await supabase.from("students").select("id, phone").eq("organization_id", ORG_ID);
-      (allStudents || []).forEach(s => { if (s.phone) phoneToStudentId.set(s.phone, s.id); });
+      const { data: allStudents } = await supabase.from("students").select("id, phone, name").eq("organization_id", ORG_ID);
+      (allStudents || []).forEach(s => { if (s.phone) namePhoneToStudentId.set(studentKey(s.name, s.phone), s.id); });
     }
 
     // Process each row
