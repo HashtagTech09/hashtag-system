@@ -273,12 +273,12 @@ export default function ImportPage() {
     let success = 0, errors = 0;
     const errorMessages: string[] = [];
 
-    const { data: allUsers } = await supabase.from("users").select("id, phone").eq("organization_id", ORG_ID);
+    const allUsers = await fetchAll<{ id: number; phone: string | null }>(supabase.from("users").select("id, phone").eq("organization_id", ORG_ID));
     const phoneToUserId = new Map<string, number>();
-    (allUsers || []).forEach(u => { if (u.phone) phoneToUserId.set(u.phone, u.id); });
+    allUsers.forEach(u => { if (u.phone) phoneToUserId.set(u.phone, u.id); });
 
-    const { data: existingStudents } = await supabase.from("students").select("phone").eq("organization_id", ORG_ID);
-    const existingPhones = new Set((existingStudents || []).map(s => s.phone).filter(Boolean));
+    const existingStudents = await fetchAll<{ phone: string | null }>(supabase.from("students").select("phone").eq("organization_id", ORG_ID));
+    const existingPhones = new Set(existingStudents.map(s => s.phone).filter(Boolean));
 
     const toInsert = rows.filter(r => {
       const phone = r.user_phone || r.phone;
