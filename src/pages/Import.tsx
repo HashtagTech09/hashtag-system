@@ -375,16 +375,15 @@ export default function ImportPage() {
     }
 
     // Step 3: Create Enrollments
-    const { data: batches } = await supabase.from("batches").select("id, batch_code").eq("organization_id", ORG_ID);
+    const [batches, cycles, subPlans] = await Promise.all([
+      fetchAll<{ id: number; batch_code: string | null }>(supabase.from("batches").select("id, batch_code").eq("organization_id", ORG_ID)),
+      fetchAll<any>(supabase.from("plan_cycles").select("*").eq("organization_id", ORG_ID).order("start_date")),
+      fetchAll<any>(supabase.from("subscription_plans").select("*").eq("organization_id", ORG_ID)),
+    ]);
     const codeToBatchId = new Map<string, number>();
-    (batches || []).forEach(b => { if (b.batch_code) codeToBatchId.set(b.batch_code.toLowerCase().trim(), b.id); });
-
-    const { data: planCycles } = await supabase.from("plan_cycles").select("*").eq("organization_id", ORG_ID).order("start_date");
-    const cycles = planCycles || [];
-
-    const { data: subPlans } = await supabase.from("subscription_plans").select("*").eq("organization_id", ORG_ID);
+    batches.forEach(b => { if (b.batch_code) codeToBatchId.set(b.batch_code.toLowerCase().trim(), b.id); });
     const planByName = new Map<string, any>();
-    (subPlans || []).forEach(p => planByName.set(p.name.toLowerCase().trim(), p));
+    subPlans.forEach(p => planByName.set(p.name.toLowerCase().trim(), p));
 
     for (const row of rows) {
       try {
