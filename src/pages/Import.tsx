@@ -377,9 +377,9 @@ export default function ImportPage() {
 
     // Step 3: Create Enrollments
     const [batches, cycles, subPlans] = await Promise.all([
-      fetchAll<{ id: number; batch_code: string | null }>(supabase.from("batches").select("id, batch_code").eq("organization_id", ORG_ID)),
-      fetchAll<any>(supabase.from("plan_cycles").select("*").eq("organization_id", ORG_ID).order("start_date")),
-      fetchAll<any>(supabase.from("subscription_plans").select("*").eq("organization_id", ORG_ID)),
+      fetchAll<{ id: number; batch_code: string | null }>(() => supabase.from("batches").select("id, batch_code").eq("organization_id", ORG_ID)),
+      fetchAll<any>(() => supabase.from("plan_cycles").select("*").eq("organization_id", ORG_ID).order("start_date")),
+      fetchAll<any>(() => supabase.from("subscription_plans").select("*").eq("organization_id", ORG_ID)),
     ]);
     const codeToBatchId = new Map<string, number>();
     batches.forEach(b => { if (b.batch_code) codeToBatchId.set(b.batch_code.toLowerCase().trim(), b.id); });
