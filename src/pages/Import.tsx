@@ -274,7 +274,7 @@ export default function ImportPage() {
     let success = 0, errors = 0;
     const errorMessages: string[] = [];
 
-    const allUsers = await fetchAll<{ id: number; phone: string | null }>(supabase.from("users").select("id, phone").eq("organization_id", ORG_ID));
+    const allUsers = await fetchAll<{ id: number; phone: string | null }>(() => supabase.from("users").select("id, phone").eq("organization_id", ORG_ID));
     const phoneToUserId = new Map<string, number>();
     allUsers.forEach(u => { if (u.phone) phoneToUserId.set(u.phone, u.id); });
 
