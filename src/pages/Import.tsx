@@ -490,11 +490,11 @@ export default function ImportPage() {
 
     // Fetch reference data (paginated)
     const [allBatches, allCycles, allPlans, allUsers, allStudentsRef] = await Promise.all([
-      fetchAll<any>(supabase.from("batches").select("id, batch_code, style_base, level").eq("organization_id", ORG_ID)),
-      fetchAll<any>(supabase.from("plan_cycles").select("*").eq("organization_id", ORG_ID).order("start_date")),
-      fetchAll<any>(supabase.from("subscription_plans").select("*").eq("organization_id", ORG_ID)),
-      fetchAll<{ id: number; phone: string | null }>(supabase.from("users").select("id, phone").eq("organization_id", ORG_ID)),
-      fetchAll<{ id: number; phone: string | null; name: string }>(supabase.from("students").select("id, phone, name").eq("organization_id", ORG_ID)),
+      fetchAll<any>(() => supabase.from("batches").select("id, batch_code, style_base, level").eq("organization_id", ORG_ID)),
+      fetchAll<any>(() => supabase.from("plan_cycles").select("*").eq("organization_id", ORG_ID).order("start_date")),
+      fetchAll<any>(() => supabase.from("subscription_plans").select("*").eq("organization_id", ORG_ID)),
+      fetchAll<{ id: number; phone: string | null }>(() => supabase.from("users").select("id, phone").eq("organization_id", ORG_ID)),
+      fetchAll<{ id: number; phone: string | null; name: string }>(() => supabase.from("students").select("id, phone, name").eq("organization_id", ORG_ID)),
     ]);
 
     const codeToBatch = new Map<string, any>();
