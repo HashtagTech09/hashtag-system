@@ -15,13 +15,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { allocateCyclesForPlan, insertEnrollmentCycles } from "@/lib/cycleUtils";
 
-/** Paginated fetch to bypass Supabase 1000-row default limit */
-async function fetchAll<T>(queryBuilder: any): Promise<T[]> {
+/** Paginated fetch to bypass Supabase 1000-row default limit.
+ *  Accepts a factory function so each page gets a fresh query builder. */
+async function fetchAll<T>(buildQuery: () => any): Promise<T[]> {
   const all: T[] = [];
   let from = 0;
   const PAGE = 1000;
   while (true) {
-    const { data, error } = await queryBuilder.range(from, from + PAGE - 1);
+    const { data, error } = await buildQuery().range(from, from + PAGE - 1);
     if (error || !data || data.length === 0) break;
     all.push(...(data as T[]));
     if (data.length < PAGE) break;
