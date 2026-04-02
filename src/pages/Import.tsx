@@ -625,7 +625,7 @@ export default function ImportPage() {
 
     return {
       success, errors, errorMessages,
-      extra: `Auto-created ${usersCreated} users, ${studentsCreated} students. Resolved batch codes & cycles from style+studio format.`,
+      extra: `Fetched ${allUsers.length} users, ${allStudentsRef.length} students, ${allBatches.length} batches, ${allCycles.length} cycles. Auto-created ${usersCreated} users, ${studentsCreated} students.`,
     };
   };
 
