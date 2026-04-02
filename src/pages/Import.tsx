@@ -526,7 +526,7 @@ export default function ImportPage() {
     }
 
     // Auto-create students (one per unique name+phone)
-    const existingStudentKeys = new Set((studentsRes.data || []).map(s => s.phone ? studentKey(s.name, s.phone) : ""));
+    const existingStudentKeys = new Set(allStudentsRef.map(s => s.phone ? studentKey(s.name, s.phone) : ""));
     const uniqueStudents = new Map<string, { name: string; phone: string; email: string }>();
     for (const r of rows) {
       if (r.student_name && r.student_phone) {
