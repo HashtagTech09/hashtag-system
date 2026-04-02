@@ -197,5 +197,6 @@ const SettingsPage = () => {
       </div>
     </AdminLayout>
   );
+};
 
 export default SettingsPage;
