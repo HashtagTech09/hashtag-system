@@ -246,7 +246,7 @@ export default function ImportPage() {
     let success = 0, errors = 0;
     const errorMessages: string[] = [];
 
-    const existingUsers = await fetchAll<{ phone: string | null }>(supabase.from("users").select("phone").eq("organization_id", ORG_ID));
+    const existingUsers = await fetchAll<{ phone: string | null }>(() => supabase.from("users").select("phone").eq("organization_id", ORG_ID));
     const existingPhones = new Set(existingUsers.map(u => u.phone).filter(Boolean));
 
     const toInsert = rows.filter(r => {
