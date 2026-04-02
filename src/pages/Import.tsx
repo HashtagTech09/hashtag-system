@@ -370,8 +370,8 @@ export default function ImportPage() {
 
     // Refresh student lookup after inserts
     if (studentsCreated > 0) {
-      const { data: allStudents } = await supabase.from("students").select("id, phone, name").eq("organization_id", ORG_ID);
-      (allStudents || []).forEach(s => { if (s.phone) namePhoneToStudentId.set(studentKey(s.name, s.phone), s.id); });
+      const allStudents = await fetchAll<{ id: number; phone: string | null; name: string }>(supabase.from("students").select("id, phone, name").eq("organization_id", ORG_ID));
+      allStudents.forEach(s => { if (s.phone) namePhoneToStudentId.set(studentKey(s.name, s.phone), s.id); });
     }
 
     // Step 3: Create Enrollments
