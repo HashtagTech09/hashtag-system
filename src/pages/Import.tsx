@@ -415,24 +415,41 @@ export default function ImportPage() {
   }
 
   /** Match a cycle token like "April", "Grid", "January'27" to a plan_cycle row */
+  const usedCycleIds = new Set<number>();
+
   function matchCycleToken(token: string, allCycles: any[]): any | null {
     const t = token.trim();
-    // Direct match
-    let match = allCycles.find(c => c.name.toLowerCase() === t.toLowerCase());
-    if (match) return match;
-    // Year suffix: "January'27" → try "January 27", then just "January"
+    const tLower = t.toLowerCase();
+
+    // 1. Direct match (exact, case-insensitive) — skip already-used
+    let match = allCycles.find(c => c.name.toLowerCase() === tLower && !usedCycleIds.has(c.id));
+    if (match) { usedCycleIds.add(match.id); return match; }
+
+    // 2. Year suffix: "January'27" → try "January'27", "January 27"
     const yearMatch = t.match(/^(.+?)['']\s*(\d{2,4})$/);
     if (yearMatch) {
       const base = yearMatch[1].trim();
       const year = yearMatch[2];
-      match = allCycles.find(c => c.name.toLowerCase() === `${base} ${year}`.toLowerCase());
-      if (match) return match;
-      match = allCycles.find(c => c.name.toLowerCase() === `${base}'${year}`.toLowerCase());
-      if (match) return match;
-      // Fallback: match just the base name
-      match = allCycles.find(c => c.name.toLowerCase() === base.toLowerCase());
-      if (match) return match;
+      match = allCycles.find(c => c.name.toLowerCase() === `${base}'${year}`.toLowerCase() && !usedCycleIds.has(c.id));
+      if (match) { usedCycleIds.add(match.id); return match; }
+      match = allCycles.find(c => c.name.toLowerCase() === `${base} ${year}`.toLowerCase() && !usedCycleIds.has(c.id));
+      if (match) { usedCycleIds.add(match.id); return match; }
     }
+
+    // 3. Normalize: "Grid 2.0" → also try "Grid'2.0"
+    const spaceNormalized = t.replace(/\s+/g, "'");
+    if (spaceNormalized !== t) {
+      match = allCycles.find(c => c.name.toLowerCase() === spaceNormalized.toLowerCase() && !usedCycleIds.has(c.id));
+      if (match) { usedCycleIds.add(match.id); return match; }
+    }
+
+    // 4. Bare-name fallback: "April" → match cycle whose name starts with "April" (e.g. "April'26")
+    match = allCycles.find(c => {
+      const cLower = c.name.toLowerCase();
+      return (cLower.startsWith(tLower + "'") || cLower.startsWith(tLower + " ")) && !usedCycleIds.has(c.id);
+    });
+    if (match) { usedCycleIds.add(match.id); return match; }
+
     return null;
   }
 
