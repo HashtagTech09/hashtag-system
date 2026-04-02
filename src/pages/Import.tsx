@@ -278,7 +278,7 @@ export default function ImportPage() {
     const phoneToUserId = new Map<string, number>();
     allUsers.forEach(u => { if (u.phone) phoneToUserId.set(u.phone, u.id); });
 
-    const existingStudents = await fetchAll<{ phone: string | null }>(supabase.from("students").select("phone").eq("organization_id", ORG_ID));
+    const existingStudents = await fetchAll<{ phone: string | null }>(() => supabase.from("students").select("phone").eq("organization_id", ORG_ID));
     const existingPhones = new Set(existingStudents.map(s => s.phone).filter(Boolean));
 
     const toInsert = rows.filter(r => {
