@@ -487,28 +487,24 @@ export default function ImportPage() {
     const errorMessages: string[] = [];
     let usersCreated = 0, studentsCreated = 0;
 
-    // Fetch reference data
-    const [batchesRes, cyclesRes, plansRes, usersRes, studentsRes] = await Promise.all([
-      supabase.from("batches").select("id, batch_code, style_base, level").eq("organization_id", ORG_ID),
-      supabase.from("plan_cycles").select("*").eq("organization_id", ORG_ID).order("start_date"),
-      supabase.from("subscription_plans").select("*").eq("organization_id", ORG_ID),
-      supabase.from("users").select("id, phone").eq("organization_id", ORG_ID),
-      supabase.from("students").select("id, phone, name").eq("organization_id", ORG_ID),
+    // Fetch reference data (paginated)
+    const [allBatches, allCycles, allPlans, allUsers, allStudentsRef] = await Promise.all([
+      fetchAll<any>(supabase.from("batches").select("id, batch_code, style_base, level").eq("organization_id", ORG_ID)),
+      fetchAll<any>(supabase.from("plan_cycles").select("*").eq("organization_id", ORG_ID).order("start_date")),
+      fetchAll<any>(supabase.from("subscription_plans").select("*").eq("organization_id", ORG_ID)),
+      fetchAll<{ id: number; phone: string | null }>(supabase.from("users").select("id, phone").eq("organization_id", ORG_ID)),
+      fetchAll<{ id: number; phone: string | null; name: string }>(supabase.from("students").select("id, phone, name").eq("organization_id", ORG_ID)),
     ]);
-
-    const allBatches = batchesRes.data || [];
-    const allCycles = cyclesRes.data || [];
-    const allPlans = plansRes.data || [];
 
     const codeToBatch = new Map<string, any>();
     allBatches.forEach(b => { if (b.batch_code) codeToBatch.set(b.batch_code.toLowerCase(), b); });
 
     const phoneToUserId = new Map<string, number>();
-    (usersRes.data || []).forEach(u => { if (u.phone) phoneToUserId.set(u.phone, u.id); });
+    allUsers.forEach(u => { if (u.phone) phoneToUserId.set(u.phone, u.id); });
 
     const studentKey = (name: string, phone: string) => `${name.toLowerCase().trim()}|${phone}`;
     const namePhoneToStudentId = new Map<string, number>();
-    (studentsRes.data || []).forEach(s => { if (s.phone) namePhoneToStudentId.set(studentKey(s.name, s.phone), s.id); });
+    allStudentsRef.forEach(s => { if (s.phone) namePhoneToStudentId.set(studentKey(s.name, s.phone), s.id); });
 
     // Auto-create users (one per unique phone, first occurrence name)
     const uniquePhones = new Map<string, { name: string; email: string }>();
