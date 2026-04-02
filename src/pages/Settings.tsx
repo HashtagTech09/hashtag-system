@@ -7,8 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Save, AlertTriangle } from "lucide-react";
+import { Save, AlertTriangle, Send, MessageSquare, Mail } from "lucide-react";
 
 const SettingsPage = () => {
   const [settings, setSettings] = useState<Record<string, string>>({});
