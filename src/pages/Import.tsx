@@ -541,7 +541,8 @@ export default function ImportPage() {
         const batch = codeToBatch.get(batchCode.toLowerCase());
         if (!batch) { errors++; errorMessages.push(`No batch with code: ${batchCode} (from "${row.style_level}" + "${row.studio_code}")`); continue; }
 
-        // Parse cycles
+        // Parse cycles — reset used tracker per row
+        usedCycleIds.clear();
         const cycleTokens = (row.cycles || "").split(",").map(t => t.trim()).filter(Boolean);
         if (cycleTokens.length === 0) { errors++; errorMessages.push(`No cycles for ${row.student_name}`); continue; }
 
