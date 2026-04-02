@@ -9,10 +9,26 @@ import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Upload, CheckCircle2, XCircle, AlertCircle, Download } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Upload, CheckCircle2, XCircle, AlertCircle, Download, ChevronDown } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { allocateCyclesForPlan, insertEnrollmentCycles } from "@/lib/cycleUtils";
+
+/** Paginated fetch to bypass Supabase 1000-row default limit */
+async function fetchAll<T>(queryBuilder: any): Promise<T[]> {
+  const all: T[] = [];
+  let from = 0;
+  const PAGE = 1000;
+  while (true) {
+    const { data, error } = await queryBuilder.range(from, from + PAGE - 1);
+    if (error || !data || data.length === 0) break;
+    all.push(...(data as T[]));
+    if (data.length < PAGE) break;
+    from += PAGE;
+  }
+  return all;
+}
 
 const ORG_ID = 1;
 
@@ -191,10 +207,24 @@ function CSVImportTab({
               </div>
               {result.extra && <p className="text-xs text-muted-foreground">{result.extra}</p>}
               {result.errorMessages.length > 0 && (
-                <div className="text-xs text-destructive max-w-md truncate">
-                  <AlertCircle className="inline h-3 w-3 mr-1" />{result.errorMessages[0]}
-                  {result.errorMessages.length > 1 && ` (+${result.errorMessages.length - 1} more)`}
-                </div>
+                <Collapsible>
+                  <CollapsibleTrigger asChild>
+                    <Button variant="ghost" size="sm" className="text-xs text-destructive gap-1 px-1 h-6">
+                      <AlertCircle className="h-3 w-3" />
+                      {result.errorMessages.length} skipped row{result.errorMessages.length > 1 ? "s" : ""} — click to expand
+                      <ChevronDown className="h-3 w-3" />
+                    </Button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="mt-2 max-h-60 overflow-auto border rounded p-2 bg-muted/50 space-y-0.5">
+                      {result.errorMessages.map((msg, i) => (
+                        <div key={i} className="text-xs text-destructive font-mono">
+                          {i + 1}. {msg}
+                        </div>
+                      ))}
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
               )}
             </div>
           )}
@@ -215,8 +245,8 @@ export default function ImportPage() {
     let success = 0, errors = 0;
     const errorMessages: string[] = [];
 
-    const { data: existingUsers } = await supabase.from("users").select("phone").eq("organization_id", ORG_ID);
-    const existingPhones = new Set((existingUsers || []).map(u => u.phone).filter(Boolean));
+    const existingUsers = await fetchAll<{ phone: string | null }>(supabase.from("users").select("phone").eq("organization_id", ORG_ID));
+    const existingPhones = new Set(existingUsers.map(u => u.phone).filter(Boolean));
 
     const toInsert = rows.filter(r => {
       if (!r.name || !r.phone) { errors++; errorMessages.push(`Missing name or phone`); return false; }
@@ -243,12 +273,12 @@ export default function ImportPage() {
     let success = 0, errors = 0;
     const errorMessages: string[] = [];
 
-    const { data: allUsers } = await supabase.from("users").select("id, phone").eq("organization_id", ORG_ID);
+    const allUsers = await fetchAll<{ id: number; phone: string | null }>(supabase.from("users").select("id, phone").eq("organization_id", ORG_ID));
     const phoneToUserId = new Map<string, number>();
-    (allUsers || []).forEach(u => { if (u.phone) phoneToUserId.set(u.phone, u.id); });
+    allUsers.forEach(u => { if (u.phone) phoneToUserId.set(u.phone, u.id); });
 
-    const { data: existingStudents } = await supabase.from("students").select("phone").eq("organization_id", ORG_ID);
-    const existingPhones = new Set((existingStudents || []).map(s => s.phone).filter(Boolean));
+    const existingStudents = await fetchAll<{ phone: string | null }>(supabase.from("students").select("phone").eq("organization_id", ORG_ID));
+    const existingPhones = new Set(existingStudents.map(s => s.phone).filter(Boolean));
 
     const toInsert = rows.filter(r => {
       const phone = r.user_phone || r.phone;
@@ -291,9 +321,9 @@ export default function ImportPage() {
       }
     }
 
-    const { data: existingUsers } = await supabase.from("users").select("id, phone").eq("organization_id", ORG_ID);
+    const existingUsers = await fetchAll<{ id: number; phone: string | null }>(supabase.from("users").select("id, phone").eq("organization_id", ORG_ID));
     const phoneToUserId = new Map<string, number>();
-    (existingUsers || []).forEach(u => { if (u.phone) phoneToUserId.set(u.phone, u.id); });
+    existingUsers.forEach(u => { if (u.phone) phoneToUserId.set(u.phone, u.id); });
 
     const newUserPhones = [...uniquePhones.entries()].filter(([phone]) => !phoneToUserId.has(phone));
     for (const batch of chunk(newUserPhones, 50)) {
@@ -309,11 +339,11 @@ export default function ImportPage() {
     }
 
     // Step 2: Auto-create Students from unique name+phone combos
-    const { data: existingStudents } = await supabase.from("students").select("id, phone, name").eq("organization_id", ORG_ID);
+    const existingStudents = await fetchAll<{ id: number; phone: string | null; name: string }>(supabase.from("students").select("id, phone, name").eq("organization_id", ORG_ID));
     const studentKey = (name: string, phone: string) => `${name.toLowerCase().trim()}|${phone}`;
-    const existingStudentKeys = new Set((existingStudents || []).map(s => s.phone ? studentKey(s.name, s.phone) : ""));
+    const existingStudentKeys = new Set(existingStudents.map(s => s.phone ? studentKey(s.name, s.phone) : ""));
     const namePhoneToStudentId = new Map<string, number>();
-    (existingStudents || []).forEach(s => { if (s.phone) namePhoneToStudentId.set(studentKey(s.name, s.phone), s.id); });
+    existingStudents.forEach(s => { if (s.phone) namePhoneToStudentId.set(studentKey(s.name, s.phone), s.id); });
 
     const uniqueStudents = new Map<string, { name: string; phone: string }>();
     for (const r of rows) {
@@ -340,21 +370,20 @@ export default function ImportPage() {
 
     // Refresh student lookup after inserts
     if (studentsCreated > 0) {
-      const { data: allStudents } = await supabase.from("students").select("id, phone, name").eq("organization_id", ORG_ID);
-      (allStudents || []).forEach(s => { if (s.phone) namePhoneToStudentId.set(studentKey(s.name, s.phone), s.id); });
+      const allStudents = await fetchAll<{ id: number; phone: string | null; name: string }>(supabase.from("students").select("id, phone, name").eq("organization_id", ORG_ID));
+      allStudents.forEach(s => { if (s.phone) namePhoneToStudentId.set(studentKey(s.name, s.phone), s.id); });
     }
 
     // Step 3: Create Enrollments
-    const { data: batches } = await supabase.from("batches").select("id, batch_code").eq("organization_id", ORG_ID);
+    const [batches, cycles, subPlans] = await Promise.all([
+      fetchAll<{ id: number; batch_code: string | null }>(supabase.from("batches").select("id, batch_code").eq("organization_id", ORG_ID)),
+      fetchAll<any>(supabase.from("plan_cycles").select("*").eq("organization_id", ORG_ID).order("start_date")),
+      fetchAll<any>(supabase.from("subscription_plans").select("*").eq("organization_id", ORG_ID)),
+    ]);
     const codeToBatchId = new Map<string, number>();
-    (batches || []).forEach(b => { if (b.batch_code) codeToBatchId.set(b.batch_code.toLowerCase().trim(), b.id); });
-
-    const { data: planCycles } = await supabase.from("plan_cycles").select("*").eq("organization_id", ORG_ID).order("start_date");
-    const cycles = planCycles || [];
-
-    const { data: subPlans } = await supabase.from("subscription_plans").select("*").eq("organization_id", ORG_ID);
+    batches.forEach(b => { if (b.batch_code) codeToBatchId.set(b.batch_code.toLowerCase().trim(), b.id); });
     const planByName = new Map<string, any>();
-    (subPlans || []).forEach(p => planByName.set(p.name.toLowerCase().trim(), p));
+    subPlans.forEach(p => planByName.set(p.name.toLowerCase().trim(), p));
 
     for (const row of rows) {
       try {
@@ -458,28 +487,24 @@ export default function ImportPage() {
     const errorMessages: string[] = [];
     let usersCreated = 0, studentsCreated = 0;
 
-    // Fetch reference data
-    const [batchesRes, cyclesRes, plansRes, usersRes, studentsRes] = await Promise.all([
-      supabase.from("batches").select("id, batch_code, style_base, level").eq("organization_id", ORG_ID),
-      supabase.from("plan_cycles").select("*").eq("organization_id", ORG_ID).order("start_date"),
-      supabase.from("subscription_plans").select("*").eq("organization_id", ORG_ID),
-      supabase.from("users").select("id, phone").eq("organization_id", ORG_ID),
-      supabase.from("students").select("id, phone, name").eq("organization_id", ORG_ID),
+    // Fetch reference data (paginated)
+    const [allBatches, allCycles, allPlans, allUsers, allStudentsRef] = await Promise.all([
+      fetchAll<any>(supabase.from("batches").select("id, batch_code, style_base, level").eq("organization_id", ORG_ID)),
+      fetchAll<any>(supabase.from("plan_cycles").select("*").eq("organization_id", ORG_ID).order("start_date")),
+      fetchAll<any>(supabase.from("subscription_plans").select("*").eq("organization_id", ORG_ID)),
+      fetchAll<{ id: number; phone: string | null }>(supabase.from("users").select("id, phone").eq("organization_id", ORG_ID)),
+      fetchAll<{ id: number; phone: string | null; name: string }>(supabase.from("students").select("id, phone, name").eq("organization_id", ORG_ID)),
     ]);
-
-    const allBatches = batchesRes.data || [];
-    const allCycles = cyclesRes.data || [];
-    const allPlans = plansRes.data || [];
 
     const codeToBatch = new Map<string, any>();
     allBatches.forEach(b => { if (b.batch_code) codeToBatch.set(b.batch_code.toLowerCase(), b); });
 
     const phoneToUserId = new Map<string, number>();
-    (usersRes.data || []).forEach(u => { if (u.phone) phoneToUserId.set(u.phone, u.id); });
+    allUsers.forEach(u => { if (u.phone) phoneToUserId.set(u.phone, u.id); });
 
     const studentKey = (name: string, phone: string) => `${name.toLowerCase().trim()}|${phone}`;
     const namePhoneToStudentId = new Map<string, number>();
-    (studentsRes.data || []).forEach(s => { if (s.phone) namePhoneToStudentId.set(studentKey(s.name, s.phone), s.id); });
+    allStudentsRef.forEach(s => { if (s.phone) namePhoneToStudentId.set(studentKey(s.name, s.phone), s.id); });
 
     // Auto-create users (one per unique phone, first occurrence name)
     const uniquePhones = new Map<string, { name: string; email: string }>();
@@ -501,7 +526,7 @@ export default function ImportPage() {
     }
 
     // Auto-create students (one per unique name+phone)
-    const existingStudentKeys = new Set((studentsRes.data || []).map(s => s.phone ? studentKey(s.name, s.phone) : ""));
+    const existingStudentKeys = new Set(allStudentsRef.map(s => s.phone ? studentKey(s.name, s.phone) : ""));
     const uniqueStudents = new Map<string, { name: string; phone: string; email: string }>();
     for (const r of rows) {
       if (r.student_name && r.student_phone) {
@@ -526,8 +551,8 @@ export default function ImportPage() {
 
     // Refresh student lookup
     if (studentsCreated > 0) {
-      const { data: allStudents } = await supabase.from("students").select("id, phone, name").eq("organization_id", ORG_ID);
-      (allStudents || []).forEach(s => { if (s.phone) namePhoneToStudentId.set(studentKey(s.name, s.phone), s.id); });
+      const refreshedStudents = await fetchAll<{ id: number; phone: string | null; name: string }>(supabase.from("students").select("id, phone, name").eq("organization_id", ORG_ID));
+      refreshedStudents.forEach(s => { if (s.phone) namePhoneToStudentId.set(studentKey(s.name, s.phone), s.id); });
     }
 
     // Process each row
