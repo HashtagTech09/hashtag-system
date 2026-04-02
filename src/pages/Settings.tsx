@@ -121,8 +121,85 @@ const SettingsPage = () => {
             ))}
           </CardContent>
         </Card>
+
+        <Card className="glass-card">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Send className="h-4 w-4" />
+              Test Messaging
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label className="mb-2 block">Channel</Label>
+              <div className="flex gap-2">
+                <Button
+                  variant={testChannel === "whatsapp" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => { setTestChannel("whatsapp"); setTestRecipient(""); }}
+                >
+                  <MessageSquare className="h-4 w-4 mr-1" />WhatsApp
+                </Button>
+                <Button
+                  variant={testChannel === "email" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => { setTestChannel("email"); setTestRecipient(""); }}
+                >
+                  <Mail className="h-4 w-4 mr-1" />Email
+                </Button>
+              </div>
+            </div>
+            <div>
+              <Label>{testChannel === "whatsapp" ? "Phone Number" : "Email Address"}</Label>
+              <Input
+                type={testChannel === "whatsapp" ? "tel" : "email"}
+                placeholder={testChannel === "whatsapp" ? "9876543210" : "name@example.com"}
+                value={testRecipient}
+                onChange={(e) => setTestRecipient(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>Message</Label>
+              <Textarea
+                placeholder="Type your test message here..."
+                value={testMessage}
+                onChange={(e) => setTestMessage(e.target.value)}
+                rows={3}
+              />
+            </div>
+            <Button
+              className="gradient-primary"
+              disabled={!testRecipient || !testMessage || sending}
+              onClick={async () => {
+                setSending(true);
+                try {
+                  const { data, error } = await supabase.functions.invoke("send-test-message", {
+                    body: { channel: testChannel, recipient: testRecipient, message: testMessage },
+                  });
+                  if (error) throw error;
+                  if (data?.success) {
+                    toast.success(data.test_mode ? "Message logged (test mode)" : "Message sent successfully!");
+                    setTestMessage("");
+                  } else {
+                    toast.error(data?.error || "Failed to send");
+                  }
+                } catch (err: any) {
+                  toast.error(err.message || "Failed to send");
+                } finally {
+                  setSending(false);
+                }
+              }}
+            >
+              <Send className="h-4 w-4 mr-2" />{sending ? "Sending..." : "Send Test"}
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     </AdminLayout>
+  );
+};
+
+export default SettingsPage;
   );
 };
 
