@@ -340,7 +340,7 @@ export default function ImportPage() {
     }
 
     // Step 2: Auto-create Students from unique name+phone combos
-    const existingStudents = await fetchAll<{ id: number; phone: string | null; name: string }>(supabase.from("students").select("id, phone, name").eq("organization_id", ORG_ID));
+    const existingStudents = await fetchAll<{ id: number; phone: string | null; name: string }>(() => supabase.from("students").select("id, phone, name").eq("organization_id", ORG_ID));
     const studentKey = (name: string, phone: string) => `${name.toLowerCase().trim()}|${phone}`;
     const existingStudentKeys = new Set(existingStudents.map(s => s.phone ? studentKey(s.name, s.phone) : ""));
     const namePhoneToStudentId = new Map<string, number>();
