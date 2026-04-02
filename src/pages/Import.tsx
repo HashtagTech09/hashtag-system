@@ -551,8 +551,8 @@ export default function ImportPage() {
 
     // Refresh student lookup
     if (studentsCreated > 0) {
-      const { data: allStudents } = await supabase.from("students").select("id, phone, name").eq("organization_id", ORG_ID);
-      (allStudents || []).forEach(s => { if (s.phone) namePhoneToStudentId.set(studentKey(s.name, s.phone), s.id); });
+      const refreshedStudents = await fetchAll<{ id: number; phone: string | null; name: string }>(supabase.from("students").select("id, phone, name").eq("organization_id", ORG_ID));
+      refreshedStudents.forEach(s => { if (s.phone) namePhoneToStudentId.set(studentKey(s.name, s.phone), s.id); });
     }
 
     // Process each row
