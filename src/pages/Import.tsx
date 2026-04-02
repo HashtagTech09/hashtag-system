@@ -245,8 +245,8 @@ export default function ImportPage() {
     let success = 0, errors = 0;
     const errorMessages: string[] = [];
 
-    const { data: existingUsers } = await supabase.from("users").select("phone").eq("organization_id", ORG_ID);
-    const existingPhones = new Set((existingUsers || []).map(u => u.phone).filter(Boolean));
+    const existingUsers = await fetchAll<{ phone: string | null }>(supabase.from("users").select("phone").eq("organization_id", ORG_ID));
+    const existingPhones = new Set(existingUsers.map(u => u.phone).filter(Boolean));
 
     const toInsert = rows.filter(r => {
       if (!r.name || !r.phone) { errors++; errorMessages.push(`Missing name or phone`); return false; }
