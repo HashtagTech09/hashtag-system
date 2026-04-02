@@ -14,6 +14,10 @@ import { Save, AlertTriangle, Send, MessageSquare, Mail } from "lucide-react";
 const SettingsPage = () => {
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [pricingPlans, setPricingPlans] = useState<any[]>([]);
+  const [testChannel, setTestChannel] = useState<"whatsapp" | "email">("whatsapp");
+  const [testRecipient, setTestRecipient] = useState("");
+  const [testMessage, setTestMessage] = useState("");
+  const [sending, setSending] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
