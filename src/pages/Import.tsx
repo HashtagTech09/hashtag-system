@@ -321,9 +321,9 @@ export default function ImportPage() {
       }
     }
 
-    const { data: existingUsers } = await supabase.from("users").select("id, phone").eq("organization_id", ORG_ID);
+    const existingUsers = await fetchAll<{ id: number; phone: string | null }>(supabase.from("users").select("id, phone").eq("organization_id", ORG_ID));
     const phoneToUserId = new Map<string, number>();
-    (existingUsers || []).forEach(u => { if (u.phone) phoneToUserId.set(u.phone, u.id); });
+    existingUsers.forEach(u => { if (u.phone) phoneToUserId.set(u.phone, u.id); });
 
     const newUserPhones = [...uniquePhones.entries()].filter(([phone]) => !phoneToUserId.has(phone));
     for (const batch of chunk(newUserPhones, 50)) {
