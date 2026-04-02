@@ -207,10 +207,24 @@ function CSVImportTab({
               </div>
               {result.extra && <p className="text-xs text-muted-foreground">{result.extra}</p>}
               {result.errorMessages.length > 0 && (
-                <div className="text-xs text-destructive max-w-md truncate">
-                  <AlertCircle className="inline h-3 w-3 mr-1" />{result.errorMessages[0]}
-                  {result.errorMessages.length > 1 && ` (+${result.errorMessages.length - 1} more)`}
-                </div>
+                <Collapsible>
+                  <CollapsibleTrigger asChild>
+                    <Button variant="ghost" size="sm" className="text-xs text-destructive gap-1 px-1 h-6">
+                      <AlertCircle className="h-3 w-3" />
+                      {result.errorMessages.length} skipped row{result.errorMessages.length > 1 ? "s" : ""} — click to expand
+                      <ChevronDown className="h-3 w-3" />
+                    </Button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="mt-2 max-h-60 overflow-auto border rounded p-2 bg-muted/50 space-y-0.5">
+                      {result.errorMessages.map((msg, i) => (
+                        <div key={i} className="text-xs text-destructive font-mono">
+                          {i + 1}. {msg}
+                        </div>
+                      ))}
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
               )}
             </div>
           )}
