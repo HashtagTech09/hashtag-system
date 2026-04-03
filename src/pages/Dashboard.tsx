@@ -16,7 +16,22 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 interface Studio { id: number; name: string; code: string | null; }
-interface Batch { id: number; name: string; studio_id: number | null; capacity: number | null; }
+interface Batch { id: number; name: string; batch_code: string | null; studio_id: number | null; capacity: number | null; }
+
+async function fetchAll<T>(queryFactory: () => any): Promise<T[]> {
+  const PAGE = 1000;
+  let all: T[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await queryFactory().range(from, from + PAGE - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    all = all.concat(data as T[]);
+    if (data.length < PAGE) break;
+    from += PAGE;
+  }
+  return all;
+}
 interface Enrollment {
   id: number; student_id: number; batch_id: number; status_type: string;
   start_date: string; end_date: string; payment_id: number | null;
@@ -53,6 +68,7 @@ const Dashboard = () => {
   const [newOpen, setNewOpen] = useState(false);
   const [revOpen, setRevOpen] = useState(false);
   const [renOpen, setRenOpen] = useState(false);
+  const [headCountOpen, setHeadCountOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date>(nowIST());
   const [missedThreshold, setMissedThreshold] = useState(3);
   const [attendanceRecords, setAttendanceRecords] = useState<{ student_id: number; batch_id: number }[]>([]);
@@ -76,7 +92,7 @@ const Dashboard = () => {
     if (!activeCycle) return;
     const fetchData = async () => {
       setLoading(true);
-      let batchQuery = supabase.from("batches").select("id, name, studio_id, capacity").eq("organization_id", 1);
+      let batchQuery = supabase.from("batches").select("id, name, batch_code, studio_id, capacity").eq("organization_id", 1);
       if (selectedStudio !== "all") {
         batchQuery = batchQuery.eq("studio_id", parseInt(selectedStudio));
       }
@@ -91,14 +107,14 @@ const Dashboard = () => {
         return;
       }
 
-      const enrollRes = await supabase
-        .from("enrollments")
-        .select("id, student_id, batch_id, status_type, start_date, end_date, payment_id, created_at, start_cycle_id, end_cycle_id")
-        .eq("organization_id", 1)
-        .in("batch_id", batchIds)
-        .gte("end_date", activeCycle.start_date)
-        .lte("start_date", activeCycle.end_date || "2099-12-31");
-      const enrollList = (enrollRes.data || []) as Enrollment[];
+      const enrollList = await fetchAll<Enrollment>(() =>
+        supabase.from("enrollments")
+          .select("id, student_id, batch_id, status_type, start_date, end_date, payment_id, created_at, start_cycle_id, end_cycle_id")
+          .eq("organization_id", 1)
+          .in("batch_id", batchIds)
+          .gte("end_date", activeCycle.start_date)
+          .lte("start_date", activeCycle.end_date || "2099-12-31")
+      );
       setEnrollments(enrollList);
 
       const paymentIds = enrollList.map(e => e.payment_id).filter(Boolean) as number[];
@@ -148,14 +164,14 @@ const Dashboard = () => {
       setRenewableCount(uniqueRenewable.size);
 
       // Fetch attendance absences within active cycle
-      const absenceRes = await supabase
-        .from("attendance")
-        .select("student_id, batch_id")
-        .eq("organization_id", 1)
-        .eq("status", "absent")
-        .gte("date", activeCycle.start_date)
-        .lte("date", activeCycle.end_date || "2099-12-31");
-      const absences = (absenceRes.data || []) as { student_id: number; batch_id: number }[];
+      const absences = await fetchAll<{ student_id: number; batch_id: number }>(() =>
+        supabase.from("attendance")
+          .select("student_id, batch_id")
+          .eq("organization_id", 1)
+          .eq("status", "absent")
+          .gte("date", activeCycle.start_date)
+          .lte("date", activeCycle.end_date || "2099-12-31")
+      );
       
       // Filter by studio batches if needed
       const filteredAbsences = batchIds.length > 0 && selectedStudio !== "all"
@@ -200,7 +216,7 @@ const Dashboard = () => {
     });
     return batches
       .map(b => ({
-        id: b.id, name: b.name, capacity: b.capacity || 35,
+        id: b.id, name: b.batch_code || b.name, capacity: b.capacity || 35,
         total: totalMap.get(b.id) || 0,
         NEW: newMap.get(b.id) || 0,
         REV: revMap.get(b.id) || 0,
@@ -208,6 +224,23 @@ const Dashboard = () => {
       }))
       .filter(b => b.total > 0)
       .sort((a, b) => b.total - a.total);
+  }, [enrollments, batches]);
+
+  // Head count: unique students per batch
+  const headCountData = useMemo(() => {
+    const batchStudents = new Map<number, Set<number>>();
+    enrollments.forEach(e => {
+      if (!batchStudents.has(e.batch_id)) batchStudents.set(e.batch_id, new Set());
+      batchStudents.get(e.batch_id)!.add(e.student_id);
+    });
+    return batches
+      .map(b => ({
+        id: b.id,
+        name: b.batch_code || b.name,
+        count: batchStudents.get(b.id)?.size || 0,
+      }))
+      .filter(b => b.count > 0)
+      .sort((a, b) => b.count - a.count);
   }, [enrollments, batches]);
 
   const paymentMap = useMemo(() => {
@@ -399,7 +432,28 @@ const Dashboard = () => {
             >
               <BatchTable data={batchData} valueKey="total" />
             </ExpandableCard>
-            <SimpleCard title="Head Count" value={headCount} subtitle="Unique students" />
+            <ExpandableCard
+              title="Head Count" value={headCount}
+              subtitle="Unique students"
+              open={headCountOpen} onOpenChange={setHeadCountOpen}
+            >
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Batch</TableHead>
+                    <TableHead className="text-right">Students</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {headCountData.map(b => (
+                    <TableRow key={b.id}>
+                      <TableCell className="font-medium text-xs">{b.name}</TableCell>
+                      <TableCell className="text-right text-xs">{b.count}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </ExpandableCard>
           </div>
 
           {/* Row 2: New Dreams (expandable) | REV Dreams (expandable) */}
@@ -589,7 +643,7 @@ const Dashboard = () => {
                           <TableRow key={`${r.student_id}-${r.batch_id}`}>
                             <TableCell className="font-medium text-sm">{student?.name || `#${r.student_id}`}</TableCell>
                             <TableCell className="text-sm text-muted-foreground">{student?.phone || "—"}</TableCell>
-                            <TableCell className="text-sm">{batch?.name || `#${r.batch_id}`}</TableCell>
+                            <TableCell className="text-sm">{batch?.batch_code || batch?.name || `#${r.batch_id}`}</TableCell>
                             <TableCell className="text-right font-bold text-sm" style={{ color: ACCENT }}>{r.count}</TableCell>
                           </TableRow>
                         );
