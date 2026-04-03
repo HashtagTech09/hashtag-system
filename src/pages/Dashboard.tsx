@@ -216,7 +216,7 @@ const Dashboard = () => {
     });
     return batches
       .map(b => ({
-        id: b.id, name: b.name, capacity: b.capacity || 35,
+        id: b.id, name: b.batch_code || b.name, capacity: b.capacity || 35,
         total: totalMap.get(b.id) || 0,
         NEW: newMap.get(b.id) || 0,
         REV: revMap.get(b.id) || 0,
@@ -224,6 +224,23 @@ const Dashboard = () => {
       }))
       .filter(b => b.total > 0)
       .sort((a, b) => b.total - a.total);
+  }, [enrollments, batches]);
+
+  // Head count: unique students per batch
+  const headCountData = useMemo(() => {
+    const batchStudents = new Map<number, Set<number>>();
+    enrollments.forEach(e => {
+      if (!batchStudents.has(e.batch_id)) batchStudents.set(e.batch_id, new Set());
+      batchStudents.get(e.batch_id)!.add(e.student_id);
+    });
+    return batches
+      .map(b => ({
+        id: b.id,
+        name: b.batch_code || b.name,
+        count: batchStudents.get(b.id)?.size || 0,
+      }))
+      .filter(b => b.count > 0)
+      .sort((a, b) => b.count - a.count);
   }, [enrollments, batches]);
 
   const paymentMap = useMemo(() => {
