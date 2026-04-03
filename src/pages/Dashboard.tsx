@@ -163,14 +163,14 @@ const Dashboard = () => {
       setRenewableCount(uniqueRenewable.size);
 
       // Fetch attendance absences within active cycle
-      const absenceRes = await supabase
-        .from("attendance")
-        .select("student_id, batch_id")
-        .eq("organization_id", 1)
-        .eq("status", "absent")
-        .gte("date", activeCycle.start_date)
-        .lte("date", activeCycle.end_date || "2099-12-31");
-      const absences = (absenceRes.data || []) as { student_id: number; batch_id: number }[];
+      const absences = await fetchAll<{ student_id: number; batch_id: number }>(() =>
+        supabase.from("attendance")
+          .select("student_id, batch_id")
+          .eq("organization_id", 1)
+          .eq("status", "absent")
+          .gte("date", activeCycle.start_date)
+          .lte("date", activeCycle.end_date || "2099-12-31")
+      );
       
       // Filter by studio batches if needed
       const filteredAbsences = batchIds.length > 0 && selectedStudio !== "all"
