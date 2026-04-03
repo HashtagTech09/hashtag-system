@@ -200,35 +200,7 @@ function CSVImportTab({
             {importing && <Progress value={progress} className="w-48 h-2" />}
           </div>
 
-          {result && (
-            <div className="space-y-1">
-              <div className="flex items-center gap-4 text-sm">
-                <Badge variant="outline" className="gap-1"><CheckCircle2 className="h-3 w-3 text-green-500" />{result.success} success</Badge>
-                <Badge variant="outline" className="gap-1"><XCircle className="h-3 w-3 text-destructive" />{result.errors} errors</Badge>
-              </div>
-              {result.extra && <p className="text-xs text-muted-foreground">{result.extra}</p>}
-              {result.errorMessages.length > 0 && (
-                <Collapsible>
-                  <CollapsibleTrigger asChild>
-                    <Button variant="ghost" size="sm" className="text-xs text-destructive gap-1 px-1 h-6">
-                      <AlertCircle className="h-3 w-3" />
-                      {result.errorMessages.length} skipped row{result.errorMessages.length > 1 ? "s" : ""} — click to expand
-                      <ChevronDown className="h-3 w-3" />
-                    </Button>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <div className="mt-2 max-h-60 overflow-auto border rounded p-2 bg-muted/50 space-y-0.5">
-                      {result.errorMessages.map((msg, i) => (
-                        <div key={i} className="text-xs text-destructive font-mono">
-                          {i + 1}. {msg}
-                        </div>
-                      ))}
-                    </div>
-                  </CollapsibleContent>
-                </Collapsible>
-              )}
-            </div>
-          )}
+          {result && <ImportResultDisplay result={result} />}
         </>
       )}
     </div>
