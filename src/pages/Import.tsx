@@ -501,6 +501,13 @@ export default function ImportPage() {
       if (match) { usedCycleIds.add(match.id); return match; }
     }
 
+    // 3b. Insert apostrophe at letter-digit boundary: "Grid2.0" → "Grid'2.0"
+    const apostropheInserted = t.replace(/([a-zA-Z])(\d)/, "$1'$2");
+    if (apostropheInserted !== t) {
+      match = allCycles.find(c => c.name.toLowerCase() === apostropheInserted.toLowerCase() && !usedCycleIds.has(c.id));
+      if (match) { usedCycleIds.add(match.id); return match; }
+    }
+
     // 4. Bare-name fallback: "April" → match cycle whose name starts with "April" (e.g. "April'26")
     match = allCycles.find(c => {
       const cLower = c.name.toLowerCase();
