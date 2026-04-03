@@ -643,7 +643,7 @@ const Dashboard = () => {
                           <TableRow key={`${r.student_id}-${r.batch_id}`}>
                             <TableCell className="font-medium text-sm">{student?.name || `#${r.student_id}`}</TableCell>
                             <TableCell className="text-sm text-muted-foreground">{student?.phone || "—"}</TableCell>
-                            <TableCell className="text-sm">{batch?.name || `#${r.batch_id}`}</TableCell>
+                            <TableCell className="text-sm">{batch?.batch_code || batch?.name || `#${r.batch_id}`}</TableCell>
                             <TableCell className="text-right font-bold text-sm" style={{ color: ACCENT }}>{r.count}</TableCell>
                           </TableRow>
                         );
