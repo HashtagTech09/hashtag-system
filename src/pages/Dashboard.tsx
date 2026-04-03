@@ -432,7 +432,28 @@ const Dashboard = () => {
             >
               <BatchTable data={batchData} valueKey="total" />
             </ExpandableCard>
-            <SimpleCard title="Head Count" value={headCount} subtitle="Unique students" />
+            <ExpandableCard
+              title="Head Count" value={headCount}
+              subtitle="Unique students"
+              open={headCountOpen} onOpenChange={setHeadCountOpen}
+            >
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Batch</TableHead>
+                    <TableHead className="text-right">Students</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {headCountData.map(b => (
+                    <TableRow key={b.id}>
+                      <TableCell className="font-medium text-xs">{b.name}</TableCell>
+                      <TableCell className="text-right text-xs">{b.count}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </ExpandableCard>
           </div>
 
           {/* Row 2: New Dreams (expandable) | REV Dreams (expandable) */}
