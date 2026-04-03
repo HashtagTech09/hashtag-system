@@ -476,7 +476,9 @@ export default function ImportPage() {
   const usedCycleIds = new Set<number>();
 
   function matchCycleToken(token: string, allCycles: any[]): any | null {
-    const t = token.trim();
+    // Sanitize: remove zero-width chars, normalize smart quotes to ASCII apostrophe
+    let t = token.trim().replace(/[\u200B-\u200D\uFEFF]/g, "");
+    t = t.replace(/[\u2018\u2019\u2032\u02BC]/g, "'");
     const tLower = t.toLowerCase();
 
     // 1. Direct match (exact, case-insensitive) — skip already-used
