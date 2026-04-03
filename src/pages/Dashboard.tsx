@@ -91,7 +91,7 @@ const Dashboard = () => {
     if (!activeCycle) return;
     const fetchData = async () => {
       setLoading(true);
-      let batchQuery = supabase.from("batches").select("id, name, studio_id, capacity").eq("organization_id", 1);
+      let batchQuery = supabase.from("batches").select("id, name, batch_code, studio_id, capacity").eq("organization_id", 1);
       if (selectedStudio !== "all") {
         batchQuery = batchQuery.eq("studio_id", parseInt(selectedStudio));
       }
@@ -106,14 +106,14 @@ const Dashboard = () => {
         return;
       }
 
-      const enrollRes = await supabase
-        .from("enrollments")
-        .select("id, student_id, batch_id, status_type, start_date, end_date, payment_id, created_at, start_cycle_id, end_cycle_id")
-        .eq("organization_id", 1)
-        .in("batch_id", batchIds)
-        .gte("end_date", activeCycle.start_date)
-        .lte("start_date", activeCycle.end_date || "2099-12-31");
-      const enrollList = (enrollRes.data || []) as Enrollment[];
+      const enrollList = await fetchAll<Enrollment>(() =>
+        supabase.from("enrollments")
+          .select("id, student_id, batch_id, status_type, start_date, end_date, payment_id, created_at, start_cycle_id, end_cycle_id")
+          .eq("organization_id", 1)
+          .in("batch_id", batchIds)
+          .gte("end_date", activeCycle.start_date)
+          .lte("start_date", activeCycle.end_date || "2099-12-31")
+      );
       setEnrollments(enrollList);
 
       const paymentIds = enrollList.map(e => e.payment_id).filter(Boolean) as number[];
