@@ -1,56 +1,34 @@
 
-# Make Skipped Enrollments Clearly Visible in Import UI
 
-## What I found
-In `src/pages/Import.tsx`, the skipped rows list already exists, but it is easy to miss:
-- it appears only after import
-- it is hidden inside a `Collapsible`
-- the trigger is a small ghost button
-- the preview table only shows the first 5 CSV rows, not failed rows specifically
+# Normalize "Grid2.0" / "Grid 2.0" to match "Grid'2.0" cycles
 
-That matches your screenshot: you can see `144 errors`, but the actual list is visually buried.
+## Problem
+CSV cycle tokens like "Grid2.0" (no space) don't match DB cycle name "Grid'2.0" because:
+- No exact match ("grid2.0" ≠ "grid'2.0")
+- Space-normalization step only fires when there ARE spaces, so "Grid2.0" is unchanged
+- Bare-name fallback checks `startsWith("grid2.0'")` which doesn't match anything
 
-## Plan
-1. **Replace the subtle collapsible trigger with a prominent error card**
-   - Show a dedicated “Skipped Enrollments” section immediately under the success/error badges
-   - Use stronger visual hierarchy so it is obvious when errors exist
+"Grid 2.0" (with space) works via step 3 (space→apostrophe), but the no-space variant fails silently.
 
-2. **Auto-expand skipped rows when errors are present**
-   - If `result.errorMessages.length > 0`, keep the section open by default
-   - No extra click needed just to discover the failures
+## Solution
+Add a normalization step in `matchCycleToken` that inserts an apostrophe before version-like suffixes (digits after letters). This handles both "Grid2.0" and "Grid 2.0" by trying "Grid'2.0".
 
-3. **Show the failed enrollments as a readable list/table**
-   - Render the full skipped-row list in a scrollable panel
-   - Preserve each reason exactly, including student name / phone / unmatched cycles / batch issues
-   - Add count in the header, e.g. `Skipped Enrollments (144)`
+In `src/pages/Import.tsx`, after step 3, add:
 
-4. **Show a short preview plus full list behavior**
-   - Display the first 10–20 skipped rows immediately
-   - Add a “Show all” toggle if needed for very large failure lists
-   - This keeps the UI readable even for 100+ errors
+```typescript
+// 3b. Insert apostrophe at letter-digit boundary: "Grid2.0" → "Grid'2.0"
+const apostropheInserted = t.replace(/([a-zA-Z])(\d)/, "$1'$2");
+if (apostropheInserted !== t) {
+  match = allCycles.find(c => c.name.toLowerCase() === apostropheInserted.toLowerCase() && !usedCycleIds.has(c.id));
+  if (match) { usedCycleIds.add(match.id); return match; }
+}
+```
 
-5. **Improve import result messaging**
-   - Keep the fetched counts and created counts
-   - Make the error summary easier to scan:
-     - unmatched cycles
-     - missing student
-     - missing batch
-     - duplicate / insert errors
+This single regex covers:
+- "Grid2.0" → "Grid'2.0" (matches DB)
+- "Grid2" → "Grid'2" (future-proof)
+- Already-apostrophed tokens like "Grid'2.0" pass via step 1 or 2
 
-6. **Optional quality-of-life addition**
-   - Add a “Download skipped rows” CSV/text export so you can review all failed enrollments outside the app
+## Files Changed
+- `src/pages/Import.tsx` — add apostrophe-insertion fallback in `matchCycleToken`
 
-## Files to update
-- `src/pages/Import.tsx`
-
-## Technical approach
-- Replace the current `Collapsible` result block with a stronger result layout using existing UI components (`Card`, `Badge`, `Button`, `Table` or a styled list)
-- Keep using `result.errorMessages` from the current import logic; no backend change is required
-- If useful, parse the error strings into grouped categories for cleaner display, but keep raw messages visible too
-
-## Expected outcome
-After this change, when 144 enrollments fail:
-- you will immediately see the skipped list without hunting for it
-- you will be able to scroll through the failed enrollments
-- you will know exactly why each enrollment was skipped
-- the import screen will feel much more transparent and debuggable
