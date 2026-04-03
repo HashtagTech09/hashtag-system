@@ -16,7 +16,22 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 interface Studio { id: number; name: string; code: string | null; }
-interface Batch { id: number; name: string; studio_id: number | null; capacity: number | null; }
+interface Batch { id: number; name: string; batch_code: string | null; studio_id: number | null; capacity: number | null; }
+
+async function fetchAll<T>(queryFactory: () => any): Promise<T[]> {
+  const PAGE = 1000;
+  let all: T[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await queryFactory().range(from, from + PAGE - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    all = all.concat(data as T[]);
+    if (data.length < PAGE) break;
+    from += PAGE;
+  }
+  return all;
+}
 interface Enrollment {
   id: number; student_id: number; batch_id: number; status_type: string;
   start_date: string; end_date: string; payment_id: number | null;
