@@ -1,35 +1,35 @@
 
 
-# Debug & Harden Grid2.0 Cycle Matching
+# Fix Dashboard Data: Pagination + Head Count Expansion + Batch Code
 
-## Analysis
-The apostrophe-insertion code at line 505 (`t.replace(/([a-zA-Z])(\d)/, "$1'$2")`) is correct and should transform "Grid2.0" → "Grid'2.0" which matches the DB. The DB value uses a plain ASCII apostrophe (verified via hex encoding).
+## Problems
+1. **Incorrect totals** — Enrollment queries use standard Supabase `.select()` which caps at 1000 rows. With 800+ enrollments, data is silently truncated. The `fetchAll` pagination helper exists in Import.tsx but is not used in Dashboard.
+2. **Head Count not expandable** — It's rendered as a `SimpleCard` with no batch breakdown. Should be an `ExpandableCard` showing batch_code and unique student count per batch.
+3. **Batch name vs batch_code** — The `BatchTable` displays `b.name` instead of `batch_code`. The batch_code (e.g., "Jazz3-NDA") is the standard identifier.
 
-Possible causes for the continued failure:
-1. The CSV token may contain invisible Unicode characters (zero-width spaces, BOM, etc.)
-2. The deployed preview may not yet include the latest fix
-3. A curly/smart quote in the CSV data
+## Plan
 
-## Solution
-Add more aggressive normalization at the **start** of `matchCycleToken` to strip non-printable characters and normalize all quote-like characters to a plain ASCII apostrophe. Also add a debug log so unmatched tokens show exactly what was attempted.
+### 1. Add `fetchAll` helper to Dashboard
+Copy the factory-pattern `fetchAll` from Import.tsx into Dashboard (or extract to a shared util). Use it for all queries that could exceed 1000 rows:
+- `enrollments` query
+- `attendance` query
+- `batch_sessions` query (for drop-ins)
+- `drop_ins` query
+- `payments` queries (if large)
 
-### Changes in `src/pages/Import.tsx`
+### 2. Update Batch interface and query
+- Add `batch_code` to the Batch interface and the batches select query
+- Change `BatchTable` to display `batch_code` (or fallback to `name`) in the Batch column
 
-1. **Sanitize token on entry** — at the top of `matchCycleToken`, strip zero-width chars and normalize smart quotes:
-```typescript
-// Sanitize: remove zero-width chars, normalize smart quotes
-let t = token.trim().replace(/[\u200B-\u200D\uFEFF]/g, "");
-t = t.replace(/[\u2018\u2019\u2032\u02BC]/g, "'"); // curly quotes → ASCII apostrophe
-```
+### 3. Make Head Count expandable
+- Replace `SimpleCard` for Head Count with `ExpandableCard`
+- Add state `headCountOpen`
+- Show a table in the expanded view: batch_code, unique student count per batch
+- Compute a `headCountBatchData` memo that groups enrollments by batch_id and counts distinct student_ids
 
-2. **Add the attempted variants to the error message** — when a token is unmatched, include what normalizations were tried, so the user can see exactly why it failed:
-```typescript
-// In the error message, show the raw token
-unmatchedTokens.push(`${token} [raw: ${JSON.stringify(token)}]`);
-```
-
-This way, next time the import runs, you will either see it match correctly (because the fix is now deployed) or get diagnostic info showing the exact characters in the failing token.
+### 4. Studio filter for "all" still filters by batch_id
+When `selectedStudio === "all"`, the enrollment query fetches ALL batches first, then filters enrollments by those batch IDs. This is correct but the `.in("batch_id", batchIds)` call may hit the URL length limit with many batches. Use fetchAll to handle this properly.
 
 ## Files Changed
-- `src/pages/Import.tsx` — add Unicode sanitization at top of `matchCycleToken`, add raw token info to error messages
+- `src/pages/Dashboard.tsx` — add fetchAll, update Batch type, fix BatchTable to show batch_code, convert Head Count to ExpandableCard with per-batch unique student breakdown
 
