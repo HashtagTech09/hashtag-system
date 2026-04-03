@@ -40,6 +40,62 @@ const SMART_ENROLLMENT_COLUMNS = ["student_name", "student_phone", "student_emai
 
 type ImportResult = { success: number; errors: number; errorMessages: string[]; extra?: string };
 
+function ImportResultDisplay({ result }: { result: ImportResult }) {
+  const [showAll, setShowAll] = useState(false);
+  const INITIAL_SHOW = 20;
+  const hasErrors = result.errorMessages.length > 0;
+
+  const downloadSkipped = () => {
+    const text = result.errorMessages.join("\n");
+    const blob = new Blob([text], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "skipped_rows.txt";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const visibleErrors = showAll ? result.errorMessages : result.errorMessages.slice(0, INITIAL_SHOW);
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-4 text-sm">
+        <Badge variant="outline" className="gap-1"><CheckCircle2 className="h-3 w-3 text-green-500" />{result.success} success</Badge>
+        <Badge variant="outline" className="gap-1"><XCircle className="h-3 w-3 text-destructive" />{result.errors} errors</Badge>
+      </div>
+      {result.extra && <p className="text-xs text-muted-foreground">{result.extra}</p>}
+      {hasErrors && (
+        <Card className="border-destructive/30 bg-destructive/5">
+          <CardHeader className="py-3 px-4 flex-row items-center justify-between">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 text-destructive" />
+              <CardTitle className="text-sm text-destructive">Skipped Enrollments ({result.errorMessages.length})</CardTitle>
+            </div>
+            <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={downloadSkipped}>
+              <Download className="h-3 w-3" /> Download
+            </Button>
+          </CardHeader>
+          <CardContent className="px-4 pb-4">
+            <div className="max-h-72 overflow-auto space-y-0.5">
+              {visibleErrors.map((msg, i) => (
+                <div key={i} className="text-xs font-mono text-destructive/90 py-0.5">
+                  {i + 1}. {msg}
+                </div>
+              ))}
+            </div>
+            {result.errorMessages.length > INITIAL_SHOW && (
+              <Button variant="ghost" size="sm" className="mt-2 text-xs h-6" onClick={() => setShowAll(!showAll)}>
+                {showAll ? "Show less" : `Show all ${result.errorMessages.length} rows`}
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 function downloadSampleCSV(filename: string, csvString: string) {
   const blob = new Blob([csvString], { type: "text/csv" });
   const url = URL.createObjectURL(blob);
@@ -200,35 +256,7 @@ function CSVImportTab({
             {importing && <Progress value={progress} className="w-48 h-2" />}
           </div>
 
-          {result && (
-            <div className="space-y-1">
-              <div className="flex items-center gap-4 text-sm">
-                <Badge variant="outline" className="gap-1"><CheckCircle2 className="h-3 w-3 text-green-500" />{result.success} success</Badge>
-                <Badge variant="outline" className="gap-1"><XCircle className="h-3 w-3 text-destructive" />{result.errors} errors</Badge>
-              </div>
-              {result.extra && <p className="text-xs text-muted-foreground">{result.extra}</p>}
-              {result.errorMessages.length > 0 && (
-                <Collapsible>
-                  <CollapsibleTrigger asChild>
-                    <Button variant="ghost" size="sm" className="text-xs text-destructive gap-1 px-1 h-6">
-                      <AlertCircle className="h-3 w-3" />
-                      {result.errorMessages.length} skipped row{result.errorMessages.length > 1 ? "s" : ""} — click to expand
-                      <ChevronDown className="h-3 w-3" />
-                    </Button>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <div className="mt-2 max-h-60 overflow-auto border rounded p-2 bg-muted/50 space-y-0.5">
-                      {result.errorMessages.map((msg, i) => (
-                        <div key={i} className="text-xs text-destructive font-mono">
-                          {i + 1}. {msg}
-                        </div>
-                      ))}
-                    </div>
-                  </CollapsibleContent>
-                </Collapsible>
-              )}
-            </div>
-          )}
+          {result && <ImportResultDisplay result={result} />}
         </>
       )}
     </div>
