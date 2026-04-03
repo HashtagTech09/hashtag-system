@@ -614,7 +614,7 @@ export default function ImportPage() {
         for (const token of cycleTokens) {
           const matched = matchCycleToken(token, allCycles);
           if (matched) matchedCycles.push(matched);
-          else unmatchedTokens.push(token);
+          else unmatchedTokens.push(`${token} [raw: ${JSON.stringify(token)}]`);
         }
 
         if (unmatchedTokens.length > 0) {
