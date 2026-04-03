@@ -1,35 +1,74 @@
 
 
-# Fix Dashboard Data: Pagination + Head Count Expansion + Batch Code
+# Delete All Non-Staff Users, Students, and Enrollments
 
-## Problems
-1. **Incorrect totals** — Enrollment queries use standard Supabase `.select()` which caps at 1000 rows. With 800+ enrollments, data is silently truncated. The `fetchAll` pagination helper exists in Import.tsx but is not used in Dashboard.
-2. **Head Count not expandable** — It's rendered as a `SimpleCard` with no batch breakdown. Should be an `ExpandableCard` showing batch_code and unique student count per batch.
-3. **Batch name vs batch_code** — The `BatchTable` displays `b.name` instead of `batch_code`. The batch_code (e.g., "Jazz3-NDA") is the standard identifier.
+## Summary
+Bulk-delete ~784 non-staff users (those without organization-type roles), all 820 students, and all 11,222 enrollments, plus related records in dependent tables.
 
-## Plan
+## Data to delete
+From the initial queries:
+- **Users with org roles (keep):** ~17 users (4 admin + 13 instructor roles)
+- **Non-staff users (delete):** ~784 users
+- **Students (delete all):** 820
+- **Enrollments (delete all):** 11,222
 
-### 1. Add `fetchAll` helper to Dashboard
-Copy the factory-pattern `fetchAll` from Import.tsx into Dashboard (or extract to a shared util). Use it for all queries that could exceed 1000 rows:
-- `enrollments` query
-- `attendance` query
-- `batch_sessions` query (for drop-ins)
-- `drop_ins` query
-- `payments` queries (if large)
+## Execution order (single migration)
+The deletion must respect data dependencies. Execute in this order within one migration:
 
-### 2. Update Batch interface and query
-- Add `batch_code` to the Batch interface and the batches select query
-- Change `BatchTable` to display `batch_code` (or fallback to `name`) in the Batch column
+1. **Delete all `enrollment_cycles`** — references enrollments
+2. **Delete all `attendance`** — references students and batches
+3. **Delete all `drop_ins`** — references students
+4. **Delete all `drop_in_credits`** — references students
+5. **Delete all `payment_allocations`** — references payments
+6. **Delete all `cycle_adjustments`** — references students
+7. **Delete all `pending_enrollments`** — references payments
+8. **Delete all `enrollments`** — references students
+9. **Delete all `payments`** — references students
+10. **Delete all `cash_payment_requests`** — references students
+11. **Delete all `students`** — references users
+12. **Delete non-staff `user_roles`** — roles for users who have NO organization-type role
+13. **Unlink non-staff users from `batches`** (instructor_id, instructor_2_id) and `studios`** (dreamcatcher_id, wingperson_id) — likely not needed for non-staff but safe
+14. **Delete non-staff `users`** — users whose id is NOT in the set of users with an organization role
 
-### 3. Make Head Count expandable
-- Replace `SimpleCard` for Head Count with `ExpandableCard`
-- Add state `headCountOpen`
-- Show a table in the expanded view: batch_code, unique student count per batch
-- Compute a `headCountBatchData` memo that groups enrollments by batch_id and counts distinct student_ids
+## SQL migration (key logic)
 
-### 4. Studio filter for "all" still filters by batch_id
-When `selectedStudio === "all"`, the enrollment query fetches ALL batches first, then filters enrollments by those batch IDs. This is correct but the `.in("batch_id", batchIds)` call may hit the URL length limit with many batches. Use fetchAll to handle this properly.
+```sql
+-- Delete all enrollment-related data
+DELETE FROM enrollment_cycles WHERE organization_id = 1;
+DELETE FROM attendance WHERE organization_id = 1;
+DELETE FROM drop_ins WHERE organization_id = 1;
+DELETE FROM drop_in_credits WHERE organization_id = 1;
+DELETE FROM cycle_adjustments;
+DELETE FROM pending_enrollments;
+DELETE FROM payment_allocations;
+DELETE FROM enrollments WHERE organization_id = 1;
+DELETE FROM payments WHERE organization_id = 1;
+DELETE FROM cash_payment_requests WHERE organization_id = 1;
 
-## Files Changed
-- `src/pages/Dashboard.tsx` — add fetchAll, update Batch type, fix BatchTable to show batch_code, convert Head Count to ExpandableCard with per-batch unique student breakdown
+-- Delete all students
+DELETE FROM students WHERE organization_id = 1;
+
+-- Delete non-staff users (those without an organization role)
+DELETE FROM user_roles
+WHERE organization_id = 1
+AND user_id NOT IN (
+  SELECT ur.user_id FROM user_roles ur
+  JOIN roles r ON ur.role_id = r.id
+  WHERE r.type = 'organization'
+);
+
+DELETE FROM users
+WHERE organization_id = 1
+AND id NOT IN (
+  SELECT ur.user_id FROM user_roles ur
+  JOIN roles r ON ur.role_id = r.id
+  WHERE r.type = 'organization'
+);
+```
+
+## Files changed
+- **Database migration only** — no code changes needed
+
+## Risk
+This is irreversible. All student, enrollment, payment, attendance, and drop-in data will be permanently deleted. Only the ~17 staff users (admins + instructors) and their roles will remain.
 
