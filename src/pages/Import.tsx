@@ -510,6 +510,17 @@ export default function ImportPage() {
       if (match) { usedCycleIds.add(match.id); return match; }
     }
 
+    // 3c. Bare-name fallback on normalized variants (e.g. "Grid'2.0" matches "Grid'2.0'26")
+    for (const variant of [spaceNormalized, apostropheInserted]) {
+      if (variant === t) continue;
+      const vLower = variant.toLowerCase();
+      match = allCycles.find(c => {
+        const cLower = c.name.toLowerCase();
+        return (cLower.startsWith(vLower + "'") || cLower.startsWith(vLower + " ") || cLower === vLower) && !usedCycleIds.has(c.id);
+      });
+      if (match) { usedCycleIds.add(match.id); return match; }
+    }
+
     // 4. Bare-name fallback: "April" → match cycle whose name starts with "April" (e.g. "April'26")
     match = allCycles.find(c => {
       const cLower = c.name.toLowerCase();
