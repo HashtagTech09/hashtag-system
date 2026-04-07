@@ -1,74 +1,35 @@
 
 
-# Delete All Non-Staff Users, Students, and Enrollments
+# Fix: Match "Grid2.0" / "Grid 2.0" to "Grid'2.0'26"
 
-## Summary
-Bulk-delete ~784 non-staff users (those without organization-type roles), all 820 students, and all 11,222 enrollments, plus related records in dependent tables.
+## Problem
+The DB cycle name is `Grid'2.0'26`. CSV tokens like `Grid2.0` or `Grid 2.0` get normalized to `Grid'2.0` (via steps 3/3b), but that doesn't exactly match `Grid'2.0'26`. The bare-name fallback (step 4) only runs on the **original** token, not on the normalized variants, so it never tries `startsWith("grid'2.0")`.
 
-## Data to delete
-From the initial queries:
-- **Users with org roles (keep):** ~17 users (4 admin + 13 instructor roles)
-- **Non-staff users (delete):** ~784 users
-- **Students (delete all):** 820
-- **Enrollments (delete all):** 11,222
+## Fix
+After steps 3 and 3b produce a normalized token that still doesn't match exactly, also run the bare-name `startsWith` fallback using the normalized value. This way `Grid'2.0` will match `Grid'2.0'26`.
 
-## Execution order (single migration)
-The deletion must respect data dependencies. Execute in this order within one migration:
+### Changes in `src/pages/Import.tsx` — `matchCycleToken`
 
-1. **Delete all `enrollment_cycles`** — references enrollments
-2. **Delete all `attendance`** — references students and batches
-3. **Delete all `drop_ins`** — references students
-4. **Delete all `drop_in_credits`** — references students
-5. **Delete all `payment_allocations`** — references payments
-6. **Delete all `cycle_adjustments`** — references students
-7. **Delete all `pending_enrollments`** — references payments
-8. **Delete all `enrollments`** — references students
-9. **Delete all `payments`** — references students
-10. **Delete all `cash_payment_requests`** — references students
-11. **Delete all `students`** — references users
-12. **Delete non-staff `user_roles`** — roles for users who have NO organization-type role
-13. **Unlink non-staff users from `batches`** (instructor_id, instructor_2_id) and `studios`** (dreamcatcher_id, wingperson_id) — likely not needed for non-staff but safe
-14. **Delete non-staff `users`** — users whose id is NOT in the set of users with an organization role
+After the apostrophe-insertion step (line ~511), add a bare-name fallback for the normalized variants:
 
-## SQL migration (key logic)
-
-```sql
--- Delete all enrollment-related data
-DELETE FROM enrollment_cycles WHERE organization_id = 1;
-DELETE FROM attendance WHERE organization_id = 1;
-DELETE FROM drop_ins WHERE organization_id = 1;
-DELETE FROM drop_in_credits WHERE organization_id = 1;
-DELETE FROM cycle_adjustments;
-DELETE FROM pending_enrollments;
-DELETE FROM payment_allocations;
-DELETE FROM enrollments WHERE organization_id = 1;
-DELETE FROM payments WHERE organization_id = 1;
-DELETE FROM cash_payment_requests WHERE organization_id = 1;
-
--- Delete all students
-DELETE FROM students WHERE organization_id = 1;
-
--- Delete non-staff users (those without an organization role)
-DELETE FROM user_roles
-WHERE organization_id = 1
-AND user_id NOT IN (
-  SELECT ur.user_id FROM user_roles ur
-  JOIN roles r ON ur.role_id = r.id
-  WHERE r.type = 'organization'
-);
-
-DELETE FROM users
-WHERE organization_id = 1
-AND id NOT IN (
-  SELECT ur.user_id FROM user_roles ur
-  JOIN roles r ON ur.role_id = r.id
-  WHERE r.type = 'organization'
-);
+```typescript
+// 3c. Bare-name fallback on normalized variants
+for (const variant of [spaceNormalized, apostropheInserted]) {
+  if (variant === t) continue;
+  const vLower = variant.toLowerCase();
+  match = allCycles.find(c => {
+    const cLower = c.name.toLowerCase();
+    return (cLower.startsWith(vLower + "'") || cLower.startsWith(vLower + " ") || cLower === vLower) && !usedCycleIds.has(c.id);
+  });
+  if (match) { usedCycleIds.add(match.id); return match; }
+}
 ```
 
-## Files changed
-- **Database migration only** — no code changes needed
+This handles:
+- `Grid2.0` → normalized to `Grid'2.0` → matches `Grid'2.0'26` via startsWith
+- `Grid 2.0` → normalized to `Grid'2.0` → same match
+- Any future similar patterns (e.g., `Grid3.0` → `Grid'3.0'27`)
 
-## Risk
-This is irreversible. All student, enrollment, payment, attendance, and drop-in data will be permanently deleted. Only the ~17 staff users (admins + instructors) and their roles will remain.
+## Files changed
+- `src/pages/Import.tsx` — add bare-name fallback for normalized variants inside `matchCycleToken`
 
