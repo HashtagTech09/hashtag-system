@@ -1,35 +1,34 @@
 
 
-# Fix: Match "Grid2.0" / "Grid 2.0" to "Grid'2.0'26"
+# Delete All Non-Staff Users, Students, and Enrollments
 
-## Problem
-The DB cycle name is `Grid'2.0'26`. CSV tokens like `Grid2.0` or `Grid 2.0` get normalized to `Grid'2.0` (via steps 3/3b), but that doesn't exactly match `Grid'2.0'26`. The bare-name fallback (step 4) only runs on the **original** token, not on the normalized variants, so it never tries `startsWith("grid'2.0")`.
+## Current data
+- **Users:** 799 total, 14 staff (to keep), ~785 non-staff (to delete)
+- **Students:** 818 (delete all)
+- **Enrollments:** 3,173 (delete all)
 
-## Fix
-After steps 3 and 3b produce a normalized token that still doesn't match exactly, also run the bare-name `startsWith` fallback using the normalized value. This way `Grid'2.0` will match `Grid'2.0'26`.
+## Execution
+Single migration deleting in dependency order:
 
-### Changes in `src/pages/Import.tsx` — `matchCycleToken`
+1. `enrollment_cycles` (refs enrollments)
+2. `attendance` (refs students)
+3. `drop_ins` (refs students)
+4. `drop_in_credits` (refs students)
+5. `cycle_adjustments` (refs students)
+6. `pending_enrollments` (refs payments)
+7. `payment_allocations` (refs payments)
+8. `enrollments`
+9. `payments`
+10. `cash_payment_requests`
+11. `students`
+12. Non-staff `user_roles`
+13. Non-staff `users`
 
-After the apostrophe-insertion step (line ~511), add a bare-name fallback for the normalized variants:
-
-```typescript
-// 3c. Bare-name fallback on normalized variants
-for (const variant of [spaceNormalized, apostropheInserted]) {
-  if (variant === t) continue;
-  const vLower = variant.toLowerCase();
-  match = allCycles.find(c => {
-    const cLower = c.name.toLowerCase();
-    return (cLower.startsWith(vLower + "'") || cLower.startsWith(vLower + " ") || cLower === vLower) && !usedCycleIds.has(c.id);
-  });
-  if (match) { usedCycleIds.add(match.id); return match; }
-}
-```
-
-This handles:
-- `Grid2.0` → normalized to `Grid'2.0` → matches `Grid'2.0'26` via startsWith
-- `Grid 2.0` → normalized to `Grid'2.0` → same match
-- Any future similar patterns (e.g., `Grid3.0` → `Grid'3.0'27`)
+Staff identification: users with a role where `roles.type = 'organization'` are preserved.
 
 ## Files changed
-- `src/pages/Import.tsx` — add bare-name fallback for normalized variants inside `matchCycleToken`
+- Database migration only — no code changes
+
+## Risk
+Irreversible. All student, enrollment, payment, attendance, and drop-in data will be permanently deleted. Only ~14 staff users remain.
 
