@@ -1,37 +1,36 @@
 
 
-# Delete All Non-Staff Users, Students, and Enrollments
+# Add "C/F" (Carry Forward) Status to Dashboard
 
-## Current data
-- **Users:** 799 total, 17 staff (to keep), ~782 non-staff (to delete)
-- **Students:** 818 (delete all)
-- **Enrollments:** 66 (delete all)
-- **Enrollment cycles:** 433 (delete all)
-- **Payments:** 0
-- **Attendance:** 0
+## Problem
+When a new plan cycle (month) starts, enrollments from previous cycles that are still active appear with their original status (NEW/REN/REV). This makes it impossible to see how many genuinely new, renewed, or revived enrollments happened in the **current** cycle vs. ones just carrying over.
 
-## Execution
-Single migration deleting in dependency order:
+## Solution
+In the Dashboard, classify enrollments into two groups:
+- **C/F (Carry Forward)**: Enrollments whose `start_cycle_id` is before the active cycle (i.e., they were created in a previous cycle but their date range overlaps the current one)
+- **NEW / REN / REV**: Only enrollments whose `start_cycle_id` matches the active cycle (or were created during the active cycle period)
 
-1. `enrollment_cycles`
-2. `attendance`
-3. `drop_ins`
-4. `drop_in_credits`
-5. `cycle_adjustments`
-6. `pending_enrollments`
-7. `payment_allocations`
-8. `enrollments`
-9. `payments`
-10. `cash_payment_requests`
-11. `students`
-12. Non-staff `user_roles`
-13. Non-staff `users`
+## Changes — `src/pages/Dashboard.tsx`
 
-Staff identification: users with a role where `roles.type = 'organization'` are preserved.
+1. **Classify enrollments as C/F vs current-cycle**: After fetching enrollments, split them based on whether `start_cycle_id < activeCycle.id` (or `created_at < activeCycle.start_date` as fallback). Mark carry-forwards as `"C/F"` for display purposes.
+
+2. **Add C/F metric card**: New card showing C/F count alongside the existing NEW/REN/REV cards. The C/F card is expandable with per-batch breakdown like the others.
+
+3. **Update Total Dreams**: Total Dreams still shows all enrollments (C/F + current). But the NEW/REN/REV counts only reflect current-cycle enrollments.
+
+4. **Update date-wise breakdown**: C/F enrollments get their own column in the date-wise table. Since C/F enrollments were created in a prior cycle, they won't appear in date rows (they have no "created_at" in this cycle).
+
+5. **Update batch-wise breakdowns**: Add C/F column to the batch table inside Total Dreams expansion.
+
+## Logic
+```text
+For each enrollment overlapping active cycle:
+  if start_cycle_id < activeCycle.id  →  "C/F"
+  else                                →  keep original status_type (NEW/REN/REV)
+```
+
+If `start_cycle_id` is null, fall back to checking `created_at < activeCycle.start_date`.
 
 ## Files changed
-- Database migration only — no code changes
-
-## Risk
-Irreversible. All student, enrollment, and related data will be permanently deleted. Only ~17 staff users remain.
+- `src/pages/Dashboard.tsx` — add C/F classification logic, new metric card, update batch tables
 
