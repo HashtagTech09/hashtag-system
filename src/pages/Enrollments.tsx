@@ -20,12 +20,16 @@ const EnrollmentsPage = () => {
   const [enrollments, setEnrollments] = useState<any[]>([]);
   const [students, setStudents] = useState<any[]>([]);
   const [batches, setBatches] = useState<any[]>([]);
+  const [studios, setStudios] = useState<any[]>([]);
   const [subPlans, setSubPlans] = useState<any[]>([]);
   const [subPlanCycles, setSubPlanCycles] = useState<any[]>([]);
   const [planCycles, setPlanCycles] = useState<any[]>([]);
   const [eligibleDropIn, setEligibleDropIn] = useState<any>(null);
   const [pricingPlans, setPricingPlans] = useState<any[]>([]);
   const [search, setSearch] = useState("");
+  const [filterStudioId, setFilterStudioId] = useState<string>("all");
+  const [filterBatchId, setFilterBatchId] = useState<string>("all");
+  const [filterType, setFilterType] = useState<string>("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [addBatchOpen, setAddBatchOpen] = useState(false);
   const [addBatchForm, setAddBatchForm] = useState({ student_id: "", new_batch_ids: [] as string[], payment_mode: "cash" });
@@ -43,10 +47,11 @@ const EnrollmentsPage = () => {
   });
 
   const fetchData = async () => {
-    const [enrollRes, studentRes, batchRes, planRes, seqRes, cycleRes, pricingRes] = await Promise.all([
-      supabase.from("enrollments").select("*, students(name, phone, users(phone)), batches(name), subscription_plans(name), start_cycle:plan_cycles!enrollments_start_cycle_id_fkey(name), end_cycle:plan_cycles!enrollments_end_cycle_id_fkey(name)").eq("organization_id", 1).order("created_at", { ascending: false }),
+    const [enrollRes, studentRes, batchRes, studioRes, planRes, seqRes, cycleRes, pricingRes] = await Promise.all([
+      supabase.from("enrollments").select("*, students(name, phone, users(phone)), batches(name, studio_id), subscription_plans(name), start_cycle:plan_cycles!enrollments_start_cycle_id_fkey(name), end_cycle:plan_cycles!enrollments_end_cycle_id_fkey(name)").eq("organization_id", 1).order("created_at", { ascending: false }),
       supabase.from("students").select("*").eq("organization_id", 1).order("name"),
       supabase.from("batches").select("*").eq("organization_id", 1).order("name"),
+      supabase.from("studios").select("id, name, code").eq("organization_id", 1).order("name"),
       supabase.from("subscription_plans").select("*").eq("organization_id", 1).eq("is_active", true).order("id"),
       supabase.from("subscription_plan_cycles").select("*").order("sequence_order"),
       supabase.from("plan_cycles").select("*").eq("organization_id", 1).order("start_date"),
@@ -55,6 +60,7 @@ const EnrollmentsPage = () => {
     setEnrollments(enrollRes.data || []);
     setStudents(studentRes.data || []);
     setBatches(batchRes.data || []);
+    setStudios(studioRes.data || []);
     setSubPlans(planRes.data || []);
     setSubPlanCycles(seqRes.data || []);
     setPlanCycles(cycleRes.data || []);
@@ -488,15 +494,25 @@ const EnrollmentsPage = () => {
 
   const statusColors: Record<string, string> = { NEW: "bg-success/20 text-success", REN: "bg-primary/20 text-primary", REV: "bg-warning/20 text-warning" };
 
-  const filtered = enrollments.filter((e) => e.students?.name?.toLowerCase().includes(search.toLowerCase()));
+  // Filter batches shown in batch dropdown based on selected studio
+  const filteredBatchOptions = filterStudioId === "all" ? batches : batches.filter(b => String(b.studio_id) === filterStudioId);
+
+  const filtered = enrollments.filter((e) => {
+    const matchesSearch = e.students?.name?.toLowerCase().includes(search.toLowerCase());
+    const matchesStudio = filterStudioId === "all" || String(e.batches?.studio_id) === filterStudioId;
+    const matchesBatch = filterBatchId === "all" || String(e.batch_id) === filterBatchId;
+    const matchesType = filterType === "all" || e.status_type === filterType;
+    return matchesSearch && matchesStudio && matchesBatch && matchesType;
+  });
 
   return (
     <AdminLayout title="Enrollments">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-        <div className="relative w-full sm:w-72">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Search by student..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10" />
-        </div>
+      <div className="flex flex-col gap-4 mb-6">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div className="relative w-full sm:w-72">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input placeholder="Search by student..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10" />
+          </div>
         <Dialog open={dialogOpen} onOpenChange={(open) => {
           setDialogOpen(open);
           if (open) {
@@ -698,6 +714,32 @@ const EnrollmentsPage = () => {
             </div>
           </DialogContent>
         </Dialog>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <Select value={filterStudioId} onValueChange={(v) => { setFilterStudioId(v); setFilterBatchId("all"); }}>
+            <SelectTrigger className="w-[180px]"><SelectValue placeholder="All Studios" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Studios</SelectItem>
+              {studios.map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name}{s.code ? ` (${s.code})` : ""}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={filterBatchId} onValueChange={setFilterBatchId}>
+            <SelectTrigger className="w-[200px]"><SelectValue placeholder="All Batches" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Batches</SelectItem>
+              {filteredBatchOptions.map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={filterType} onValueChange={setFilterType}>
+            <SelectTrigger className="w-[140px]"><SelectValue placeholder="All Types" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Types</SelectItem>
+              <SelectItem value="NEW">NEW</SelectItem>
+              <SelectItem value="REN">REN</SelectItem>
+              <SelectItem value="REV">REV</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <Card className="glass-card">

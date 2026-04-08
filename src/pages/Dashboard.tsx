@@ -59,7 +59,8 @@ const Dashboard = () => {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [dropIns, setDropIns] = useState<DropIn[]>([]);
   const [dropInPayments, setDropInPayments] = useState<Payment[]>([]);
-  const [activeCycle, setActiveCycle] = useState<PlanCycle | null>(null);
+  const [allCycles, setAllCycles] = useState<PlanCycle[]>([]);
+  const [selectedCycleId, setSelectedCycleId] = useState<string>("");
   const [renewableCount, setRenewableCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
@@ -79,18 +80,22 @@ const Dashboard = () => {
     const init = async () => {
       const [studioRes, cycleRes] = await Promise.all([
         supabase.from("studios").select("id, name, code").eq("organization_id", 1).order("name"),
-        supabase.from("plan_cycles").select("*").eq("organization_id", 1).eq("is_active", true).limit(1),
+        supabase.from("plan_cycles").select("*").eq("organization_id", 1).order("start_date", { ascending: false }),
       ]);
       setStudios(studioRes.data || []);
-      if (cycleRes.data && cycleRes.data.length > 0) {
-        setActiveCycle(cycleRes.data[0] as PlanCycle);
-      }
+      const cycles = (cycleRes.data || []) as PlanCycle[];
+      setAllCycles(cycles);
+      const active = cycles.find(c => c.is_active);
+      if (active) setSelectedCycleId(String(active.id));
+      else if (cycles.length > 0) setSelectedCycleId(String(cycles[0].id));
     };
     init();
   }, []);
 
+  const selectedCycle = useMemo(() => allCycles.find(c => String(c.id) === selectedCycleId) || null, [allCycles, selectedCycleId]);
+
   useEffect(() => {
-    if (!activeCycle) return;
+    if (!selectedCycle) return;
     const fetchData = async () => {
       setLoading(true);
       let batchQuery = supabase.from("batches").select("id, name, batch_code, studio_id, capacity").eq("organization_id", 1);
@@ -113,8 +118,8 @@ const Dashboard = () => {
           .select("id, student_id, batch_id, status_type, start_date, end_date, payment_id, created_at, start_cycle_id, end_cycle_id")
           .eq("organization_id", 1)
           .in("batch_id", batchIds)
-          .gte("end_date", activeCycle.start_date)
-          .lte("start_date", activeCycle.end_date || "2099-12-31")
+          .gte("end_date", selectedCycle.start_date)
+          .lte("start_date", selectedCycle.end_date || "2099-12-31")
       );
       setEnrollments(enrollList);
 
@@ -129,8 +134,8 @@ const Dashboard = () => {
       const sessionRes = await supabase
         .from("batch_sessions").select("id").eq("organization_id", 1)
         .in("batch_id", batchIds)
-        .gte("session_date", activeCycle.start_date)
-        .lte("session_date", activeCycle.end_date || "2099-12-31");
+        .gte("session_date", selectedCycle.start_date)
+        .lte("session_date", selectedCycle.end_date || "2099-12-31");
       const sessionIds = (sessionRes.data || []).map(s => s.id);
 
       if (sessionIds.length > 0) {
@@ -148,15 +153,15 @@ const Dashboard = () => {
         setDropIns([]); setDropInPayments([]);
       }
 
-      const graceDate = new Date(activeCycle.start_date);
+      const graceDate = new Date(selectedCycle.start_date);
       graceDate.setDate(graceDate.getDate() - 1);
       const graceLookback = new Date(graceDate);
-      graceLookback.setDate(graceLookback.getDate() - (activeCycle.grace_days || 14));
+      graceLookback.setDate(graceLookback.getDate() - (selectedCycle.grace_days || 14));
 
       let renewableQuery = supabase.from("enrollments").select("student_id, batch_id")
         .eq("organization_id", 1)
         .gte("end_date", graceLookback.toISOString().split("T")[0])
-        .lt("end_date", activeCycle.start_date);
+        .lt("end_date", selectedCycle.start_date);
       if (batchIds.length > 0 && selectedStudio !== "all") {
         renewableQuery = renewableQuery.in("batch_id", batchIds);
       }
@@ -164,14 +169,14 @@ const Dashboard = () => {
       const uniqueRenewable = new Set((renewableRes.data || []).map((r: any) => r.student_id));
       setRenewableCount(uniqueRenewable.size);
 
-      // Fetch attendance absences within active cycle
+      // Fetch attendance absences within selected cycle
       const absences = await fetchAll<{ student_id: number; batch_id: number }>(() =>
         supabase.from("attendance")
           .select("student_id, batch_id")
           .eq("organization_id", 1)
           .eq("status", "absent")
-          .gte("date", activeCycle.start_date)
-          .lte("date", activeCycle.end_date || "2099-12-31")
+          .gte("date", selectedCycle.start_date)
+          .lte("date", selectedCycle.end_date || "2099-12-31")
       );
       
       // Filter by studio batches if needed
@@ -194,18 +199,18 @@ const Dashboard = () => {
       setLoading(false);
     };
     fetchData();
-  }, [activeCycle, selectedStudio]);
+  }, [selectedCycle, selectedStudio]);
 
   // Classify enrollments: C/F (carry forward from prior cycle) vs current-cycle
   const classifiedEnrollments = useMemo(() => {
-    if (!activeCycle) return enrollments.map(e => ({ ...e, displayStatus: e.status_type }));
+    if (!selectedCycle) return enrollments.map(e => ({ ...e, displayStatus: e.status_type }));
     return enrollments.map(e => {
       const isCarryForward = e.start_cycle_id
-        ? e.start_cycle_id < activeCycle.id
-        : e.created_at < activeCycle.start_date;
+        ? e.start_cycle_id < selectedCycle.id
+        : e.created_at < selectedCycle.start_date;
       return { ...e, displayStatus: isCarryForward ? "C/F" : e.status_type };
     });
-  }, [enrollments, activeCycle]);
+  }, [enrollments, selectedCycle]);
 
   const totalDreams = classifiedEnrollments.length;
   const headCount = new Set(classifiedEnrollments.map(e => e.student_id)).size;
@@ -415,8 +420,20 @@ const Dashboard = () => {
 
   return (
     <AdminLayout title="Dashboard">
-      {/* Studio Filter */}
-      <div className="flex items-center gap-4 mb-6">
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-4 mb-6">
+        <Select value={selectedCycleId} onValueChange={setSelectedCycleId}>
+          <SelectTrigger className="w-[240px]">
+            <SelectValue placeholder="Select Cycle" />
+          </SelectTrigger>
+          <SelectContent>
+            {allCycles.map(c => (
+              <SelectItem key={c.id} value={String(c.id)}>
+                {c.name}{c.is_active ? " (Active)" : ""}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Select value={selectedStudio} onValueChange={setSelectedStudio}>
           <SelectTrigger className="w-[240px]">
             <SelectValue placeholder="Select Studio" />
@@ -428,10 +445,9 @@ const Dashboard = () => {
             ))}
           </SelectContent>
         </Select>
-        {activeCycle && (
+        {selectedCycle && (
           <span className="text-sm text-muted-foreground">
-            Cycle: <span className="font-medium text-foreground">{activeCycle.name}</span>
-            {" "}({activeCycle.start_date} → {activeCycle.end_date || "ongoing"})
+            {selectedCycle.start_date} → {selectedCycle.end_date || "ongoing"}
           </span>
         )}
       </div>
@@ -444,7 +460,7 @@ const Dashboard = () => {
           <div className="grid grid-cols-2 gap-4">
             <ExpandableCard
               title="Total Dreams" value={totalDreams}
-              subtitle={`Active cycle: ${activeCycle?.name || "—"}`}
+              subtitle={`Cycle: ${selectedCycle?.name || "—"}`}
               open={totalOpen} onOpenChange={setTotalOpen} highlight
             >
               <BatchTable data={batchData} valueKey="total" />
