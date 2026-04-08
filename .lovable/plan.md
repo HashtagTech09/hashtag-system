@@ -1,36 +1,90 @@
 
 
-# Add "C/F" (Carry Forward) Status to Dashboard
+# Expose Registration API for External Lovable Website
 
-## Problem
-When a new plan cycle (month) starts, enrollments from previous cycles that are still active appear with their original status (NEW/REN/REV). This makes it impossible to see how many genuinely new, renewed, or revived enrollments happened in the **current** cycle vs. ones just carrying over.
+## Summary
+Your existing backend (edge functions + database tables) already has CORS set to `*`, meaning any external website can call them directly. The other Lovable site just needs to hit your Supabase endpoints with the anon key — no new edge functions needed for most operations.
 
-## Solution
-In the Dashboard, classify enrollments into two groups:
-- **C/F (Carry Forward)**: Enrollments whose `start_cycle_id` is before the active cycle (i.e., they were created in a previous cycle but their date range overlaps the current one)
-- **NEW / REN / REV**: Only enrollments whose `start_cycle_id` matches the active cycle (or were created during the active cycle period)
+## What already works cross-origin
 
-## Changes — `src/pages/Dashboard.tsx`
+The external site can directly query your database tables (batches, studios, plan_cycles, subscription_plans, students, users, enrollments) and invoke your edge functions — all have `anon` RLS policies allowing SELECT/INSERT.
 
-1. **Classify enrollments as C/F vs current-cycle**: After fetching enrollments, split them based on whether `start_cycle_id < activeCycle.id` (or `created_at < activeCycle.start_date` as fallback). Mark carry-forwards as `"C/F"` for display purposes.
+**Direct table reads (no auth needed):**
+- `batches` — anon SELECT allowed
+- `studios` — anon SELECT allowed
+- `plan_cycles` — anon SELECT allowed
+- `subscription_plans` — anon SELECT allowed
+- `batch_sessions` — anon SELECT allowed
 
-2. **Add C/F metric card**: New card showing C/F count alongside the existing NEW/REN/REV cards. The C/F card is expandable with per-batch breakdown like the others.
+**Edge functions (CORS: *):**
+- `send-whatsapp-otp` — sends OTP
+- `verify-whatsapp-otp` — verifies OTP
+- `create-razorpay-order` — payment initiation
+- `send-cash-confirmation` — cash flow
 
-3. **Update Total Dreams**: Total Dreams still shows all enrollments (C/F + current). But the NEW/REN/REV counts only reflect current-cycle enrollments.
+**Direct table writes (anon INSERT allowed):**
+- `students`, `users`, `enrollments`, `enrollment_cycles`, `payments`, `cash_payment_requests`, `pending_enrollments`
 
-4. **Update date-wise breakdown**: C/F enrollments get their own column in the date-wise table. Since C/F enrollments were created in a prior cycle, they won't appear in date rows (they have no "created_at" in this cycle).
+## What the external site needs
 
-5. **Update batch-wise breakdowns**: Add C/F column to the batch table inside Total Dreams expansion.
+### 1. Initialize Supabase client pointing to THIS project
+```typescript
+import { createClient } from '@supabase/supabase-js';
 
-## Logic
-```text
-For each enrollment overlapping active cycle:
-  if start_cycle_id < activeCycle.id  →  "C/F"
-  else                                →  keep original status_type (NEW/REN/REV)
+const supabase = createClient(
+  'https://plrpurjponddhelgtebw.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' // anon key
+);
 ```
 
-If `start_cycle_id` is null, fall back to checking `created_at < activeCycle.start_date`.
+### 2. Fetch batches (same queries your components use)
+```typescript
+// Get studios
+const { data: studios } = await supabase.from('studios').select('*').eq('organization_id', 1);
+
+// Get batches by studio + style
+const { data: batches } = await supabase.from('batches').select('*')
+  .eq('organization_id', 1).eq('studio_id', studioId).eq('style_base', 'Jazz');
+
+// Get plan cycles & subscription plans
+const { data: cycles } = await supabase.from('plan_cycles').select('*').eq('organization_id', 1);
+const { data: plans } = await supabase.from('subscription_plans').select('*').eq('organization_id', 1).eq('is_active', true);
+```
+
+### 3. OTP verification
+```typescript
+// Send OTP
+const { data } = await supabase.functions.invoke('send-whatsapp-otp', { body: { phone: '9876543210' } });
+
+// Verify OTP
+const { data } = await supabase.functions.invoke('verify-whatsapp-otp', { body: { phone: '9876543210', otp: '123456' } });
+```
+
+### 4. Create student & enroll (same insert logic from JoinBatchFlow)
+
+## Implementation: Create a single "registration-api" edge function
+
+Rather than having the external site make 5+ separate calls, create **one orchestrator edge function** that bundles the registration logic (the same logic in `JoinBatchFlow.handleEnroll`) server-side:
+
+**New edge function: `supabase/functions/registration-api/index.ts`**
+
+Endpoints (via request body `action` field):
+- `get-catalog` — returns studios, batches, plan_cycles, subscription_plans in one call
+- `send-otp` — proxies to send-whatsapp-otp
+- `verify-otp` — proxies to verify-whatsapp-otp, returns student if found
+- `create-student` — creates user + student records
+- `enroll` — runs the full enrollment + payment logic server-side
+
+This gives the external site a clean, single-endpoint API instead of requiring them to replicate all the client-side logic from `JoinBatchFlow`, `enrollmentUtils`, and `styleHierarchy`.
+
+## Shared logic to move
+
+The fee calculation logic currently in `src/lib/enrollmentUtils.ts` and `src/lib/styleHierarchy.ts` would need to be duplicated into the edge function (since edge functions can't import from `src/`). This ensures the external site doesn't need to implement fee breakdowns — the API returns computed fees.
 
 ## Files changed
-- `src/pages/Dashboard.tsx` — add C/F classification logic, new metric card, update batch tables
+- **New:** `supabase/functions/registration-api/index.ts` — single orchestrator edge function with 5 actions
+- No changes to existing files
+
+## Alternative: No code changes needed
+If the other Lovable site is comfortable using the Supabase JS client directly and replicating the enrollment logic from your `enrollmentUtils.ts` / `styleHierarchy.ts`, then **zero changes are needed here** — everything is already accessible via anon policies and CORS `*`. You'd just share the Supabase URL + anon key with the other project.
 
