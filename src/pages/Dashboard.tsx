@@ -195,11 +195,23 @@ const Dashboard = () => {
     fetchData();
   }, [activeCycle, selectedStudio]);
 
-  const totalDreams = enrollments.length;
-  const headCount = new Set(enrollments.map(e => e.student_id)).size;
-  const newDreams = enrollments.filter(e => e.status_type === "NEW").length;
-  const revDreams = enrollments.filter(e => e.status_type === "REV").length;
-  const renDreams = enrollments.filter(e => e.status_type === "REN").length;
+  // Classify enrollments: C/F (carry forward from prior cycle) vs current-cycle
+  const classifiedEnrollments = useMemo(() => {
+    if (!activeCycle) return enrollments.map(e => ({ ...e, displayStatus: e.status_type }));
+    return enrollments.map(e => {
+      const isCarryForward = e.start_cycle_id
+        ? e.start_cycle_id < activeCycle.id
+        : e.created_at < activeCycle.start_date;
+      return { ...e, displayStatus: isCarryForward ? "C/F" : e.status_type };
+    });
+  }, [enrollments, activeCycle]);
+
+  const totalDreams = classifiedEnrollments.length;
+  const headCount = new Set(classifiedEnrollments.map(e => e.student_id)).size;
+  const cfDreams = classifiedEnrollments.filter(e => e.displayStatus === "C/F").length;
+  const newDreams = classifiedEnrollments.filter(e => e.displayStatus === "NEW").length;
+  const revDreams = classifiedEnrollments.filter(e => e.displayStatus === "REV").length;
+  const renDreams = classifiedEnrollments.filter(e => e.displayStatus === "REN").length;
   const renRate = renewableCount > 0 ? Math.round((renDreams / renewableCount) * 100) : 0;
 
   // Batch-wise data (total + per status)
