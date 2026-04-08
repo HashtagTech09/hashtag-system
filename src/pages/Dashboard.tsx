@@ -506,6 +506,17 @@ const Dashboard = () => {
             />
           </div>
 
+          {/* Row 4: C/F (Carry Forward) */}
+          <div className="grid grid-cols-2 gap-4">
+            <ExpandableCard
+              title="C/F (Carry Forward)" value={cfDreams}
+              subtitle="From previous cycles"
+              open={cfOpen} onOpenChange={setCfOpen}
+            >
+              <BatchTable data={batchData} valueKey="C/F" />
+            </ExpandableCard>
+          </div>
+
           {/* Row 4: Date-wise Breakdown with date picker */}
           <div>
             <div className="flex items-center gap-3 mb-3">
