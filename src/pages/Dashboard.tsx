@@ -313,7 +313,7 @@ const Dashboard = () => {
       }
     });
     return Array.from(map.values()).sort((a, b) => b.date.localeCompare(a.date));
-  }, [enrollments, dropIns, paymentMap]);
+  }, [classifiedEnrollments, dropIns, paymentMap]);
 
   const dateTotals = useMemo(() => {
     return dateWise.reduce((acc, r) => ({
