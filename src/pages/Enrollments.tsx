@@ -714,6 +714,32 @@ const EnrollmentsPage = () => {
             </div>
           </DialogContent>
         </Dialog>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <Select value={filterStudioId} onValueChange={(v) => { setFilterStudioId(v); setFilterBatchId("all"); }}>
+            <SelectTrigger className="w-[180px]"><SelectValue placeholder="All Studios" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Studios</SelectItem>
+              {studios.map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name}{s.code ? ` (${s.code})` : ""}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={filterBatchId} onValueChange={setFilterBatchId}>
+            <SelectTrigger className="w-[200px]"><SelectValue placeholder="All Batches" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Batches</SelectItem>
+              {filteredBatchOptions.map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={filterType} onValueChange={setFilterType}>
+            <SelectTrigger className="w-[140px]"><SelectValue placeholder="All Types" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Types</SelectItem>
+              <SelectItem value="NEW">NEW</SelectItem>
+              <SelectItem value="REN">REN</SelectItem>
+              <SelectItem value="REV">REV</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <Card className="glass-card">
