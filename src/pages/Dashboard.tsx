@@ -68,6 +68,7 @@ const Dashboard = () => {
   const [newOpen, setNewOpen] = useState(false);
   const [revOpen, setRevOpen] = useState(false);
   const [renOpen, setRenOpen] = useState(false);
+  const [cfOpen, setCfOpen] = useState(false);
   const [headCountOpen, setHeadCountOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date>(nowIST());
   const [missedThreshold, setMissedThreshold] = useState(3);
@@ -195,41 +196,56 @@ const Dashboard = () => {
     fetchData();
   }, [activeCycle, selectedStudio]);
 
-  const totalDreams = enrollments.length;
-  const headCount = new Set(enrollments.map(e => e.student_id)).size;
-  const newDreams = enrollments.filter(e => e.status_type === "NEW").length;
-  const revDreams = enrollments.filter(e => e.status_type === "REV").length;
-  const renDreams = enrollments.filter(e => e.status_type === "REN").length;
+  // Classify enrollments: C/F (carry forward from prior cycle) vs current-cycle
+  const classifiedEnrollments = useMemo(() => {
+    if (!activeCycle) return enrollments.map(e => ({ ...e, displayStatus: e.status_type }));
+    return enrollments.map(e => {
+      const isCarryForward = e.start_cycle_id
+        ? e.start_cycle_id < activeCycle.id
+        : e.created_at < activeCycle.start_date;
+      return { ...e, displayStatus: isCarryForward ? "C/F" : e.status_type };
+    });
+  }, [enrollments, activeCycle]);
+
+  const totalDreams = classifiedEnrollments.length;
+  const headCount = new Set(classifiedEnrollments.map(e => e.student_id)).size;
+  const cfDreams = classifiedEnrollments.filter(e => e.displayStatus === "C/F").length;
+  const newDreams = classifiedEnrollments.filter(e => e.displayStatus === "NEW").length;
+  const revDreams = classifiedEnrollments.filter(e => e.displayStatus === "REV").length;
+  const renDreams = classifiedEnrollments.filter(e => e.displayStatus === "REN").length;
   const renRate = renewableCount > 0 ? Math.round((renDreams / renewableCount) * 100) : 0;
 
   // Batch-wise data (total + per status)
   const batchData = useMemo(() => {
     const totalMap = new Map<number, number>();
+    const cfMap = new Map<number, number>();
     const newMap = new Map<number, number>();
     const revMap = new Map<number, number>();
     const renMap = new Map<number, number>();
-    enrollments.forEach(e => {
+    classifiedEnrollments.forEach(e => {
       totalMap.set(e.batch_id, (totalMap.get(e.batch_id) || 0) + 1);
-      if (e.status_type === "NEW") newMap.set(e.batch_id, (newMap.get(e.batch_id) || 0) + 1);
-      if (e.status_type === "REV") revMap.set(e.batch_id, (revMap.get(e.batch_id) || 0) + 1);
-      if (e.status_type === "REN") renMap.set(e.batch_id, (renMap.get(e.batch_id) || 0) + 1);
+      if (e.displayStatus === "C/F") cfMap.set(e.batch_id, (cfMap.get(e.batch_id) || 0) + 1);
+      if (e.displayStatus === "NEW") newMap.set(e.batch_id, (newMap.get(e.batch_id) || 0) + 1);
+      if (e.displayStatus === "REV") revMap.set(e.batch_id, (revMap.get(e.batch_id) || 0) + 1);
+      if (e.displayStatus === "REN") renMap.set(e.batch_id, (renMap.get(e.batch_id) || 0) + 1);
     });
     return batches
       .map(b => ({
         id: b.id, name: b.batch_code || b.name, capacity: b.capacity || 35,
         total: totalMap.get(b.id) || 0,
+        "C/F": cfMap.get(b.id) || 0,
         NEW: newMap.get(b.id) || 0,
         REV: revMap.get(b.id) || 0,
         REN: renMap.get(b.id) || 0,
       }))
       .filter(b => b.total > 0)
       .sort((a, b) => b.total - a.total);
-  }, [enrollments, batches]);
+  }, [classifiedEnrollments, batches]);
 
   // Head count: unique students per batch
   const headCountData = useMemo(() => {
     const batchStudents = new Map<number, Set<number>>();
-    enrollments.forEach(e => {
+    classifiedEnrollments.forEach(e => {
       if (!batchStudents.has(e.batch_id)) batchStudents.set(e.batch_id, new Set());
       batchStudents.get(e.batch_id)!.add(e.student_id);
     });
@@ -241,7 +257,7 @@ const Dashboard = () => {
       }))
       .filter(b => b.count > 0)
       .sort((a, b) => b.count - a.count);
-  }, [enrollments, batches]);
+  }, [classifiedEnrollments, batches]);
 
   const paymentMap = useMemo(() => {
     const m = new Map<number, Payment>();
@@ -260,12 +276,13 @@ const Dashboard = () => {
       if (!map.has(date)) map.set(date, { date, NEW: 0, REN: 0, REV: 0, dropIn: 0, diAdjusted: 0, gross: 0, gst: 0, total: 0, cash: 0, razorpay: 0 });
       return map.get(date)!;
     };
-    enrollments.forEach(e => {
+    classifiedEnrollments.forEach(e => {
+      if (e.displayStatus === "C/F") return; // C/F enrollments don't appear in date-wise
       const date = toISTDateString(e.created_at);
       const row = getOrCreate(date);
-      if (e.status_type === "NEW") row.NEW++;
-      else if (e.status_type === "REN") row.REN++;
-      else if (e.status_type === "REV") row.REV++;
+      if (e.displayStatus === "NEW") row.NEW++;
+      else if (e.displayStatus === "REN") row.REN++;
+      else if (e.displayStatus === "REV") row.REV++;
       if (e.payment_id) {
         const p = paymentMap.get(e.payment_id);
         if (p) {
@@ -296,7 +313,7 @@ const Dashboard = () => {
       }
     });
     return Array.from(map.values()).sort((a, b) => b.date.localeCompare(a.date));
-  }, [enrollments, dropIns, paymentMap]);
+  }, [classifiedEnrollments, dropIns, paymentMap]);
 
   const dateTotals = useMemo(() => {
     return dateWise.reduce((acc, r) => ({
@@ -325,7 +342,7 @@ const Dashboard = () => {
 
   const fmt = (n: number) => n.toLocaleString("en-IN");
 
-  const BatchTable = ({ data, valueKey }: { data: typeof batchData; valueKey: "total" | "NEW" | "REV" | "REN" }) => (
+  const BatchTable = ({ data, valueKey }: { data: typeof batchData; valueKey: "total" | "C/F" | "NEW" | "REV" | "REN" }) => (
     <Table>
       <TableHeader>
         <TableRow>
@@ -487,6 +504,17 @@ const Dashboard = () => {
               title="REN Dreams" value={renDreams}
               subtitle={`${renewableCount} renewable`} highlight
             />
+          </div>
+
+          {/* Row 4: C/F (Carry Forward) */}
+          <div className="grid grid-cols-2 gap-4">
+            <ExpandableCard
+              title="C/F (Carry Forward)" value={cfDreams}
+              subtitle="From previous cycles"
+              open={cfOpen} onOpenChange={setCfOpen}
+            >
+              <BatchTable data={batchData} valueKey="C/F" />
+            </ExpandableCard>
           </div>
 
           {/* Row 4: Date-wise Breakdown with date picker */}
