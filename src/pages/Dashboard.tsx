@@ -276,12 +276,13 @@ const Dashboard = () => {
       if (!map.has(date)) map.set(date, { date, NEW: 0, REN: 0, REV: 0, dropIn: 0, diAdjusted: 0, gross: 0, gst: 0, total: 0, cash: 0, razorpay: 0 });
       return map.get(date)!;
     };
-    enrollments.forEach(e => {
+    classifiedEnrollments.forEach(e => {
+      if (e.displayStatus === "C/F") return; // C/F enrollments don't appear in date-wise
       const date = toISTDateString(e.created_at);
       const row = getOrCreate(date);
-      if (e.status_type === "NEW") row.NEW++;
-      else if (e.status_type === "REN") row.REN++;
-      else if (e.status_type === "REV") row.REV++;
+      if (e.displayStatus === "NEW") row.NEW++;
+      else if (e.displayStatus === "REN") row.REN++;
+      else if (e.displayStatus === "REV") row.REV++;
       if (e.payment_id) {
         const p = paymentMap.get(e.payment_id);
         if (p) {
