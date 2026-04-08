@@ -68,6 +68,7 @@ const Dashboard = () => {
   const [newOpen, setNewOpen] = useState(false);
   const [revOpen, setRevOpen] = useState(false);
   const [renOpen, setRenOpen] = useState(false);
+  const [cfOpen, setCfOpen] = useState(false);
   const [headCountOpen, setHeadCountOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date>(nowIST());
   const [missedThreshold, setMissedThreshold] = useState(3);
