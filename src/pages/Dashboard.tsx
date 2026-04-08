@@ -342,7 +342,7 @@ const Dashboard = () => {
 
   const fmt = (n: number) => n.toLocaleString("en-IN");
 
-  const BatchTable = ({ data, valueKey }: { data: typeof batchData; valueKey: "total" | "NEW" | "REV" | "REN" }) => (
+  const BatchTable = ({ data, valueKey }: { data: typeof batchData; valueKey: "total" | "C/F" | "NEW" | "REV" | "REN" }) => (
     <Table>
       <TableHeader>
         <TableRow>
