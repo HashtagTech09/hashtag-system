@@ -217,31 +217,34 @@ const Dashboard = () => {
   // Batch-wise data (total + per status)
   const batchData = useMemo(() => {
     const totalMap = new Map<number, number>();
+    const cfMap = new Map<number, number>();
     const newMap = new Map<number, number>();
     const revMap = new Map<number, number>();
     const renMap = new Map<number, number>();
-    enrollments.forEach(e => {
+    classifiedEnrollments.forEach(e => {
       totalMap.set(e.batch_id, (totalMap.get(e.batch_id) || 0) + 1);
-      if (e.status_type === "NEW") newMap.set(e.batch_id, (newMap.get(e.batch_id) || 0) + 1);
-      if (e.status_type === "REV") revMap.set(e.batch_id, (revMap.get(e.batch_id) || 0) + 1);
-      if (e.status_type === "REN") renMap.set(e.batch_id, (renMap.get(e.batch_id) || 0) + 1);
+      if (e.displayStatus === "C/F") cfMap.set(e.batch_id, (cfMap.get(e.batch_id) || 0) + 1);
+      if (e.displayStatus === "NEW") newMap.set(e.batch_id, (newMap.get(e.batch_id) || 0) + 1);
+      if (e.displayStatus === "REV") revMap.set(e.batch_id, (revMap.get(e.batch_id) || 0) + 1);
+      if (e.displayStatus === "REN") renMap.set(e.batch_id, (renMap.get(e.batch_id) || 0) + 1);
     });
     return batches
       .map(b => ({
         id: b.id, name: b.batch_code || b.name, capacity: b.capacity || 35,
         total: totalMap.get(b.id) || 0,
+        "C/F": cfMap.get(b.id) || 0,
         NEW: newMap.get(b.id) || 0,
         REV: revMap.get(b.id) || 0,
         REN: renMap.get(b.id) || 0,
       }))
       .filter(b => b.total > 0)
       .sort((a, b) => b.total - a.total);
-  }, [enrollments, batches]);
+  }, [classifiedEnrollments, batches]);
 
   // Head count: unique students per batch
   const headCountData = useMemo(() => {
     const batchStudents = new Map<number, Set<number>>();
-    enrollments.forEach(e => {
+    classifiedEnrollments.forEach(e => {
       if (!batchStudents.has(e.batch_id)) batchStudents.set(e.batch_id, new Set());
       batchStudents.get(e.batch_id)!.add(e.student_id);
     });
