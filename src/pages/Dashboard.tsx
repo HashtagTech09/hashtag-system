@@ -256,7 +256,7 @@ const Dashboard = () => {
       }))
       .filter(b => b.count > 0)
       .sort((a, b) => b.count - a.count);
-  }, [enrollments, batches]);
+  }, [classifiedEnrollments, batches]);
 
   const paymentMap = useMemo(() => {
     const m = new Map<number, Payment>();
