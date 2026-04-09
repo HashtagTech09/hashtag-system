@@ -24,6 +24,7 @@ interface StudentDashboardProps {
 export default function StudentDashboard({ student, user, onDone }: StudentDashboardProps) {
   const [enrollments, setEnrollments] = useState<any[]>([]);
   const [batches, setBatches] = useState<any[]>([]);
+  const [studios, setStudios] = useState<any[]>([]);
   const [subPlans, setSubPlans] = useState<SubPlan[]>([]);
   const [planCycles, setPlanCycles] = useState<PlanCycle[]>([]);
   const [loading, setLoading] = useState(true);
