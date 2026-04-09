@@ -12,6 +12,8 @@ import { allocateCyclesForPlan, insertEnrollmentCycles } from "@/lib/cycleUtils"
 import FeeBreakdownDisplay from "./FeeBreakdown";
 import { initiateRazorpayPayment } from "@/lib/razorpayUtils";
 import { sortBatchesByHierarchy, computePaymentAllocations } from "@/lib/styleHierarchy";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { ChevronDown, Check } from "lucide-react";
 
 interface StudentDashboardProps {
   student: any;
@@ -22,6 +24,7 @@ interface StudentDashboardProps {
 export default function StudentDashboard({ student, user, onDone }: StudentDashboardProps) {
   const [enrollments, setEnrollments] = useState<any[]>([]);
   const [batches, setBatches] = useState<any[]>([]);
+  const [studios, setStudios] = useState<any[]>([]);
   const [subPlans, setSubPlans] = useState<SubPlan[]>([]);
   const [planCycles, setPlanCycles] = useState<PlanCycle[]>([]);
   const [loading, setLoading] = useState(true);
@@ -38,16 +41,18 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
   }, [student.id]);
 
   const fetchData = async () => {
-    const [enrollRes, batchRes, planRes, cycleRes] = await Promise.all([
-      supabase.from("enrollments").select("*, batches(name), subscription_plans(name), start_cycle:plan_cycles!enrollments_start_cycle_id_fkey(name), end_cycle:plan_cycles!enrollments_end_cycle_id_fkey(name)").eq("student_id", student.id).eq("organization_id", 1).order("end_date", { ascending: false }),
+    const [enrollRes, batchRes, planRes, cycleRes, studioRes] = await Promise.all([
+      supabase.from("enrollments").select("*, batches(name, studio_id, style_base), subscription_plans(name), start_cycle:plan_cycles!enrollments_start_cycle_id_fkey(name), end_cycle:plan_cycles!enrollments_end_cycle_id_fkey(name)").eq("student_id", student.id).eq("organization_id", 1).order("end_date", { ascending: false }),
       supabase.from("batches").select("*").eq("organization_id", 1).order("name"),
       supabase.from("subscription_plans").select("*").eq("organization_id", 1).eq("is_active", true).order("id"),
       supabase.from("plan_cycles").select("*").eq("organization_id", 1).order("start_date"),
+      supabase.from("studios").select("id, name").eq("organization_id", 1).order("name"),
     ]);
     setEnrollments(enrollRes.data || []);
     setBatches(batchRes.data || []);
     setSubPlans(planRes.data || []);
     setPlanCycles(cycleRes.data || []);
+    setStudios(studioRes.data || []);
     setLoading(false);
   };
 
@@ -377,35 +382,49 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
             <Button variant="ghost" size="sm" onClick={() => setMode("view")}>← Back</Button>
           </div>
 
+          {/* Step 1: Select Batches — grouped by Studio → Style */}
+          <div>
+            <Label>Select Batches</Label>
+            <BatchGroupedSelector
+              batches={batches}
+              studios={studios}
+              selectedBatchIds={selectedBatchIds}
+              onToggle={toggleBatch}
+            />
+          </div>
+
+          {/* Step 2: Plan Cards */}
           <div>
             <Label>Subscription Plan</Label>
-            <Select value={selectedPlanId} onValueChange={setSelectedPlanId}>
-              <SelectTrigger><SelectValue placeholder="Select plan" /></SelectTrigger>
-              <SelectContent>
-                {validPlans.map(p => {
-                  const pk = getPlanKey(p.total_regular_cycles || 0, p.total_grid_cycles || 0);
-                  const ft = PLAN_FIXED_TOTALS[pk];
-                  const perBatchFee = ft !== undefined ? Math.round(ft / 1.18) : (p.total_regular_cycles || 0) * REGULAR_PRICE + (p.total_grid_cycles || 0) * GRID_PRICE;
-                  return <SelectItem key={p.id} value={String(p.id)}>{p.name} — ₹{perBatchFee.toLocaleString("en-IN")}/batch</SelectItem>;
-                })}
-              </SelectContent>
-            </Select>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+              {validPlans.map(p => {
+                const pk = getPlanKey(p.total_regular_cycles || 0, p.total_grid_cycles || 0);
+                const ft = PLAN_FIXED_TOTALS[pk];
+                const perBatchFee = ft !== undefined ? Math.round(ft / 1.18) : (p.total_regular_cycles || 0) * REGULAR_PRICE + (p.total_grid_cycles || 0) * GRID_PRICE;
+                const isSelected = selectedPlanId === String(p.id);
+                return (
+                  <Card
+                    key={p.id}
+                    className={`cursor-pointer transition-all duration-200 hover:scale-[1.02] ${isSelected ? "border-primary ring-1 ring-primary" : "hover:border-primary/40"}`}
+                    onClick={() => setSelectedPlanId(String(p.id))}
+                  >
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between mb-1">
+                        <h4 className="font-display font-semibold text-foreground">{p.name}</h4>
+                        {isSelected && <Check className="h-5 w-5 text-primary" />}
+                      </div>
+                      <p className="text-sm text-muted-foreground">₹{perBatchFee.toLocaleString("en-IN")}/batch</p>
+                      <p className="text-xs text-muted-foreground">{p.total_cycles} cycle{p.total_cycles > 1 ? "s" : ""}</p>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
             {assignment && (
               <div className="mt-2 p-2 rounded border border-border text-sm">
                 <p className="text-muted-foreground">Validity: <span className="text-foreground font-medium">{assignment.startCycle.name}</span> → <span className="text-foreground font-medium">{assignment.endCycle.name}</span></p>
               </div>
             )}
-          </div>
-
-          <div>
-            <Label>Select Batches</Label>
-            <div className="flex flex-wrap gap-2 mt-2">
-              {batches.map(b => (
-                <Badge key={b.id} variant={selectedBatchIds.includes(String(b.id)) ? "default" : "outline"}
-                  className={`cursor-pointer ${selectedBatchIds.includes(String(b.id)) ? "gradient-primary" : ""}`}
-                  onClick={() => toggleBatch(String(b.id))}>{b.name}</Badge>
-              ))}
-            </div>
           </div>
 
           <div>
@@ -443,13 +462,12 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
 
           <div>
             <Label>Select Additional Batches</Label>
-            <div className="flex flex-wrap gap-2 mt-2">
-              {batches.filter(b => !existingBatchIds.includes(b.id)).map(b => (
-                <Badge key={b.id} variant={selectedBatchIds.includes(String(b.id)) ? "default" : "outline"}
-                  className={`cursor-pointer ${selectedBatchIds.includes(String(b.id)) ? "gradient-primary" : ""}`}
-                  onClick={() => toggleBatch(String(b.id))}>{b.name}</Badge>
-              ))}
-            </div>
+            <BatchGroupedSelector
+              batches={batches.filter(b => !existingBatchIds.includes(b.id))}
+              studios={studios}
+              selectedBatchIds={selectedBatchIds}
+              onToggle={toggleBatch}
+            />
           </div>
 
           <div>
@@ -472,6 +490,65 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
           </Button>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Grouped batch selector: Studio → Style → batch badges */
+function BatchGroupedSelector({ batches, studios, selectedBatchIds, onToggle }: {
+  batches: any[];
+  studios: any[];
+  selectedBatchIds: string[];
+  onToggle: (id: string) => void;
+}) {
+  // Group batches by studio_id → style_base
+  const studioMap = new Map<number, string>();
+  studios.forEach((s: any) => studioMap.set(s.id, s.name));
+
+  const grouped: Record<string, Record<string, any[]>> = {};
+  batches.forEach(b => {
+    const studioName = studioMap.get(b.studio_id) || "Other";
+    const style = b.style_base || "Other";
+    if (!grouped[studioName]) grouped[studioName] = {};
+    if (!grouped[studioName][style]) grouped[studioName][style] = [];
+    grouped[studioName][style].push(b);
+  });
+
+  const studioNames = Object.keys(grouped).sort();
+
+  if (studioNames.length === 0) {
+    return <p className="text-sm text-muted-foreground mt-2">No batches available</p>;
+  }
+
+  return (
+    <div className="space-y-2 mt-2">
+      {studioNames.map(studioName => (
+        <Collapsible key={studioName} defaultOpen>
+          <CollapsibleTrigger className="flex items-center gap-2 w-full text-left py-1.5 px-2 rounded hover:bg-muted/50 transition-colors">
+            <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform [&[data-state=open]]:rotate-0 [&[data-state=closed]]:-rotate-90" />
+            <span className="font-medium text-sm text-foreground">{studioName}</span>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="pl-6 space-y-2 pt-1">
+            {Object.entries(grouped[studioName]).sort(([a], [b]) => a.localeCompare(b)).map(([style, styleBatches]) => (
+              <div key={style}>
+                <p className="text-xs text-muted-foreground mb-1">{style}</p>
+                <div className="flex flex-wrap gap-2">
+                  {styleBatches.map((b: any) => (
+                    <Badge
+                      key={b.id}
+                      variant={selectedBatchIds.includes(String(b.id)) ? "default" : "outline"}
+                      className={`cursor-pointer ${selectedBatchIds.includes(String(b.id)) ? "gradient-primary" : ""}`}
+                      onClick={() => onToggle(String(b.id))}
+                    >
+                      {b.name}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </CollapsibleContent>
+        </Collapsible>
+      ))}
     </div>
   );
 }

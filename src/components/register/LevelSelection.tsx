@@ -25,8 +25,15 @@ export default function LevelSelection({ studioId, selectedStyle, onSelectLevel,
         query = query.eq("style_base", selectedStyle);
       }
       const { data } = await query;
-      const unique = [...new Set((data || []).map(b => b.level).filter(Boolean))] as string[];
+      let unique = [...new Set((data || []).map(b => b.level).filter(Boolean))] as string[];
       unique.sort();
+
+      // For Kids, only show the lowest level (e.g. "Kids Level 1") and auto-advance
+      if (selectedStyle === "Kids" && unique.length > 0) {
+        const lowest = unique.find(l => l.includes("1")) || unique[0];
+        unique = [lowest];
+      }
+
       setLevels(unique);
       setLoading(false);
 
