@@ -115,7 +115,8 @@ function computeFeeBreakdown(params: {
   const fixedTotal = PLAN_FIXED_TOTALS[planKey];
   const isFixedPricePlan = fixedTotal !== undefined;
   const today = todayIST();
-  const applyRegFee = detectedStatus === "NEW" || detectedStatus === "REV" || (detectedStatus === "REN" && latestEndDate ? today > latestEndDate : false);
+  let applyRegFee = detectedStatus === "NEW" || detectedStatus === "REV" || (detectedStatus === "REN" && latestEndDate ? today > latestEndDate : false);
+  if (isFixedPricePlan) applyRegFee = false;
   const regFee = applyRegFee ? REG_FEE : 0;
   let perBatchFee: number;
   if (isFixedPricePlan) { perBatchFee = Math.round(fixedTotal / (1 + GST_RATE)); }
