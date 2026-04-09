@@ -1,42 +1,36 @@
 
 
-# Kids Division Default Level + My Account UI Improvements
+# Delete All Non-Staff Users, Students, and Enrollments
 
-## 1. Kids Division: Auto-select Level 1, Hide Higher Levels
+## Current data
+- **Users:** 799 total, 14 staff IDs to keep (10–20, 29–31)
+- **Students:** 818 (delete all)
+- **Enrollments:** 691 (delete all)
+- **Enrollment cycles:** 2,557 (delete all)
+- **Payments:** 0
+- **Other related tables:** all empty (drop_ins, cash_requests, etc.)
 
-**File: `src/components/register/LevelSelection.tsx`**
+## Execution
+Single migration deleting in dependency order:
 
-When `selectedStyle === "Kids"`, filter levels to only show the first/lowest level (e.g., "Kids Level 1") and auto-advance. This effectively hides higher Kids levels from the registration flow. Logic: filter Kids levels to keep only the one containing "1" or the first alphabetically, then auto-advance since there's only one.
+1. `enrollment_cycles` — DELETE ALL
+2. `cycle_adjustments` — DELETE ALL
+3. `drop_ins` — DELETE ALL
+4. `drop_in_credits` — DELETE ALL
+5. `pending_enrollments` — DELETE ALL
+6. `payment_allocations` — DELETE ALL
+7. `enrollments` — DELETE ALL
+8. `payments` — DELETE ALL
+9. `cash_payment_requests` — DELETE ALL
+10. `students` — DELETE ALL
+11. `user_roles` — DELETE WHERE user_id NOT IN (10–20, 29, 30, 31)
+12. `users` — DELETE WHERE id NOT IN (10–20, 29, 30, 31)
 
-## 2. My Account: Plans as Cards Instead of Dropdown
-
-**File: `src/components/register/StudentDashboard.tsx`**
-
-In the `mode === "renew"` section (lines 380-398), replace the `<Select>` dropdown for subscription plans with a grid of selectable cards matching the style already used in `JoinBatchFlow.tsx` pay step. Each card shows plan name, per-batch price, cycle count, and a check icon when selected.
-
-## 3. My Account: Reorganize Renew/Add Flow — Batches First, Grouped by Studio & Style
-
-**File: `src/components/register/StudentDashboard.tsx`**
-
-In both `mode === "renew"` and `mode === "add"` sections:
-
-- Move batch selection **above** plan selection (currently plan is first)
-- Group batches by studio name, then by style_base within each studio (instead of a flat badge list)
-- Display as collapsible sections: `Studio Name > Style > batch badges`
-- Fetch studios data to get studio names for grouping
-- Plan cards come after batch selection
-- Payment mode and fee breakdown remain at the bottom
-
-### Batch grouping structure:
-```text
-Studio A
-  Jazz: [Jazz1-A] [Jazz2-A]
-  Ballet: [Ballet1-A]
-Studio B
-  Hip Hop: [HipHop1-B]
-```
+Staff preserved (14 users): Ashish, Astha Tomar (x2), Ayushi, Dhriti, Divija, Jahnvi, Jhilmil, Kriti, Manas, Priyanshi, Rubani, Shivek, Tarun.
 
 ## Files changed
-- `src/components/register/LevelSelection.tsx` — auto-select lowest Kids level, hide higher ones
-- `src/components/register/StudentDashboard.tsx` — plan cards, batch-first ordering, studio/style grouping
+- Database migration only — no code changes
+
+## Risk
+Irreversible. All student, enrollment, and related data permanently deleted.
 
