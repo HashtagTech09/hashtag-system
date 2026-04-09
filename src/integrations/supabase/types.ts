@@ -1060,6 +1060,7 @@ export type Database = {
       }
       users: {
         Row: {
+          auth_id: string | null
           created_at: string
           email: string | null
           id: number
@@ -1070,6 +1071,7 @@ export type Database = {
           source: string | null
         }
         Insert: {
+          auth_id?: string | null
           created_at?: string
           email?: string | null
           id?: never
@@ -1080,6 +1082,7 @@ export type Database = {
           source?: string | null
         }
         Update: {
+          auth_id?: string | null
           created_at?: string
           email?: string | null
           id?: never

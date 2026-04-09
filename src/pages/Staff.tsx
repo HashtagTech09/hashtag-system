@@ -10,9 +10,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Search, Trash2, Edit, Upload, Star } from "lucide-react";
+import { Plus, Search, Trash2, Edit, Upload, Star, KeyRound } from "lucide-react";
 import { toast } from "sonner";
 import { ALL_ROLES, roleColors, type UserRole } from "@/lib/roleUtils";
+import { useAuth } from "@/hooks/useAuth";
 
 interface RoleRecord {
   id: number;
@@ -21,6 +22,7 @@ interface RoleRecord {
 }
 
 const UsersPage = () => {
+  const { session } = useAuth();
   const [staff, setStaff] = useState<any[]>([]);
   const [roles, setRoles] = useState<RoleRecord[]>([]);
   const [search, setSearch] = useState("");
@@ -31,6 +33,9 @@ const UsersPage = () => {
   const [editId, setEditId] = useState<number | null>(null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [authDialogOpen, setAuthDialogOpen] = useState(false);
+  const [authForm, setAuthForm] = useState({ userId: 0, userName: "", email: "", password: "" });
+  const [authLoading, setAuthLoading] = useState(false);
 
   const fetchData = async () => {
     const [staffRes, rolesRes] = await Promise.all([
@@ -259,6 +264,14 @@ const UsersPage = () => {
                     <TableCell className="hidden lg:table-cell text-muted-foreground">{s.source || "—"}</TableCell>
                     <TableCell>
                       <div className="flex gap-1">
+                        {!s.auth_id && (
+                          <Button variant="ghost" size="icon" title="Create Login" onClick={() => {
+                            setAuthForm({ userId: s.id, userName: s.name, email: s.email || "", password: "" });
+                            setAuthDialogOpen(true);
+                          }}>
+                            <KeyRound className="h-4 w-4 text-primary" />
+                          </Button>
+                        )}
                         <Button variant="ghost" size="icon" onClick={() => {
                           setForm({ name: s.name, email: s.email || "", phone: s.phone || "", source: s.source || "" });
                           if (s.photo) setPhotoPreview(s.photo);
@@ -280,6 +293,46 @@ const UsersPage = () => {
           </Table>
         </CardContent>
       </Card>
+
+      {/* Create Login Dialog */}
+      <Dialog open={authDialogOpen} onOpenChange={setAuthDialogOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Create Login for {authForm.userName}</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Email *</Label>
+              <Input type="email" value={authForm.email} onChange={(e) => setAuthForm({ ...authForm, email: e.target.value })} placeholder="staff@hashtag.dance" />
+            </div>
+            <div>
+              <Label>Temporary Password *</Label>
+              <Input type="text" value={authForm.password} onChange={(e) => setAuthForm({ ...authForm, password: e.target.value })} placeholder="Min 6 characters" />
+            </div>
+            <Button
+              className="w-full gradient-primary"
+              disabled={authLoading || !authForm.email || authForm.password.length < 6}
+              onClick={async () => {
+                setAuthLoading(true);
+                try {
+                  const { data, error } = await supabase.functions.invoke("create-staff-auth", {
+                    body: { user_id: authForm.userId, email: authForm.email, password: authForm.password },
+                  });
+                  if (error) throw error;
+                  if (data?.error) throw new Error(data.error);
+                  toast.success("Login account created successfully");
+                  setAuthDialogOpen(false);
+                  fetchData();
+                } catch (err: any) {
+                  toast.error(err.message || "Failed to create login");
+                } finally {
+                  setAuthLoading(false);
+                }
+              }}
+            >
+              {authLoading ? "Creating..." : "Create Login Account"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </AdminLayout>
   );
 };

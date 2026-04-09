@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import LoginPage from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
+import StaffDashboard from "./pages/StaffDashboard";
 import StudiosPage from "./pages/Studios";
 import UsersPage from "./pages/Staff";
 import StudentsPage from "./pages/Students";
@@ -37,10 +38,17 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function HomePage() {
+  const { isAdminOrManager, staffUser } = useAuth();
+  // If admin/manager or no staff record (superadmin), show full dashboard
+  if (isAdminOrManager || !staffUser) return <Dashboard />;
+  return <StaffDashboard />;
+}
+
 const AppRoutes = () => (
   <Routes>
     <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
-    <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+    <Route path="/" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
     <Route path="/studios" element={<ProtectedRoute><StudiosPage /></ProtectedRoute>} />
     <Route path="/users" element={<ProtectedRoute><UsersPage /></ProtectedRoute>} />
     <Route path="/students" element={<ProtectedRoute><StudentsPage /></ProtectedRoute>} />
