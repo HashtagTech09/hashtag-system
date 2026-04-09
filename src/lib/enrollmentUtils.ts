@@ -171,7 +171,8 @@ export function computeFeeBreakdown(params: {
   const isFixedPricePlan = fixedTotal !== undefined;
 
   const todayStr = new Date().toISOString().split("T")[0];
-  const applyRegFee = detectedStatus === "NEW" || detectedStatus === "REV" || (detectedStatus === "REN" && latestEndDate ? todayStr > latestEndDate : false);
+  let applyRegFee = detectedStatus === "NEW" || detectedStatus === "REV" || (detectedStatus === "REN" && latestEndDate ? todayStr > latestEndDate : false);
+  if (isFixedPricePlan) applyRegFee = false;
   const regFee = applyRegFee ? REG_FEE : 0;
   const isLateRenewal = detectedStatus === "REN" && latestEndDate ? todayStr > latestEndDate : false;
 
