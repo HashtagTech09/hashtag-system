@@ -41,16 +41,18 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
   }, [student.id]);
 
   const fetchData = async () => {
-    const [enrollRes, batchRes, planRes, cycleRes] = await Promise.all([
-      supabase.from("enrollments").select("*, batches(name), subscription_plans(name), start_cycle:plan_cycles!enrollments_start_cycle_id_fkey(name), end_cycle:plan_cycles!enrollments_end_cycle_id_fkey(name)").eq("student_id", student.id).eq("organization_id", 1).order("end_date", { ascending: false }),
+    const [enrollRes, batchRes, planRes, cycleRes, studioRes] = await Promise.all([
+      supabase.from("enrollments").select("*, batches(name, studio_id, style_base), subscription_plans(name), start_cycle:plan_cycles!enrollments_start_cycle_id_fkey(name), end_cycle:plan_cycles!enrollments_end_cycle_id_fkey(name)").eq("student_id", student.id).eq("organization_id", 1).order("end_date", { ascending: false }),
       supabase.from("batches").select("*").eq("organization_id", 1).order("name"),
       supabase.from("subscription_plans").select("*").eq("organization_id", 1).eq("is_active", true).order("id"),
       supabase.from("plan_cycles").select("*").eq("organization_id", 1).order("start_date"),
+      supabase.from("studios").select("id, name").eq("organization_id", 1).order("name"),
     ]);
     setEnrollments(enrollRes.data || []);
     setBatches(batchRes.data || []);
     setSubPlans(planRes.data || []);
     setPlanCycles(cycleRes.data || []);
+    setStudios(studioRes.data || []);
     setLoading(false);
   };
 
