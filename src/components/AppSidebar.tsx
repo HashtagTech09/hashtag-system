@@ -30,29 +30,41 @@ import {
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 
-const mainItems = [
-  { title: "Dashboard", url: "/", icon: LayoutDashboard },
-  { title: "Studios", url: "/studios", icon: Building2 },
-  { title: "Users", url: "/users", icon: Users },
-  { title: "Students", url: "/students", icon: GraduationCap },
-  { title: "Batches", url: "/batches", icon: Layers },
-  { title: "Plan Cycles", url: "/plan-cycles", icon: CalendarDays },
+const allMainItems = [
+  { title: "Dashboard", url: "/", icon: LayoutDashboard, roles: ["admin", "manager", "instructor", "frontdesk"] },
+  { title: "Studios", url: "/studios", icon: Building2, roles: ["admin", "manager", "frontdesk"] },
+  { title: "Users", url: "/users", icon: Users, roles: ["admin", "manager"] },
+  { title: "Students", url: "/students", icon: GraduationCap, roles: ["admin", "manager", "instructor", "frontdesk"] },
+  { title: "Batches", url: "/batches", icon: Layers, roles: ["admin", "manager"] },
+  { title: "Plan Cycles", url: "/plan-cycles", icon: CalendarDays, roles: ["admin", "manager"] },
 ];
 
-const operationItems = [
-  { title: "Enrollments", url: "/enrollments", icon: ClipboardList },
-  { title: "Drop-ins", url: "/drop-ins", icon: Zap },
-  { title: "Payments", url: "/payments", icon: CreditCard },
-  { title: "Attendance", url: "/attendance", icon: UserCheck },
-  { title: "Settings", url: "/settings", icon: Settings },
-  { title: "Import Data", url: "/import", icon: FileUp },
+const allOperationItems = [
+  { title: "Enrollments", url: "/enrollments", icon: ClipboardList, roles: ["admin", "manager", "frontdesk"] },
+  { title: "Drop-ins", url: "/drop-ins", icon: Zap, roles: ["admin", "manager", "frontdesk"] },
+  { title: "Payments", url: "/payments", icon: CreditCard, roles: ["admin", "manager", "frontdesk"] },
+  { title: "Attendance", url: "/attendance", icon: UserCheck, roles: ["admin", "manager", "instructor", "frontdesk"] },
+  { title: "Settings", url: "/settings", icon: Settings, roles: ["admin", "manager"] },
+  { title: "Import Data", url: "/import", icon: FileUp, roles: ["admin", "manager"] },
 ];
 
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const location = useLocation();
-  const { signOut } = useAuth();
+  const { signOut, staffRoles, isAdminOrManager } = useAuth();
+
+  const roleNames = staffRoles.map(r => r.roles?.name).filter(Boolean) as string[];
+  // If no staff record found (e.g. superadmin), show everything
+  const showAll = roleNames.length === 0 || isAdminOrManager;
+
+  const filterByRole = (items: typeof allMainItems) => {
+    if (showAll) return items;
+    return items.filter(item => item.roles.some(r => roleNames.includes(r)));
+  };
+
+  const mainItems = filterByRole(allMainItems);
+  const operationItems = filterByRole(allOperationItems);
 
   const isActive = (path: string) =>
     path === "/" ? location.pathname === "/" : location.pathname.startsWith(path);
@@ -69,41 +81,45 @@ export function AppSidebar() {
           {collapsed && <span className="text-xl font-bold text-gradient">#</span>}
         </div>
 
-        <SidebarGroup>
-          <SidebarGroupLabel>Management</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {mainItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild isActive={isActive(item.url)}>
-                    <NavLink to={item.url} end={item.url === "/"}>
-                      <item.icon className="h-4 w-4" />
-                      {!collapsed && <span>{item.title}</span>}
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {mainItems.length > 0 && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Management</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {mainItems.map((item) => (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton asChild isActive={isActive(item.url)}>
+                      <NavLink to={item.url} end={item.url === "/"}>
+                        <item.icon className="h-4 w-4" />
+                        {!collapsed && <span>{item.title}</span>}
+                      </NavLink>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
 
-        <SidebarGroup>
-          <SidebarGroupLabel>Operations</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {operationItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild isActive={isActive(item.url)}>
-                    <NavLink to={item.url}>
-                      <item.icon className="h-4 w-4" />
-                      {!collapsed && <span>{item.title}</span>}
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {operationItems.length > 0 && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Operations</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {operationItems.map((item) => (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton asChild isActive={isActive(item.url)}>
+                      <NavLink to={item.url}>
+                        <item.icon className="h-4 w-4" />
+                        {!collapsed && <span>{item.title}</span>}
+                      </NavLink>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
 
       <SidebarFooter className="p-3">
