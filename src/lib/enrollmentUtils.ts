@@ -239,3 +239,149 @@ export function detectStudentStatus(
   if (todayStr <= graceEndStr) return { status: "REN", latestEndDate: latest };
   return { status: "REV", latestEndDate: latest };
 }
+
+export interface AddBatchAllocation {
+  batch_id: number;
+  batch_name: string;
+  style_base: string;
+  is_primary: boolean;
+  is_existing: boolean;
+  amount: number;
+  discountPct: number;
+  missingCycleIds: number[];
+  fullCycleIds: number[];
+}
+
+export interface AddBatchBreakdown {
+  batchCount: number;
+  perBatchFee: number;
+  discountPct: number;
+  discountAmount: number;
+  totalBatchFee: number;
+  regFee: number;
+  dropInAdj: number;
+  subtotal: number;
+  gst: number;
+  total: number;
+  applyRegFee: boolean;
+  isLateRenewal: boolean;
+  isFixedPricePlan: boolean;
+  planKey: string;
+  regularCycles: number;
+  gridCycles: number;
+  batchAllocations: AddBatchAllocation[];
+}
+
+/**
+ * Compute fee breakdown for "Add Batch" with validity matching.
+ * Existing batches are charged only for missing cycles at their positional discount.
+ * New batches are charged the full plan fee at their incremental positional discount.
+ */
+export function computeAddBatchBreakdown(params: {
+  existingBatches: { batch_id: number; batch_name: string; style_base: string; coveredCycleIds: number[] }[];
+  newBatches: { id: number; name: string; style_base?: string | null }[];
+  plan: SubPlan;
+  planCycles: PlanCycle[];
+  startCycleIndex: number;
+}): AddBatchBreakdown | null {
+  const { existingBatches, newBatches, plan, planCycles: cycles, startCycleIndex } = params;
+  const regularCycles = plan.total_regular_cycles ?? 0;
+  const gridCycles = plan.total_grid_cycles ?? 0;
+  const planKey = getPlanKey(regularCycles, gridCycles);
+  const fixedTotal = PLAN_FIXED_TOTALS[planKey];
+  const isFixedPricePlan = fixedTotal !== undefined;
+
+  // Compute per-batch fee (full plan price)
+  const fullPerBatch = isFixedPricePlan
+    ? Math.round(fixedTotal / (1 + GST_RATE))
+    : (regularCycles * REGULAR_PRICE) + (gridCycles * GRID_PRICE);
+
+  // Get matched cycle IDs from the plan assignment
+  const assignment = computeCycleAssignment(plan, cycles, startCycleIndex);
+  if (!assignment) return null;
+  const planCycleIds = assignment.matched.map(c => c.id);
+
+  // Per-cycle price for partial charging of existing batches
+  const totalCycleCount = regularCycles + gridCycles;
+  const regularRate = REGULAR_PRICE;
+  const gridRate = GRID_PRICE;
+
+  const allocations: AddBatchAllocation[] = [];
+  let totalFee = 0;
+
+  // Position 1..N for existing batches (they already hold their positional rank)
+  existingBatches.forEach((eb, idx) => {
+    const position = idx + 1;
+    const disc = getBatchDiscount(position);
+    const coveredSet = new Set(eb.coveredCycleIds);
+    const missingCycleIds = planCycleIds.filter(cid => !coveredSet.has(cid));
+
+    if (missingCycleIds.length === 0) {
+      // Fully covered, no charge
+      allocations.push({
+        batch_id: eb.batch_id, batch_name: eb.batch_name, style_base: eb.style_base,
+        is_primary: idx === 0, is_existing: true, amount: 0, discountPct: disc,
+        missingCycleIds: [], fullCycleIds: [],
+      });
+      return;
+    }
+
+    // Calculate fee for missing cycles only
+    let missingFee = 0;
+    for (const cid of missingCycleIds) {
+      const cycle = cycles.find(c => c.id === cid);
+      if (cycle) {
+        missingFee += cycle.plan_type === "grid" ? gridRate : regularRate;
+      }
+    }
+    const discountedFee = Math.round(missingFee * (1 - disc));
+    totalFee += discountedFee;
+
+    allocations.push({
+      batch_id: eb.batch_id, batch_name: eb.batch_name, style_base: eb.style_base,
+      is_primary: idx === 0, is_existing: true, amount: discountedFee, discountPct: disc,
+      missingCycleIds, fullCycleIds: [],
+    });
+  });
+
+  // New batches get full plan fee at incremental positional discount
+  newBatches.forEach((nb, idx) => {
+    const position = existingBatches.length + 1 + idx;
+    const disc = getBatchDiscount(position);
+    const amount = Math.round(fullPerBatch * (1 - disc));
+    totalFee += amount;
+
+    allocations.push({
+      batch_id: nb.id, batch_name: nb.name, style_base: nb.style_base || "",
+      is_primary: false, is_existing: false, amount, discountPct: disc,
+      missingCycleIds: [], fullCycleIds: planCycleIds,
+    });
+  });
+
+  const subtotal = totalFee;
+  const gst = Math.round(subtotal * GST_RATE);
+  let total = subtotal + gst;
+  if (!isFixedPricePlan) {
+    total = roundToNearest100(total);
+  }
+
+  return {
+    batchCount: existingBatches.length + newBatches.length,
+    perBatchFee: fullPerBatch,
+    discountPct: 0,
+    discountAmount: 0,
+    totalBatchFee: totalFee,
+    regFee: 0,
+    dropInAdj: 0,
+    subtotal,
+    gst,
+    total,
+    applyRegFee: false,
+    isLateRenewal: false,
+    isFixedPricePlan,
+    planKey,
+    regularCycles,
+    gridCycles,
+    batchAllocations: allocations,
+  };
+}

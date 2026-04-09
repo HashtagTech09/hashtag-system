@@ -6,8 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { isPlanValid, computeCycleAssignment, computeFeeBreakdown, detectStudentStatus, getStartCycleIndex, getBatchDiscount, getPlanKey, PLAN_FIXED_TOTALS, REGULAR_PRICE, GRID_PRICE } from "@/lib/enrollmentUtils";
-import type { PlanCycle, SubPlan } from "@/lib/enrollmentUtils";
+import { isPlanValid, computeCycleAssignment, computeFeeBreakdown, detectStudentStatus, getStartCycleIndex, getBatchDiscount, getPlanKey, PLAN_FIXED_TOTALS, REGULAR_PRICE, GRID_PRICE, computeAddBatchBreakdown } from "@/lib/enrollmentUtils";
+import type { PlanCycle, SubPlan, AddBatchBreakdown } from "@/lib/enrollmentUtils";
 import { allocateCyclesForPlan, insertEnrollmentCycles } from "@/lib/cycleUtils";
 import FeeBreakdownDisplay from "./FeeBreakdown";
 import { initiateRazorpayPayment } from "@/lib/razorpayUtils";
@@ -325,39 +325,59 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
   // Add batch logic
   const existingBatchIds = activeEnrollments.map(e => e.batch_id);
   const refEnrollment = activeEnrollments[0];
+  const [addSelectedPlanId, setAddSelectedPlanId] = useState("");
+  const [existingBatchCycles, setExistingBatchCycles] = useState<Record<number, number[]>>({});
 
-  const addBatchBreakdown = (() => {
-    if (mode !== "add" || !refEnrollment || selectedBatchIds.length === 0) return null;
-    const refPlan = subPlans.find(p => p.id === refEnrollment.subscription_plan_id);
-    const regularCycles = refPlan?.total_regular_cycles || 1;
-    const gridCycles = refPlan?.total_grid_cycles || 0;
-    const newBatchCount = selectedBatchIds.length;
-    const planKey = getPlanKey(regularCycles, gridCycles);
-    const fixedTotal = PLAN_FIXED_TOTALS[planKey];
-    const isFixedPricePlan = fixedTotal !== undefined;
-    const perBatchFee = isFixedPricePlan ? Math.round(fixedTotal / 1.18) : (regularCycles * REGULAR_PRICE) + (gridCycles * GRID_PRICE);
-    let totalNewFee = 0;
-    const batchAllocations: any[] = [];
-    for (let i = 0; i < newBatchCount; i++) {
-      const position = existingBatchIds.length + 1 + i;
-      const disc = getBatchDiscount(position);
-      const amount = Math.round(perBatchFee * (1 - disc));
-      totalNewFee += amount;
-      batchAllocations.push({ batch_id: 0, batch_name: `Batch ${i + 1}`, style_base: "", is_primary: false, amount, discountPct: disc });
-    }
-    const subtotal = totalNewFee;
-    const gst = Math.round(subtotal * 0.18);
-    const total = subtotal + gst;
-    return {
-      batchCount: newBatchCount, perBatchFee, discountPct: 0, discountAmount: (perBatchFee * newBatchCount) - totalNewFee,
-      totalBatchFee: totalNewFee, regFee: 0, dropInAdj: 0, subtotal, gst, total, applyRegFee: false, isLateRenewal: false,
-      isFixedPricePlan, planKey,
-      regularCycles, gridCycles, batchAllocations,
+  // Fetch enrollment_cycles for existing batches when entering add mode
+  useEffect(() => {
+    if (mode !== "add" || activeEnrollments.length === 0) return;
+    const fetchCycles = async () => {
+      const { data } = await supabase
+        .from("enrollment_cycles")
+        .select("batch_id, cycle_id")
+        .eq("student_id", student.id)
+        .in("batch_id", existingBatchIds);
+      const map: Record<number, number[]> = {};
+      (data || []).forEach(row => {
+        if (!map[row.batch_id]) map[row.batch_id] = [];
+        map[row.batch_id].push(row.cycle_id);
+      });
+      setExistingBatchCycles(map);
     };
+    fetchCycles();
+  }, [mode, student.id, activeEnrollments.length]);
+
+  // Auto-select first valid plan for add mode
+  useEffect(() => {
+    if (mode === "add" && validPlans.length > 0 && !addSelectedPlanId) {
+      setAddSelectedPlanId(String(validPlans[0].id));
+    }
+  }, [mode, validPlans, addSelectedPlanId]);
+
+  const addPlan = addSelectedPlanId ? subPlans.find(p => p.id === Number(addSelectedPlanId)) : null;
+  const addAssignment = addPlan ? computeCycleAssignment(addPlan, planCycles, startCycleIdx) : null;
+
+  const addBatchBreakdown: AddBatchBreakdown | null = (() => {
+    if (mode !== "add" || !addPlan || selectedBatchIds.length === 0) return null;
+    const existingBatchData = activeEnrollments.map((e, idx) => ({
+      batch_id: e.batch_id,
+      batch_name: e.batches?.name || `Batch ${e.batch_id}`,
+      style_base: e.batches?.style_base || "",
+      coveredCycleIds: existingBatchCycles[e.batch_id] || [],
+    }));
+    const newBatchObjs = selectedBatchIds.map(id => batches.find(b => b.id === Number(id))).filter(Boolean);
+    const sortedNew = sortBatchesByHierarchy(newBatchObjs);
+    return computeAddBatchBreakdown({
+      existingBatches: existingBatchData,
+      newBatches: sortedNew.map(b => ({ id: b.id, name: b.name, style_base: b.style_base })),
+      plan: addPlan,
+      planCycles,
+      startCycleIndex: startCycleIdx,
+    });
   })();
 
   const handleAddBatch = async () => {
-    if (!refEnrollment || selectedBatchIds.length === 0 || !addBatchBreakdown) return;
+    if (!addPlan || selectedBatchIds.length === 0 || !addBatchBreakdown || !addAssignment) return;
     setSubmitting(true);
     try {
       const { data: payment, error: payError } = await supabase.from("payments").insert({
@@ -367,37 +387,84 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
       }).select().single();
       if (payError) throw payError;
 
-      const records = selectedBatchIds.map(batchId => ({
-        organization_id: 1, student_id: student.id, batch_id: Number(batchId),
-        payment_id: payment.id, status_type: "REN",
-        registration_fee_applied: false, late_renewal: false,
-        start_date: refEnrollment.start_date, end_date: refEnrollment.end_date,
-        subscription_plan_id: refEnrollment.subscription_plan_id,
-        start_cycle_id: refEnrollment.start_cycle_id, end_cycle_id: refEnrollment.end_cycle_id,
-        previous_batch_id: null,
-      }));
+      // Create enrollments for NEW batches
+      const newAllocations = addBatchBreakdown.batchAllocations.filter(a => !a.is_existing);
+      if (newAllocations.length > 0) {
+        const records = newAllocations.map(a => ({
+          organization_id: 1, student_id: student.id, batch_id: a.batch_id,
+          payment_id: payment.id, status_type: "ADD",
+          registration_fee_applied: false, late_renewal: false,
+          start_date: addAssignment.startCycle.start_date,
+          end_date: addAssignment.endCycle.end_date || addAssignment.startCycle.start_date,
+          subscription_plan_id: Number(addSelectedPlanId),
+          start_cycle_id: addAssignment.startCycle.id, end_cycle_id: addAssignment.endCycle.id,
+          previous_batch_id: null,
+        }));
 
-      const { data: insertedAddRecords, error } = await supabase.from("enrollments").insert(records).select();
-      if (error) throw error;
+        const { data: insertedRecords, error } = await supabase.from("enrollments").insert(records).select();
+        if (error) throw error;
 
-      if (insertedAddRecords && refEnrollment?.start_cycle_id && refEnrollment?.end_cycle_id) {
-        const refPlan = subPlans.find(p => p.id === refEnrollment.subscription_plan_id);
-        if (refPlan) {
-          const startIdx = planCycles.findIndex(c => c.id === refEnrollment.start_cycle_id);
-          if (startIdx !== -1) {
-            const allocated = allocateCyclesForPlan(refPlan, planCycles, startIdx);
-            for (const enrollment of insertedAddRecords) {
-              await insertEnrollmentCycles(enrollment.id, enrollment.student_id, enrollment.batch_id, allocated);
-            }
+        // Insert enrollment_cycles for new batches
+        if (insertedRecords) {
+          const startIdx = planCycles.findIndex(c => c.id === addAssignment.startCycle.id);
+          const allocated = allocateCyclesForPlan(addPlan, planCycles, startIdx !== -1 ? startIdx : 0);
+          for (const enrollment of insertedRecords) {
+            await insertEnrollmentCycles(enrollment.id, enrollment.student_id, enrollment.batch_id, allocated);
           }
         }
       }
 
+      // Extend existing enrollments with missing cycles
+      const existingAllocations = addBatchBreakdown.batchAllocations.filter(a => a.is_existing && a.missingCycleIds.length > 0);
+      for (const alloc of existingAllocations) {
+        // Find the enrollment for this batch
+        const enrollment = activeEnrollments.find(e => e.batch_id === alloc.batch_id);
+        if (!enrollment) continue;
+
+        // Insert missing enrollment_cycles
+        const missingRows = alloc.missingCycleIds.map(cid => {
+          const cycle = planCycles.find(c => c.id === cid);
+          return {
+            enrollment_id: enrollment.id,
+            student_id: student.id,
+            batch_id: alloc.batch_id,
+            cycle_id: cid,
+            cycle_type: cycle?.plan_type || "regular",
+          };
+        });
+        await supabase.from("enrollment_cycles").insert(missingRows);
+
+        // Update enrollment end_date/end_cycle_id if extended
+        const newEndDate = addAssignment.endCycle.end_date || addAssignment.startCycle.start_date;
+        if (newEndDate > enrollment.end_date) {
+          await supabase.from("enrollments").update({
+            end_date: newEndDate,
+            end_cycle_id: addAssignment.endCycle.id,
+          }).eq("id", enrollment.id);
+        }
+      }
+
+      // Payment allocations for all charged batches
+      const chargedAllocations = addBatchBreakdown.batchAllocations.filter(a => a.amount > 0);
+      if (chargedAllocations.length > 0) {
+        const batchStudioMap = batches.reduce((m: Record<number, number | null>, b: any) => { m[b.id] = b.studio_id; return m; }, {});
+        await supabase.from("payment_allocations").insert(
+          chargedAllocations.map((a, idx) => ({
+            payment_id: payment.id,
+            batch_id: a.batch_id,
+            studio_id: batchStudioMap[a.batch_id] || null,
+            allocated_amount: a.amount,
+            is_primary: idx === 0,
+          }))
+        );
+      }
+
       await markCartConverted();
-      toast.success(`Added ${selectedBatchIds.length} batch(es)! Amount: ₹${addBatchBreakdown.total.toLocaleString()}`);
+      toast.success(`Added batch(es)! Amount: ₹${addBatchBreakdown.total.toLocaleString()}`);
       setMode("view");
       setSubStep("studio");
       setSelectedBatchIds([]);
+      setAddSelectedPlanId("");
       fetchData();
     } catch {
       toast.error("Failed to add batches. Please try again.");
@@ -659,9 +726,51 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
                 </>
               )}
 
-              {/* ADD: Payment + Breakdown */}
+              {/* ADD: Plan Selection + Payment + Breakdown */}
               {mode === "add" && (
                 <>
+                  {/* Existing batches info */}
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Existing Batches ({activeEnrollments.length})</Label>
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      {activeEnrollments.map(e => <Badge key={e.id} variant="secondary" className="opacity-60">{e.batches?.name}</Badge>)}
+                    </div>
+                  </div>
+
+                  {/* Plan selection */}
+                  <div>
+                    <Label>Subscription Plan</Label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+                      {validPlans.map(p => {
+                        const pk = getPlanKey(p.total_regular_cycles || 0, p.total_grid_cycles || 0);
+                        const ft = PLAN_FIXED_TOTALS[pk];
+                        const perBatchFee = ft !== undefined ? Math.round(ft / 1.18) : (p.total_regular_cycles || 0) * REGULAR_PRICE + (p.total_grid_cycles || 0) * GRID_PRICE;
+                        const isSelected = addSelectedPlanId === String(p.id);
+                        return (
+                          <Card
+                            key={p.id}
+                            className={`cursor-pointer transition-all duration-200 hover:scale-[1.02] ${isSelected ? "border-primary ring-1 ring-primary" : "hover:border-primary/40"}`}
+                            onClick={() => setAddSelectedPlanId(String(p.id))}
+                          >
+                            <CardContent className="p-4">
+                              <div className="flex items-center justify-between mb-1">
+                                <h4 className="font-display font-semibold text-foreground">{p.name}</h4>
+                                {isSelected && <Check className="h-5 w-5 text-primary" />}
+                              </div>
+                              <p className="text-sm text-muted-foreground">₹{perBatchFee.toLocaleString("en-IN")}/batch</p>
+                              <p className="text-xs text-muted-foreground">{p.total_cycles} cycle{p.total_cycles > 1 ? "s" : ""}</p>
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
+                    </div>
+                    {addAssignment && (
+                      <div className="mt-2 p-2 rounded border border-border text-sm">
+                        <p className="text-muted-foreground">Validity: <span className="text-foreground font-medium">{addAssignment.startCycle.name}</span> → <span className="text-foreground font-medium">{addAssignment.endCycle.name}</span></p>
+                      </div>
+                    )}
+                  </div>
+
                   <div>
                     <Label>Payment Mode</Label>
                     <Select value={paymentMode} onValueChange={setPaymentMode}>
@@ -674,10 +783,43 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
                   </div>
 
                   {addBatchBreakdown && (
-                    <FeeBreakdownDisplay breakdown={addBatchBreakdown} regularCycles={addBatchBreakdown.regularCycles} gridCycles={addBatchBreakdown.gridCycles} detectedStatus="REN" />
+                    <div className="p-3 rounded-lg border border-border bg-muted/30 text-sm space-y-1">
+                      <p className="font-medium text-foreground mb-2">Fee Breakdown</p>
+
+                      {/* Per-batch line items */}
+                      <div className="pl-2 border-l-2 border-primary/20 ml-1 space-y-0.5">
+                        {addBatchBreakdown.batchAllocations.map((alloc, idx) => (
+                          <div key={idx} className="flex justify-between text-xs">
+                            <span className={alloc.amount === 0 ? "text-muted-foreground line-through" : alloc.is_existing ? "text-foreground" : "text-foreground font-medium"}>
+                              {alloc.batch_name}
+                              {alloc.is_existing
+                                ? alloc.amount === 0 ? " (Covered)" : ` (+${alloc.missingCycleIds.length} cycle${alloc.missingCycleIds.length > 1 ? "s" : ""}${alloc.discountPct > 0 ? `, ${Math.round(alloc.discountPct * 100)}% off` : ""})`
+                                : alloc.discountPct > 0 ? ` (New, ${Math.round(alloc.discountPct * 100)}% off)` : " (New)"
+                              }
+                            </span>
+                            <span className={alloc.amount === 0 ? "text-muted-foreground" : alloc.discountPct > 0 ? "text-success" : ""}>
+                              ₹{alloc.amount.toLocaleString()}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="flex justify-between border-t border-border pt-1 mt-1">
+                        <span className="text-muted-foreground">Subtotal</span>
+                        <span>₹{addBatchBreakdown.subtotal.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">GST (18%)</span>
+                        <span>₹{addBatchBreakdown.gst.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between font-semibold border-t border-border pt-1 mt-1">
+                        <span>Total</span>
+                        <span>₹{addBatchBreakdown.total.toLocaleString()}</span>
+                      </div>
+                    </div>
                   )}
 
-                  <Button className="w-full gradient-primary" onClick={handleAddBatch} disabled={submitting || selectedBatchIds.length === 0}>
+                  <Button className="w-full gradient-primary" onClick={handleAddBatch} disabled={submitting || selectedBatchIds.length === 0 || !addAssignment || !addBatchBreakdown}>
                     {submitting ? "Processing..." : `Add Batch${selectedBatchIds.length > 1 ? "es" : ""}`}
                   </Button>
                 </>
