@@ -12,6 +12,8 @@ import { allocateCyclesForPlan, insertEnrollmentCycles } from "@/lib/cycleUtils"
 import FeeBreakdownDisplay from "./FeeBreakdown";
 import { initiateRazorpayPayment } from "@/lib/razorpayUtils";
 import { sortBatchesByHierarchy, computePaymentAllocations } from "@/lib/styleHierarchy";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { ChevronDown, Check } from "lucide-react";
 
 interface StudentDashboardProps {
   student: any;
