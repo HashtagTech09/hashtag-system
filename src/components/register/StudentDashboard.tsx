@@ -462,13 +462,12 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
 
           <div>
             <Label>Select Additional Batches</Label>
-            <div className="flex flex-wrap gap-2 mt-2">
-              {batches.filter(b => !existingBatchIds.includes(b.id)).map(b => (
-                <Badge key={b.id} variant={selectedBatchIds.includes(String(b.id)) ? "default" : "outline"}
-                  className={`cursor-pointer ${selectedBatchIds.includes(String(b.id)) ? "gradient-primary" : ""}`}
-                  onClick={() => toggleBatch(String(b.id))}>{b.name}</Badge>
-              ))}
-            </div>
+            <BatchGroupedSelector
+              batches={batches.filter(b => !existingBatchIds.includes(b.id))}
+              studios={studios}
+              selectedBatchIds={selectedBatchIds}
+              onToggle={toggleBatch}
+            />
           </div>
 
           <div>
@@ -491,6 +490,65 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
           </Button>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Grouped batch selector: Studio → Style → batch badges */
+function BatchGroupedSelector({ batches, studios, selectedBatchIds, onToggle }: {
+  batches: any[];
+  studios: any[];
+  selectedBatchIds: string[];
+  onToggle: (id: string) => void;
+}) {
+  // Group batches by studio_id → style_base
+  const studioMap = new Map<number, string>();
+  studios.forEach((s: any) => studioMap.set(s.id, s.name));
+
+  const grouped: Record<string, Record<string, any[]>> = {};
+  batches.forEach(b => {
+    const studioName = studioMap.get(b.studio_id) || "Other";
+    const style = b.style_base || "Other";
+    if (!grouped[studioName]) grouped[studioName] = {};
+    if (!grouped[studioName][style]) grouped[studioName][style] = [];
+    grouped[studioName][style].push(b);
+  });
+
+  const studioNames = Object.keys(grouped).sort();
+
+  if (studioNames.length === 0) {
+    return <p className="text-sm text-muted-foreground mt-2">No batches available</p>;
+  }
+
+  return (
+    <div className="space-y-2 mt-2">
+      {studioNames.map(studioName => (
+        <Collapsible key={studioName} defaultOpen>
+          <CollapsibleTrigger className="flex items-center gap-2 w-full text-left py-1.5 px-2 rounded hover:bg-muted/50 transition-colors">
+            <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform [&[data-state=open]]:rotate-0 [&[data-state=closed]]:-rotate-90" />
+            <span className="font-medium text-sm text-foreground">{studioName}</span>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="pl-6 space-y-2 pt-1">
+            {Object.entries(grouped[studioName]).sort(([a], [b]) => a.localeCompare(b)).map(([style, styleBatches]) => (
+              <div key={style}>
+                <p className="text-xs text-muted-foreground mb-1">{style}</p>
+                <div className="flex flex-wrap gap-2">
+                  {styleBatches.map((b: any) => (
+                    <Badge
+                      key={b.id}
+                      variant={selectedBatchIds.includes(String(b.id)) ? "default" : "outline"}
+                      className={`cursor-pointer ${selectedBatchIds.includes(String(b.id)) ? "gradient-primary" : ""}`}
+                      onClick={() => onToggle(String(b.id))}
+                    >
+                      {b.name}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </CollapsibleContent>
+        </Collapsible>
+      ))}
     </div>
   );
 }
