@@ -14,6 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      abandoned_carts: {
+        Row: {
+          batch_ids: Json
+          cart_type: string
+          created_at: string
+          id: number
+          organization_id: number
+          reminded_at: string | null
+          status: string
+          student_id: number
+        }
+        Insert: {
+          batch_ids?: Json
+          cart_type?: string
+          created_at?: string
+          id?: number
+          organization_id?: number
+          reminded_at?: string | null
+          status?: string
+          student_id: number
+        }
+        Update: {
+          batch_ids?: Json
+          cart_type?: string
+          created_at?: string
+          id?: number
+          organization_id?: number
+          reminded_at?: string | null
+          status?: string
+          student_id?: number
+        }
+        Relationships: []
+      }
       attendance: {
         Row: {
           batch_id: number
