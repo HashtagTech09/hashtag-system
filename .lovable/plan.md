@@ -1,67 +1,75 @@
 
 
-# Cart-Based Batch Selection in My Account + Abandoned Cart Reminders
+# Add Batch: Plan Selection + Validity Matching for Existing Enrollments
 
-## Overview
-Replace the current collapsible batch selector with a step-by-step Studio Card → Batch browsing flow. Selected batches go into a persistent cart. If the student leaves without completing checkout, their cart is saved for follow-up reminders.
+## Problem
 
-## UI Flow
+Currently, "Add Batch" blindly inherits the reference enrollment's plan and charges only the new batch(es). The user wants:
 
-```text
-[View Enrollments] → Click "Renew" / "Add Batch"
-  → Step 1: Studio Cards (grid of cards, pick one)
-  → Step 2: Batches for that studio (grouped by style, toggle to add to cart)
-      - "← Back to Studios" link
-      - Cart summary bar pinned at bottom showing count + total
-  → Step 3: Cart Review + Plan Selection + Payment (checkout)
-      - List of carted batches with remove buttons
-      - Plan cards, payment mode, fee breakdown
-      - "Confirm & Pay" button
-```
+1. After selecting batch(es) to add, let the student **choose a plan** (like in renew flow)
+2. **Match the plan's cycle coverage against existing enrollments** — if the chosen plan covers cycles that existing batches don't have yet, extend those existing enrollments too
+3. Price the missing cycles for existing batches at their **positional discounts** (2nd=12%, 3rd=13%, etc.)
 
-## Database: New `abandoned_carts` table
+### Example
 
-Store cart data when a student has items in cart but navigates away or closes the page.
+Student has 2 existing batches valid through May. They add 1 new batch and select a plan covering April, May, Grid.
 
-| Column | Type | Notes |
-|---|---|---|
-| id | bigint (PK) | auto |
-| student_id | bigint | NOT NULL |
-| organization_id | bigint | default 1 |
-| batch_ids | jsonb | array of batch IDs |
-| cart_type | text | "renew" or "add" |
-| created_at | timestamptz | default now() |
-| reminded_at | timestamptz | nullable, last reminder sent |
-| status | text | "active" / "converted" / "expired" |
+- Existing batch 1 needs Grid cycle → charged at base price (position 1, but since it's a top-up, use base)
+- Existing batch 2 needs Grid cycle → charged at 12% discount (position 2)
+- New batch 3 needs April + May + Grid → charged at 13% discount (position 3)
 
-RLS: anon can INSERT and SELECT (student portal is unauthenticated). Authenticated can read all.
+**Format**: `[3R + (1G-12%) + (1G-13%)]` — the base cycles already covered are free; only missing cycles are charged with positional discounts.
+
+## Logic
+
+1. **Plan selection step** — Show plan cards in "add" mode (reuse the renew plan selector UI)
+2. **Compute cycle assignment** for the selected plan → get matched cycles (e.g., Apr, May, Grid)
+3. **Diff against each existing enrollment's cycles** — find which cycles in the new plan are NOT covered by each existing enrollment
+4. **Build a combined fee breakdown**:
+   - For each existing batch: charge only for missing cycles at their existing positional discount
+   - For each new batch: charge the full plan fee at their incremental positional discount
+5. **On submit**: 
+   - Create enrollments for new batches (as today)
+   - Insert `enrollment_cycles` for missing cycles into existing enrollments
+   - Update existing enrollment `end_date` / `end_cycle_id` if extended
 
 ## Changes
 
 ### `src/components/register/StudentDashboard.tsx`
 
-**Refactor the renew/add modes into a sub-step flow:**
+**Add plan selection to "add" mode:**
+- In the checkout sub-step for `mode === "add"`, add the same plan card selector currently only shown for renew
+- Add state: `addSelectedPlanId`
+- Compute cycle assignment from selected plan
 
-1. Replace `BatchGroupedSelector` with a new multi-step component:
-   - Sub-step "studio": render studios as clickable cards (like StudioSelection component)
-   - Sub-step "batches": show batches for selected studio grouped by style, with add-to-cart toggle badges
-   - Sub-step "checkout": cart review + plan cards + payment mode + fee breakdown + confirm
+**Compute validity-matched fee breakdown:**
+- Replace the current `addBatchBreakdown` logic with a new function that:
+  1. Gets the selected plan's cycle assignment (matched cycles)
+  2. For each active enrollment, queries its `enrollment_cycles` to find which matched cycles are already covered
+  3. Computes missing cycles per existing batch
+  4. Builds a combined breakdown:
+     - Position 1 (primary existing batch): missing cycles at base price
+     - Position 2+ (other existing batches): missing cycles at positional discount
+     - Position N+1+ (new batches): full plan cycles at positional discount
 
-2. Add a floating cart bar at the bottom when items are in cart (shows count, "View Cart" button)
+**Update `handleAddBatch`:**
+- Create enrollments for new batches with the selected plan's dates
+- For existing enrollments with missing cycles: insert additional `enrollment_cycles` rows and update the enrollment's `end_date`/`end_cycle_id` if needed
 
-3. On `beforeunload` and on "← Back" to view mode: if cart has items, save to `abandoned_carts` table
+### `src/lib/enrollmentUtils.ts`
 
-4. On initial load (when student logs in): check `abandoned_carts` for active carts, pre-populate `selectedBatchIds` if found, show a toast "You have items in your cart from last time"
+Add a helper function `computeAddBatchBreakdown` that takes:
+- `existingEnrollments` (with their covered cycle IDs)
+- `newBatchCount`
+- `plan` (selected SubPlan)
+- `planCycles` (calendar)
+- `startCycleIndex`
 
-### `BatchGroupedSelector` → replaced by new components inline
-
-The existing `BatchGroupedSelector` at the bottom of the file gets replaced by the new step-based UI described above.
-
-### Edge function or cron (future)
-
-For sending reminders, a cron job can query `abandoned_carts WHERE status = 'active' AND reminded_at IS NULL AND created_at < now() - interval '1 hour'` and send WhatsApp messages. This can be a follow-up task — the cart persistence is the immediate deliverable.
+Returns a breakdown with per-batch allocations showing:
+- Existing batches: only missing cycle fees with positional discount
+- New batches: full plan fee with positional discount
 
 ## Files changed
-- **Migration**: create `abandoned_carts` table with RLS policies
-- `src/components/register/StudentDashboard.tsx` — refactor renew/add modes into studio-card → batch-cart → checkout flow; add cart persistence via `beforeunload`; restore abandoned cart on login
+- `src/lib/enrollmentUtils.ts` — add `computeAddBatchBreakdown` helper
+- `src/components/register/StudentDashboard.tsx` — add plan selector to "add" mode, replace fee logic, update submit handler to extend existing enrollments
 
