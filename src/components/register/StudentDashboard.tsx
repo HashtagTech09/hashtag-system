@@ -576,68 +576,85 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
             </div>
           )}
 
-          {/* Sub-step: STUDIO SELECTION */}
-          {subStep === "studio" && (
-            <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">Select a studio to browse batches</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {availableStudios.map(s => (
-                  <Card
-                    key={s.id}
-                    className="cursor-pointer group hover:border-primary/60 transition-all duration-300 hover:scale-[1.02]"
-                    onClick={() => { setSelectedStudioId(s.id); setSubStep("batches"); }}
-                  >
-                    <CardContent className="p-4 flex items-center justify-between">
-                      <div className="space-y-1">
-                        <h4 className="font-display font-semibold text-foreground">{s.name}</h4>
-                        {s.location && (
-                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <MapPin className="h-3 w-3" />
-                            <span>{s.location}</span>
-                          </div>
-                        )}
-                      </div>
-                      <ChevronRight className="h-5 w-5 text-primary group-hover:translate-x-0.5 transition-transform" />
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Sub-step: BATCH SELECTION */}
-          {subStep === "batches" && selectedStudioId && (
+          {/* Sub-step: STUDIO + BATCHES (merged) */}
+          {(subStep === "studio" || subStep === "batches") && (
             <div className="space-y-4">
-              <Button variant="ghost" size="sm" onClick={() => setSubStep("studio")} className="text-muted-foreground">
-                <ArrowLeft className="h-4 w-4 mr-1" /> {studios.find(s => s.id === selectedStudioId)?.name || "Studios"}
-              </Button>
+              <div>
+                <Label className="text-sm text-muted-foreground mb-2 block">Select Studio</Label>
+                <Select value={selectedStudioId ? String(selectedStudioId) : ""} onValueChange={(v) => setSelectedStudioId(Number(v))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choose a studio..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableStudios.map(s => (
+                      <SelectItem key={s.id} value={String(s.id)}>
+                        {s.name}{s.location ? ` · ${s.location}` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-              <p className="text-sm text-muted-foreground">Tap batches to add them to your cart</p>
+              {selectedStudioId && (
+                <>
+                  <p className="text-sm text-muted-foreground">Tap batches to add them to your cart</p>
 
-              {Object.entries(batchesByStyle).sort(([a], [b]) => a.localeCompare(b)).map(([style, styleBatches]) => (
-                <div key={style} className="space-y-2">
-                  <h4 className="text-sm font-medium text-foreground">{style}</h4>
-                  <div className="flex flex-wrap gap-2">
-                    {styleBatches.map((b: any) => {
-                      const isInCart = selectedBatchIds.includes(String(b.id));
-                      return (
-                        <Badge
-                          key={b.id}
-                          variant={isInCart ? "default" : "outline"}
-                          className={`cursor-pointer transition-all ${isInCart ? "gradient-primary" : "hover:border-primary/60"}`}
-                          onClick={() => toggleBatch(String(b.id))}
-                        >
-                          {isInCart && <Check className="h-3 w-3 mr-1" />}
-                          {b.name}
-                        </Badge>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
+                  {Object.entries(batchesByStyle).sort(([a], [b]) => a.localeCompare(b)).map(([style, styleBatches]) => (
+                    <div key={style} className="space-y-3">
+                      <h4 className="text-sm font-medium text-foreground">{style}</h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {styleBatches.map((b: any) => {
+                          const isInCart = selectedBatchIds.includes(String(b.id));
+                          const existingEnrollment = enrollments.find(e => e.batch_id === b.id && e.end_date >= todayStr);
+                          const schedule = b.schedule as any;
+                          const timings: string[] = [];
+                          if (schedule && Array.isArray(schedule)) {
+                            schedule.forEach((s: any) => {
+                              if (s.day && s.start_time) timings.push(`${s.day} ${s.start_time}–${s.end_time || ""}`);
+                            });
+                          } else if (schedule && typeof schedule === "object") {
+                            Object.entries(schedule).forEach(([day, val]: [string, any]) => {
+                              if (val?.start_time) timings.push(`${day} ${val.start_time}–${val.end_time || ""}`);
+                            });
+                          }
+                          return (
+                            <Card
+                              key={b.id}
+                              className={`cursor-pointer transition-all duration-200 hover:scale-[1.02] ${isInCart ? "border-primary ring-1 ring-primary" : "hover:border-primary/40"}`}
+                              onClick={() => toggleBatch(String(b.id))}
+                            >
+                              <CardContent className="p-4">
+                                <div className="flex items-start justify-between">
+                                  <div className="space-y-1 flex-1">
+                                    <div className="flex items-center gap-2">
+                                      <h4 className="font-display font-semibold text-foreground">{b.name}</h4>
+                                      {isInCart && <Check className="h-4 w-4 text-primary" />}
+                                    </div>
+                                    {b.batch_code && <p className="text-xs text-muted-foreground">Code: {b.batch_code}</p>}
+                                    {timings.length > 0 && (
+                                      <div className="text-xs text-muted-foreground">
+                                        {timings.map((t, i) => <p key={i}>{t}</p>)}
+                                      </div>
+                                    )}
+                                    {existingEnrollment && (
+                                      <Badge variant="secondary" className="bg-success/20 text-success text-[10px] mt-1">
+                                        Active till {existingEnrollment.end_date}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
 
-              {Object.keys(batchesByStyle).length === 0 && (
-                <p className="text-sm text-muted-foreground">No batches available at this studio</p>
+                  {Object.keys(batchesByStyle).length === 0 && (
+                    <p className="text-sm text-muted-foreground">No batches available at this studio</p>
+                  )}
+                </>
               )}
             </div>
           )}

@@ -309,24 +309,23 @@ export function computeAddBatchBreakdown(params: {
   const allocations: AddBatchAllocation[] = [];
   let totalFee = 0;
 
-  // Position 1..N for existing batches (they already hold their positional rank)
+  // Existing batches are SECONDARY — positioned after new batches
+  // They are only charged for missing cycles at their positional discount
   existingBatches.forEach((eb, idx) => {
-    const position = idx + 1;
+    const position = newBatches.length + 1 + idx;
     const disc = getBatchDiscount(position);
     const coveredSet = new Set(eb.coveredCycleIds);
     const missingCycleIds = planCycleIds.filter(cid => !coveredSet.has(cid));
 
     if (missingCycleIds.length === 0) {
-      // Fully covered, no charge
       allocations.push({
         batch_id: eb.batch_id, batch_name: eb.batch_name, style_base: eb.style_base,
-        is_primary: idx === 0, is_existing: true, amount: 0, discountPct: disc,
+        is_primary: false, is_existing: true, amount: 0, discountPct: disc,
         missingCycleIds: [], fullCycleIds: [],
       });
       return;
     }
 
-    // Calculate fee for missing cycles only
     let missingFee = 0;
     for (const cid of missingCycleIds) {
       const cycle = cycles.find(c => c.id === cid);
@@ -339,21 +338,21 @@ export function computeAddBatchBreakdown(params: {
 
     allocations.push({
       batch_id: eb.batch_id, batch_name: eb.batch_name, style_base: eb.style_base,
-      is_primary: idx === 0, is_existing: true, amount: discountedFee, discountPct: disc,
+      is_primary: false, is_existing: true, amount: discountedFee, discountPct: disc,
       missingCycleIds, fullCycleIds: [],
     });
   });
 
-  // New batches get full plan fee at incremental positional discount
+  // New batches become PRIMARY (position 1, 2, ...) — full price for first, then discounts
   newBatches.forEach((nb, idx) => {
-    const position = existingBatches.length + 1 + idx;
+    const position = idx + 1;
     const disc = getBatchDiscount(position);
-    const amount = Math.round(fullPerBatch * (1 - disc));
+    const amount = position === 1 ? fullPerBatch : Math.round(fullPerBatch * (1 - disc));
     totalFee += amount;
 
     allocations.push({
       batch_id: nb.id, batch_name: nb.name, style_base: nb.style_base || "",
-      is_primary: false, is_existing: false, amount, discountPct: disc,
+      is_primary: idx === 0, is_existing: false, amount, discountPct: disc,
       missingCycleIds: [], fullCycleIds: planCycleIds,
     });
   });
