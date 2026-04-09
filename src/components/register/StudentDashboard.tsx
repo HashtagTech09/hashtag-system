@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -12,8 +12,7 @@ import { allocateCyclesForPlan, insertEnrollmentCycles } from "@/lib/cycleUtils"
 import FeeBreakdownDisplay from "./FeeBreakdown";
 import { initiateRazorpayPayment } from "@/lib/razorpayUtils";
 import { sortBatchesByHierarchy, computePaymentAllocations } from "@/lib/styleHierarchy";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ChevronDown, Check } from "lucide-react";
+import { MapPin, ChevronRight, ShoppingCart, X, Check, ArrowLeft, Trash2 } from "lucide-react";
 
 interface StudentDashboardProps {
   student: any;
@@ -30,7 +29,11 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState<"view" | "renew" | "add">("view");
 
-  // Renew state
+  // Sub-step for renew/add modes
+  const [subStep, setSubStep] = useState<"studio" | "batches" | "checkout">("studio");
+  const [selectedStudioId, setSelectedStudioId] = useState<number | null>(null);
+
+  // Cart state
   const [selectedBatchIds, setSelectedBatchIds] = useState<string[]>([]);
   const [selectedPlanId, setSelectedPlanId] = useState("");
   const [paymentMode, setPaymentMode] = useState("cash");
@@ -46,7 +49,7 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
       supabase.from("batches").select("*").eq("organization_id", 1).order("name"),
       supabase.from("subscription_plans").select("*").eq("organization_id", 1).eq("is_active", true).order("id"),
       supabase.from("plan_cycles").select("*").eq("organization_id", 1).order("start_date"),
-      supabase.from("studios").select("id, name").eq("organization_id", 1).order("name"),
+      supabase.from("studios").select("id, name, location").eq("organization_id", 1).order("name"),
     ]);
     setEnrollments(enrollRes.data || []);
     setBatches(batchRes.data || []);
@@ -54,7 +57,75 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
     setPlanCycles(cycleRes.data || []);
     setStudios(studioRes.data || []);
     setLoading(false);
+
+    // Check for abandoned cart
+    const { data: cartData } = await supabase
+      .from("abandoned_carts")
+      .select("*")
+      .eq("student_id", student.id)
+      .eq("status", "active")
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    if (cartData && cartData.length > 0) {
+      const cart = cartData[0];
+      const ids = (cart.batch_ids as number[]).map(String);
+      if (ids.length > 0) {
+        setSelectedBatchIds(ids);
+        setMode(cart.cart_type === "renew" ? "renew" : "add");
+        setSubStep("checkout");
+        toast.info("You have items in your cart from last time");
+      }
+    }
   };
+
+  // Save abandoned cart
+  const saveAbandonedCart = useCallback(async () => {
+    if (selectedBatchIds.length === 0) return;
+    try {
+      // Expire old active carts for this student
+      await supabase
+        .from("abandoned_carts")
+        .update({ status: "expired" })
+        .eq("student_id", student.id)
+        .eq("status", "active");
+
+      await supabase.from("abandoned_carts").insert({
+        student_id: student.id,
+        organization_id: 1,
+        batch_ids: selectedBatchIds.map(Number),
+        cart_type: mode === "add" ? "add" : "renew",
+        status: "active",
+      });
+    } catch {
+      // silent
+    }
+  }, [selectedBatchIds, student.id, mode]);
+
+  // beforeunload handler
+  useEffect(() => {
+    const handler = () => {
+      if (selectedBatchIds.length > 0 && (mode === "renew" || mode === "add")) {
+        // Use sendBeacon for reliability
+        const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+        const url = `https://${projectId}.supabase.co/rest/v1/abandoned_carts`;
+        const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+        const body = JSON.stringify({
+          student_id: student.id,
+          organization_id: 1,
+          batch_ids: selectedBatchIds.map(Number),
+          cart_type: mode === "add" ? "add" : "renew",
+          status: "active",
+        });
+        navigator.sendBeacon(
+          url,
+          new Blob([body], { type: "application/json" })
+        );
+      }
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [selectedBatchIds, mode, student.id]);
 
   const todayStr = new Date().toISOString().split("T")[0];
   const activeEnrollments = enrollments.filter(e => e.end_date >= todayStr);
@@ -68,7 +139,6 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
     planCycles
   );
 
-  // Previous batch ids from latest enrollment set
   const previousBatchIds = (() => {
     if (enrollments.length === 0) return [];
     const latest = enrollments[0].end_date;
@@ -77,7 +147,6 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
 
   const assignment = selectedPlanId ? computeCycleAssignment(subPlans.find(p => p.id === Number(selectedPlanId))!, planCycles, startCycleIdx) : null;
 
-  // Sort selected batches by style hierarchy
   const selectedBatchObjects = selectedBatchIds.map(id => batches.find(b => b.id === Number(id))).filter(Boolean);
   const sortedSelectedBatches = sortBatchesByHierarchy(selectedBatchObjects);
 
@@ -109,6 +178,30 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
     setSelectedBatchIds(prev => prev.includes(id) ? prev.filter(b => b !== id) : [...prev, id]);
   };
 
+  const removeBatch = (id: string) => {
+    setSelectedBatchIds(prev => prev.filter(b => b !== id));
+  };
+
+  // Mark abandoned cart as converted
+  const markCartConverted = async () => {
+    await supabase
+      .from("abandoned_carts")
+      .update({ status: "converted" })
+      .eq("student_id", student.id)
+      .eq("status", "active");
+  };
+
+  const goBackToView = async () => {
+    if (selectedBatchIds.length > 0) {
+      await saveAbandonedCart();
+    }
+    setMode("view");
+    setSubStep("studio");
+    setSelectedStudioId(null);
+    setSelectedBatchIds([]);
+    setSelectedPlanId("");
+  };
+
   const buildEnrollmentRecords = (paymentId?: number) => {
     return selectedBatchIds.map(batchId => {
       let prevBatchId: number | null = null;
@@ -136,9 +229,11 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
     return allocateCyclesForPlan(plan, planCycles, startIdx !== -1 ? startIdx : 0);
   };
 
-  const onRenewSuccess = () => {
+  const onRenewSuccess = async () => {
+    await markCartConverted();
     toast.success(`Payment initiated! Enrollment will be confirmed once payment is captured.`);
     setMode("view");
+    setSubStep("studio");
     setSelectedBatchIds([]);
     setSelectedPlanId("");
     fetchData();
@@ -148,7 +243,6 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
     if (selectedBatchIds.length === 0 || !assignment || !breakdown) return;
     setSubmitting(true);
     try {
-      // Build allocations from sorted batches
       const allocations = computePaymentAllocations(
         sortedSelectedBatches.map(b => ({ id: b.id, studio_id: b.studio_id })),
         breakdown.perBatchFee, breakdown.discountPct
@@ -197,7 +291,6 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
       const { data: insertedRecords, error } = await supabase.from("enrollments").insert(records).select();
       if (error) throw error;
 
-      // Insert payment allocations
       if (allocations.length > 0) {
         await supabase.from("payment_allocations").insert(
           allocations.map(a => ({ ...a, payment_id: payment.id }))
@@ -215,8 +308,10 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
         }
       }
 
+      await markCartConverted();
       toast.success(`Enrolled successfully! Amount: ₹${breakdown.total.toLocaleString()}`);
       setMode("view");
+      setSubStep("studio");
       setSelectedBatchIds([]);
       setSelectedPlanId("");
       fetchData();
@@ -236,13 +331,11 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
     const refPlan = subPlans.find(p => p.id === refEnrollment.subscription_plan_id);
     const regularCycles = refPlan?.total_regular_cycles || 1;
     const gridCycles = refPlan?.total_grid_cycles || 0;
-    const totalBatchCount = existingBatchIds.length + selectedBatchIds.length;
     const newBatchCount = selectedBatchIds.length;
     const planKey = getPlanKey(regularCycles, gridCycles);
     const fixedTotal = PLAN_FIXED_TOTALS[planKey];
     const isFixedPricePlan = fixedTotal !== undefined;
     const perBatchFee = isFixedPricePlan ? Math.round(fixedTotal / 1.18) : (regularCycles * REGULAR_PRICE) + (gridCycles * GRID_PRICE);
-    // New batches start at position (existingBatchIds.length + 1)
     let totalNewFee = 0;
     const batchAllocations: any[] = [];
     for (let i = 0; i < newBatchCount; i++) {
@@ -287,7 +380,6 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
       const { data: insertedAddRecords, error } = await supabase.from("enrollments").insert(records).select();
       if (error) throw error;
 
-      // Write enrollment_cycles for add-batch
       if (insertedAddRecords && refEnrollment?.start_cycle_id && refEnrollment?.end_cycle_id) {
         const refPlan = subPlans.find(p => p.id === refEnrollment.subscription_plan_id);
         if (refPlan) {
@@ -301,8 +393,10 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
         }
       }
 
+      await markCartConverted();
       toast.success(`Added ${selectedBatchIds.length} batch(es)! Amount: ₹${addBatchBreakdown.total.toLocaleString()}`);
       setMode("view");
+      setSubStep("studio");
       setSelectedBatchIds([]);
       fetchData();
     } catch {
@@ -313,6 +407,22 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
   };
 
   const statusColors: Record<string, string> = { NEW: "bg-success/20 text-success", REN: "bg-primary/20 text-primary", REV: "bg-warning/20 text-warning" };
+
+  // Studios that have batches
+  const studioIdsWithBatches = [...new Set(batches.map(b => b.studio_id).filter(Boolean))];
+  const availableStudios = studios.filter(s => studioIdsWithBatches.includes(s.id));
+
+  // Batches for selected studio, grouped by style
+  const batchesForStudio = selectedStudioId
+    ? batches.filter(b => b.studio_id === selectedStudioId && (mode !== "add" || !existingBatchIds.includes(b.id)))
+    : [];
+
+  const batchesByStyle: Record<string, any[]> = {};
+  batchesForStudio.forEach(b => {
+    const style = b.style_base || "Other";
+    if (!batchesByStyle[style]) batchesByStyle[style] = [];
+    batchesByStyle[style].push(b);
+  });
 
   if (loading) return <p className="text-muted-foreground text-center py-8">Loading your profile...</p>;
 
@@ -326,6 +436,7 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
         <Badge className={statusColors[detectedStatus] || ""} variant="secondary">{detectedStatus}</Badge>
       </div>
 
+      {/* VIEW MODE */}
       {mode === "view" && (
         <>
           {activeEnrollments.length > 0 && (
@@ -363,11 +474,11 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
           )}
 
           <div className="flex gap-2 pt-2">
-            <Button className="flex-1 gradient-primary" onClick={() => { setMode("renew"); setSelectedBatchIds([]); setSelectedPlanId(""); }}>
+            <Button className="flex-1 gradient-primary" onClick={() => { setMode("renew"); setSubStep("studio"); setSelectedBatchIds([]); setSelectedPlanId(""); setSelectedStudioId(null); }}>
               {detectedStatus === "NEW" ? "Enroll" : detectedStatus === "REN" ? "Renew" : "Revive"}
             </Button>
             {activeEnrollments.length > 0 && (
-              <Button variant="outline" className="flex-1" onClick={() => { setMode("add"); setSelectedBatchIds([]); }}>
+              <Button variant="outline" className="flex-1" onClick={() => { setMode("add"); setSubStep("studio"); setSelectedBatchIds([]); setSelectedStudioId(null); }}>
                 Add Batch
               </Button>
             )}
@@ -375,180 +486,221 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
         </>
       )}
 
-      {mode === "renew" && (
+      {/* RENEW / ADD MODE */}
+      {(mode === "renew" || mode === "add") && (
         <div className="space-y-4">
+          {/* Header */}
           <div className="flex items-center justify-between">
-            <h3 className="font-medium text-foreground">{detectedStatus === "NEW" ? "New Enrollment" : detectedStatus === "REN" ? "Renew Enrollment" : "Revive Enrollment"}</h3>
-            <Button variant="ghost" size="sm" onClick={() => setMode("view")}>← Back</Button>
+            <h3 className="font-medium text-foreground">
+              {mode === "add" ? "Add Batch" : detectedStatus === "NEW" ? "New Enrollment" : detectedStatus === "REN" ? "Renew Enrollment" : "Revive Enrollment"}
+            </h3>
+            <Button variant="ghost" size="sm" onClick={goBackToView}>
+              <ArrowLeft className="h-4 w-4 mr-1" /> Back
+            </Button>
           </div>
 
-          {/* Step 1: Select Batches — grouped by Studio → Style */}
-          <div>
-            <Label>Select Batches</Label>
-            <BatchGroupedSelector
-              batches={batches}
-              studios={studios}
-              selectedBatchIds={selectedBatchIds}
-              onToggle={toggleBatch}
-            />
-          </div>
-
-          {/* Step 2: Plan Cards */}
-          <div>
-            <Label>Subscription Plan</Label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
-              {validPlans.map(p => {
-                const pk = getPlanKey(p.total_regular_cycles || 0, p.total_grid_cycles || 0);
-                const ft = PLAN_FIXED_TOTALS[pk];
-                const perBatchFee = ft !== undefined ? Math.round(ft / 1.18) : (p.total_regular_cycles || 0) * REGULAR_PRICE + (p.total_grid_cycles || 0) * GRID_PRICE;
-                const isSelected = selectedPlanId === String(p.id);
-                return (
-                  <Card
-                    key={p.id}
-                    className={`cursor-pointer transition-all duration-200 hover:scale-[1.02] ${isSelected ? "border-primary ring-1 ring-primary" : "hover:border-primary/40"}`}
-                    onClick={() => setSelectedPlanId(String(p.id))}
-                  >
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between mb-1">
-                        <h4 className="font-display font-semibold text-foreground">{p.name}</h4>
-                        {isSelected && <Check className="h-5 w-5 text-primary" />}
-                      </div>
-                      <p className="text-sm text-muted-foreground">₹{perBatchFee.toLocaleString("en-IN")}/batch</p>
-                      <p className="text-xs text-muted-foreground">{p.total_cycles} cycle{p.total_cycles > 1 ? "s" : ""}</p>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-            {assignment && (
-              <div className="mt-2 p-2 rounded border border-border text-sm">
-                <p className="text-muted-foreground">Validity: <span className="text-foreground font-medium">{assignment.startCycle.name}</span> → <span className="text-foreground font-medium">{assignment.endCycle.name}</span></p>
+          {/* Current batches for add mode */}
+          {mode === "add" && subStep !== "checkout" && (
+            <div>
+              <Label className="text-xs text-muted-foreground">Current Batches</Label>
+              <div className="flex flex-wrap gap-2 mt-1">
+                {activeEnrollments.map(e => <Badge key={e.id} variant="secondary" className="opacity-60">{e.batches?.name}</Badge>)}
               </div>
-            )}
-          </div>
-
-          <div>
-            <Label>Payment Mode</Label>
-            <Select value={paymentMode} onValueChange={setPaymentMode}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="cash">Cash</SelectItem>
-                <SelectItem value="razorpay">Razorpay</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {breakdown && <FeeBreakdownDisplay breakdown={breakdown} regularCycles={assignment!.regularCount} gridCycles={assignment!.gridCount} detectedStatus={detectedStatus} />}
-
-          <Button className="w-full gradient-primary" onClick={handleRenew} disabled={submitting || selectedBatchIds.length === 0 || !assignment}>
-            {submitting ? "Processing..." : "Confirm & Pay"}
-          </Button>
-        </div>
-      )}
-
-      {mode === "add" && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="font-medium text-foreground">Add Batch</h3>
-            <Button variant="ghost" size="sm" onClick={() => setMode("view")}>← Back</Button>
-          </div>
-
-          <div>
-            <Label>Current Batches</Label>
-            <div className="flex flex-wrap gap-2 mt-2">
-              {activeEnrollments.map(e => <Badge key={e.id} variant="secondary" className="opacity-60">{e.batches?.name}</Badge>)}
             </div>
-          </div>
-
-          <div>
-            <Label>Select Additional Batches</Label>
-            <BatchGroupedSelector
-              batches={batches.filter(b => !existingBatchIds.includes(b.id))}
-              studios={studios}
-              selectedBatchIds={selectedBatchIds}
-              onToggle={toggleBatch}
-            />
-          </div>
-
-          <div>
-            <Label>Payment Mode</Label>
-            <Select value={paymentMode} onValueChange={setPaymentMode}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="cash">Cash</SelectItem>
-                <SelectItem value="razorpay">Razorpay</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {addBatchBreakdown && (
-            <FeeBreakdownDisplay breakdown={addBatchBreakdown} regularCycles={addBatchBreakdown.regularCycles} gridCycles={addBatchBreakdown.gridCycles} detectedStatus="REN" />
           )}
 
-          <Button className="w-full gradient-primary" onClick={handleAddBatch} disabled={submitting || selectedBatchIds.length === 0}>
-            {submitting ? "Processing..." : `Add Batch${selectedBatchIds.length > 1 ? "es" : ""}`}
-          </Button>
+          {/* Sub-step: STUDIO SELECTION */}
+          {subStep === "studio" && (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">Select a studio to browse batches</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {availableStudios.map(s => (
+                  <Card
+                    key={s.id}
+                    className="cursor-pointer group hover:border-primary/60 transition-all duration-300 hover:scale-[1.02]"
+                    onClick={() => { setSelectedStudioId(s.id); setSubStep("batches"); }}
+                  >
+                    <CardContent className="p-4 flex items-center justify-between">
+                      <div className="space-y-1">
+                        <h4 className="font-display font-semibold text-foreground">{s.name}</h4>
+                        {s.location && (
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <MapPin className="h-3 w-3" />
+                            <span>{s.location}</span>
+                          </div>
+                        )}
+                      </div>
+                      <ChevronRight className="h-5 w-5 text-primary group-hover:translate-x-0.5 transition-transform" />
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Sub-step: BATCH SELECTION */}
+          {subStep === "batches" && selectedStudioId && (
+            <div className="space-y-4">
+              <Button variant="ghost" size="sm" onClick={() => setSubStep("studio")} className="text-muted-foreground">
+                <ArrowLeft className="h-4 w-4 mr-1" /> {studios.find(s => s.id === selectedStudioId)?.name || "Studios"}
+              </Button>
+
+              <p className="text-sm text-muted-foreground">Tap batches to add them to your cart</p>
+
+              {Object.entries(batchesByStyle).sort(([a], [b]) => a.localeCompare(b)).map(([style, styleBatches]) => (
+                <div key={style} className="space-y-2">
+                  <h4 className="text-sm font-medium text-foreground">{style}</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {styleBatches.map((b: any) => {
+                      const isInCart = selectedBatchIds.includes(String(b.id));
+                      return (
+                        <Badge
+                          key={b.id}
+                          variant={isInCart ? "default" : "outline"}
+                          className={`cursor-pointer transition-all ${isInCart ? "gradient-primary" : "hover:border-primary/60"}`}
+                          onClick={() => toggleBatch(String(b.id))}
+                        >
+                          {isInCart && <Check className="h-3 w-3 mr-1" />}
+                          {b.name}
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+
+              {Object.keys(batchesByStyle).length === 0 && (
+                <p className="text-sm text-muted-foreground">No batches available at this studio</p>
+              )}
+            </div>
+          )}
+
+          {/* Sub-step: CHECKOUT */}
+          {subStep === "checkout" && (
+            <div className="space-y-4">
+              <Button variant="ghost" size="sm" onClick={() => setSubStep("studio")} className="text-muted-foreground">
+                <ArrowLeft className="h-4 w-4 mr-1" /> Add more batches
+              </Button>
+
+              {/* Cart items */}
+              <div className="space-y-2">
+                <Label>Your Cart ({selectedBatchIds.length} batch{selectedBatchIds.length !== 1 ? "es" : ""})</Label>
+                {selectedBatchIds.map(id => {
+                  const batch = batches.find(b => b.id === Number(id));
+                  const studio = batch ? studios.find(s => s.id === batch.studio_id) : null;
+                  return (
+                    <Card key={id} className="glass-card">
+                      <CardContent className="p-3 flex items-center justify-between">
+                        <div>
+                          <p className="font-medium text-foreground text-sm">{batch?.name || `Batch #${id}`}</p>
+                          <p className="text-xs text-muted-foreground">{studio?.name} · {batch?.style_base}</p>
+                        </div>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => removeBatch(id)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+
+              {/* RENEW: Plan + Payment + Breakdown */}
+              {mode === "renew" && (
+                <>
+                  <div>
+                    <Label>Subscription Plan</Label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+                      {validPlans.map(p => {
+                        const pk = getPlanKey(p.total_regular_cycles || 0, p.total_grid_cycles || 0);
+                        const ft = PLAN_FIXED_TOTALS[pk];
+                        const perBatchFee = ft !== undefined ? Math.round(ft / 1.18) : (p.total_regular_cycles || 0) * REGULAR_PRICE + (p.total_grid_cycles || 0) * GRID_PRICE;
+                        const isSelected = selectedPlanId === String(p.id);
+                        return (
+                          <Card
+                            key={p.id}
+                            className={`cursor-pointer transition-all duration-200 hover:scale-[1.02] ${isSelected ? "border-primary ring-1 ring-primary" : "hover:border-primary/40"}`}
+                            onClick={() => setSelectedPlanId(String(p.id))}
+                          >
+                            <CardContent className="p-4">
+                              <div className="flex items-center justify-between mb-1">
+                                <h4 className="font-display font-semibold text-foreground">{p.name}</h4>
+                                {isSelected && <Check className="h-5 w-5 text-primary" />}
+                              </div>
+                              <p className="text-sm text-muted-foreground">₹{perBatchFee.toLocaleString("en-IN")}/batch</p>
+                              <p className="text-xs text-muted-foreground">{p.total_cycles} cycle{p.total_cycles > 1 ? "s" : ""}</p>
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
+                    </div>
+                    {assignment && (
+                      <div className="mt-2 p-2 rounded border border-border text-sm">
+                        <p className="text-muted-foreground">Validity: <span className="text-foreground font-medium">{assignment.startCycle.name}</span> → <span className="text-foreground font-medium">{assignment.endCycle.name}</span></p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <Label>Payment Mode</Label>
+                    <Select value={paymentMode} onValueChange={setPaymentMode}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="cash">Cash</SelectItem>
+                        <SelectItem value="razorpay">Razorpay</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {breakdown && <FeeBreakdownDisplay breakdown={breakdown} regularCycles={assignment!.regularCount} gridCycles={assignment!.gridCount} detectedStatus={detectedStatus} />}
+
+                  <Button className="w-full gradient-primary" onClick={handleRenew} disabled={submitting || selectedBatchIds.length === 0 || !assignment}>
+                    {submitting ? "Processing..." : "Confirm & Pay"}
+                  </Button>
+                </>
+              )}
+
+              {/* ADD: Payment + Breakdown */}
+              {mode === "add" && (
+                <>
+                  <div>
+                    <Label>Payment Mode</Label>
+                    <Select value={paymentMode} onValueChange={setPaymentMode}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="cash">Cash</SelectItem>
+                        <SelectItem value="razorpay">Razorpay</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {addBatchBreakdown && (
+                    <FeeBreakdownDisplay breakdown={addBatchBreakdown} regularCycles={addBatchBreakdown.regularCycles} gridCycles={addBatchBreakdown.gridCycles} detectedStatus="REN" />
+                  )}
+
+                  <Button className="w-full gradient-primary" onClick={handleAddBatch} disabled={submitting || selectedBatchIds.length === 0}>
+                    {submitting ? "Processing..." : `Add Batch${selectedBatchIds.length > 1 ? "es" : ""}`}
+                  </Button>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Floating cart bar (visible on studio/batches steps when cart has items) */}
+          {(subStep === "studio" || subStep === "batches") && selectedBatchIds.length > 0 && (
+            <div className="fixed bottom-0 left-0 right-0 z-50 p-4 bg-card/95 backdrop-blur-xl border-t border-border">
+              <div className="max-w-2xl mx-auto flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <ShoppingCart className="h-5 w-5 text-primary" />
+                  <span className="font-medium text-foreground">{selectedBatchIds.length} batch{selectedBatchIds.length !== 1 ? "es" : ""}</span>
+                </div>
+                <Button className="gradient-primary" onClick={() => setSubStep("checkout")}>
+                  View Cart <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       )}
-    </div>
-  );
-}
-
-/** Grouped batch selector: Studio → Style → batch badges */
-function BatchGroupedSelector({ batches, studios, selectedBatchIds, onToggle }: {
-  batches: any[];
-  studios: any[];
-  selectedBatchIds: string[];
-  onToggle: (id: string) => void;
-}) {
-  // Group batches by studio_id → style_base
-  const studioMap = new Map<number, string>();
-  studios.forEach((s: any) => studioMap.set(s.id, s.name));
-
-  const grouped: Record<string, Record<string, any[]>> = {};
-  batches.forEach(b => {
-    const studioName = studioMap.get(b.studio_id) || "Other";
-    const style = b.style_base || "Other";
-    if (!grouped[studioName]) grouped[studioName] = {};
-    if (!grouped[studioName][style]) grouped[studioName][style] = [];
-    grouped[studioName][style].push(b);
-  });
-
-  const studioNames = Object.keys(grouped).sort();
-
-  if (studioNames.length === 0) {
-    return <p className="text-sm text-muted-foreground mt-2">No batches available</p>;
-  }
-
-  return (
-    <div className="space-y-2 mt-2">
-      {studioNames.map(studioName => (
-        <Collapsible key={studioName} defaultOpen>
-          <CollapsibleTrigger className="flex items-center gap-2 w-full text-left py-1.5 px-2 rounded hover:bg-muted/50 transition-colors">
-            <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform [&[data-state=open]]:rotate-0 [&[data-state=closed]]:-rotate-90" />
-            <span className="font-medium text-sm text-foreground">{studioName}</span>
-          </CollapsibleTrigger>
-          <CollapsibleContent className="pl-6 space-y-2 pt-1">
-            {Object.entries(grouped[studioName]).sort(([a], [b]) => a.localeCompare(b)).map(([style, styleBatches]) => (
-              <div key={style}>
-                <p className="text-xs text-muted-foreground mb-1">{style}</p>
-                <div className="flex flex-wrap gap-2">
-                  {styleBatches.map((b: any) => (
-                    <Badge
-                      key={b.id}
-                      variant={selectedBatchIds.includes(String(b.id)) ? "default" : "outline"}
-                      className={`cursor-pointer ${selectedBatchIds.includes(String(b.id)) ? "gradient-primary" : ""}`}
-                      onClick={() => onToggle(String(b.id))}
-                    >
-                      {b.name}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </CollapsibleContent>
-        </Collapsible>
-      ))}
     </div>
   );
 }
