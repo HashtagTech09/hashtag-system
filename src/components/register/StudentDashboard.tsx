@@ -726,9 +726,51 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
                 </>
               )}
 
-              {/* ADD: Payment + Breakdown */}
+              {/* ADD: Plan Selection + Payment + Breakdown */}
               {mode === "add" && (
                 <>
+                  {/* Existing batches info */}
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Existing Batches ({activeEnrollments.length})</Label>
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      {activeEnrollments.map(e => <Badge key={e.id} variant="secondary" className="opacity-60">{e.batches?.name}</Badge>)}
+                    </div>
+                  </div>
+
+                  {/* Plan selection */}
+                  <div>
+                    <Label>Subscription Plan</Label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+                      {validPlans.map(p => {
+                        const pk = getPlanKey(p.total_regular_cycles || 0, p.total_grid_cycles || 0);
+                        const ft = PLAN_FIXED_TOTALS[pk];
+                        const perBatchFee = ft !== undefined ? Math.round(ft / 1.18) : (p.total_regular_cycles || 0) * REGULAR_PRICE + (p.total_grid_cycles || 0) * GRID_PRICE;
+                        const isSelected = addSelectedPlanId === String(p.id);
+                        return (
+                          <Card
+                            key={p.id}
+                            className={`cursor-pointer transition-all duration-200 hover:scale-[1.02] ${isSelected ? "border-primary ring-1 ring-primary" : "hover:border-primary/40"}`}
+                            onClick={() => setAddSelectedPlanId(String(p.id))}
+                          >
+                            <CardContent className="p-4">
+                              <div className="flex items-center justify-between mb-1">
+                                <h4 className="font-display font-semibold text-foreground">{p.name}</h4>
+                                {isSelected && <Check className="h-5 w-5 text-primary" />}
+                              </div>
+                              <p className="text-sm text-muted-foreground">₹{perBatchFee.toLocaleString("en-IN")}/batch</p>
+                              <p className="text-xs text-muted-foreground">{p.total_cycles} cycle{p.total_cycles > 1 ? "s" : ""}</p>
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
+                    </div>
+                    {addAssignment && (
+                      <div className="mt-2 p-2 rounded border border-border text-sm">
+                        <p className="text-muted-foreground">Validity: <span className="text-foreground font-medium">{addAssignment.startCycle.name}</span> → <span className="text-foreground font-medium">{addAssignment.endCycle.name}</span></p>
+                      </div>
+                    )}
+                  </div>
+
                   <div>
                     <Label>Payment Mode</Label>
                     <Select value={paymentMode} onValueChange={setPaymentMode}>
@@ -741,10 +783,43 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
                   </div>
 
                   {addBatchBreakdown && (
-                    <FeeBreakdownDisplay breakdown={addBatchBreakdown} regularCycles={addBatchBreakdown.regularCycles} gridCycles={addBatchBreakdown.gridCycles} detectedStatus="REN" />
+                    <div className="p-3 rounded-lg border border-border bg-muted/30 text-sm space-y-1">
+                      <p className="font-medium text-foreground mb-2">Fee Breakdown</p>
+
+                      {/* Per-batch line items */}
+                      <div className="pl-2 border-l-2 border-primary/20 ml-1 space-y-0.5">
+                        {addBatchBreakdown.batchAllocations.map((alloc, idx) => (
+                          <div key={idx} className="flex justify-between text-xs">
+                            <span className={alloc.amount === 0 ? "text-muted-foreground line-through" : alloc.is_existing ? "text-foreground" : "text-foreground font-medium"}>
+                              {alloc.batch_name}
+                              {alloc.is_existing
+                                ? alloc.amount === 0 ? " (Covered)" : ` (+${alloc.missingCycleIds.length} cycle${alloc.missingCycleIds.length > 1 ? "s" : ""}${alloc.discountPct > 0 ? `, ${Math.round(alloc.discountPct * 100)}% off` : ""})`
+                                : alloc.discountPct > 0 ? ` (New, ${Math.round(alloc.discountPct * 100)}% off)` : " (New)"
+                              }
+                            </span>
+                            <span className={alloc.amount === 0 ? "text-muted-foreground" : alloc.discountPct > 0 ? "text-success" : ""}>
+                              ₹{alloc.amount.toLocaleString()}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="flex justify-between border-t border-border pt-1 mt-1">
+                        <span className="text-muted-foreground">Subtotal</span>
+                        <span>₹{addBatchBreakdown.subtotal.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">GST (18%)</span>
+                        <span>₹{addBatchBreakdown.gst.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between font-semibold border-t border-border pt-1 mt-1">
+                        <span>Total</span>
+                        <span>₹{addBatchBreakdown.total.toLocaleString()}</span>
+                      </div>
+                    </div>
                   )}
 
-                  <Button className="w-full gradient-primary" onClick={handleAddBatch} disabled={submitting || selectedBatchIds.length === 0}>
+                  <Button className="w-full gradient-primary" onClick={handleAddBatch} disabled={submitting || selectedBatchIds.length === 0 || !addAssignment || !addBatchBreakdown}>
                     {submitting ? "Processing..." : `Add Batch${selectedBatchIds.length > 1 ? "es" : ""}`}
                   </Button>
                 </>
