@@ -6,23 +6,25 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { Music } from "lucide-react";
+import { Music, Check } from "lucide-react";
 import { initiateRazorpayPayment } from "@/lib/razorpayUtils";
 import { isPlanValid, computeCycleAssignment, computeFeeBreakdown, detectStudentStatus, getStartCycleIndex } from "@/lib/enrollmentUtils";
 import type { PlanCycle, SubPlan } from "@/lib/enrollmentUtils";
 import { sortBatchesByHierarchy, computePaymentAllocations } from "@/lib/styleHierarchy";
-import StyleSelection from "./StyleSelection";
 import StudioSelection from "./StudioSelection";
+import StyleSelection from "./StyleSelection";
+import LevelSelection from "./LevelSelection";
 import BatchSelection from "./BatchSelection";
 import PhoneEntry from "./PhoneEntry";
 import FeeBreakdownDisplay from "./FeeBreakdown";
 
-type Step = "style" | "studio" | "batch" | "phone" | "details" | "pay" | "waiting";
+type Step = "studio" | "style" | "level" | "batch" | "phone" | "details" | "pay" | "waiting";
 
 export default function JoinBatchFlow() {
-  const [step, setStep] = useState<Step>("style");
-  const [selectedStyle, setSelectedStyle] = useState("");
+  const [step, setStep] = useState<Step>("studio");
   const [selectedStudioId, setSelectedStudioId] = useState<number | null>(null);
+  const [selectedStyle, setSelectedStyle] = useState("");
+  const [selectedLevel, setSelectedLevel] = useState("");
   const [selectedBatchIds, setSelectedBatchIds] = useState<string[]>([]);
   const [student, setStudent] = useState<any>(null);
   const [user, setUser] = useState<any>(null);
@@ -176,7 +178,6 @@ export default function JoinBatchFlow() {
         return;
       }
 
-      // Cash flow
       if (!selectedStaffId) {
         toast.error("Please select a staff member to confirm the cash payment.");
         setSubmitting(false);
@@ -210,9 +211,10 @@ export default function JoinBatchFlow() {
   };
 
   const resetFlow = () => {
-    setStep("style");
-    setSelectedStyle("");
+    setStep("studio");
     setSelectedStudioId(null);
+    setSelectedStyle("");
+    setSelectedLevel("");
     setSelectedBatchIds([]);
     setStudent(null);
     setUser(null);
@@ -220,9 +222,10 @@ export default function JoinBatchFlow() {
     setSelectedStaffId("");
   };
 
-  // Step indicator
-  const stepLabels = ["Style", "Studio", "Batch", "Verify", "Pay"];
-  const stepIdx = { style: 0, studio: 1, batch: 2, phone: 3, details: 3, pay: 4, waiting: 4 }[step];
+  const stepLabels = ["Studio", "Style", "Level", "Batch", "Verify", "Pay"];
+  const stepIdx = { studio: 0, style: 1, level: 2, batch: 3, phone: 4, details: 4, pay: 5, waiting: 5 }[step];
+
+  const getPlanPerBatchFee = (p: SubPlan) => (p.total_regular_cycles || 0) * 3767 + (p.total_grid_cycles || 0) * 5300;
 
   return (
     <div className="space-y-6">
@@ -239,13 +242,24 @@ export default function JoinBatchFlow() {
         ))}
       </div>
 
-      {step === "style" && <StyleSelection onSelectStyle={s => { setSelectedStyle(s); setStep("studio"); }} />}
-
       {step === "studio" && (
-        <StudioSelection
+        <StudioSelection onSelectStudio={id => { setSelectedStudioId(id); setStep("style"); }} />
+      )}
+
+      {step === "style" && selectedStudioId && (
+        <StyleSelection
+          studioId={selectedStudioId}
+          onSelectStyle={s => { setSelectedStyle(s); setStep("level"); }}
+          onBack={() => { setSelectedStudioId(null); setStep("studio"); }}
+        />
+      )}
+
+      {step === "level" && selectedStudioId && (
+        <LevelSelection
+          studioId={selectedStudioId}
           selectedStyle={selectedStyle}
-          onSelectStudio={id => { setSelectedStudioId(id); setStep("batch"); }}
-          onBack={() => setStep("style")}
+          onSelectLevel={l => { setSelectedLevel(l); setStep("batch"); }}
+          onBack={() => { setSelectedStyle(""); setStep("style"); }}
         />
       )}
 
@@ -253,10 +267,11 @@ export default function JoinBatchFlow() {
         <BatchSelection
           selectedStyle={selectedStyle}
           studioId={selectedStudioId}
+          selectedLevel={selectedLevel}
           selectedBatchIds={selectedBatchIds}
           onToggleBatch={toggleBatch}
           onContinue={() => setStep("phone")}
-          onBack={() => setStep("studio")}
+          onBack={() => { setSelectedLevel(""); setStep("level"); }}
         />
       )}
 
@@ -296,19 +311,37 @@ export default function JoinBatchFlow() {
             </div>
             <p className="text-sm text-muted-foreground">Welcome, <span className="text-foreground font-medium">{student?.name}</span></p>
 
-            <div>
+            {/* Plan as cards */}
+            <div className="space-y-2">
               <Label>Subscription Plan</Label>
-              <Select value={selectedPlanId} onValueChange={setSelectedPlanId}>
-                <SelectTrigger><SelectValue placeholder="Select plan" /></SelectTrigger>
-                <SelectContent>
-                  {validPlans.map(p => {
-                    const perBatchFee = (p.total_regular_cycles || 0) * 3767 + (p.total_grid_cycles || 0) * 5300;
-                    return <SelectItem key={p.id} value={String(p.id)}>{p.name} — ₹{perBatchFee.toLocaleString("en-IN")}/batch</SelectItem>;
-                  })}
-                </SelectContent>
-              </Select>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {validPlans.map(p => {
+                  const isSelected = selectedPlanId === String(p.id);
+                  const perBatch = getPlanPerBatchFee(p);
+                  return (
+                    <Card
+                      key={p.id}
+                      className={`cursor-pointer transition-all duration-200 ${isSelected ? "ring-2 ring-primary glow-primary" : "hover:border-primary/50"}`}
+                      onClick={() => setSelectedPlanId(String(p.id))}
+                    >
+                      <CardContent className="p-4 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-display font-semibold text-foreground">{p.name}</h4>
+                          {isSelected && (
+                            <div className="h-5 w-5 rounded-full gradient-primary flex items-center justify-center">
+                              <Check className="h-3 w-3 text-primary-foreground" />
+                            </div>
+                          )}
+                        </div>
+                        <p className="text-lg font-bold text-foreground">₹{perBatch.toLocaleString("en-IN")}<span className="text-xs font-normal text-muted-foreground">/batch</span></p>
+                        <p className="text-xs text-muted-foreground">{p.total_cycles} cycle{p.total_cycles > 1 ? "s" : ""}</p>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
               {assignment && (
-                <div className="mt-2 p-2 rounded border border-border text-sm">
+                <div className="p-2 rounded border border-border text-sm">
                   <p className="text-muted-foreground">Validity: <span className="text-foreground font-medium">{assignment.startCycle.name}</span> → <span className="text-foreground font-medium">{assignment.endCycle.name}</span></p>
                 </div>
               )}

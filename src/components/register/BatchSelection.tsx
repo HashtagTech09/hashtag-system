@@ -9,13 +9,14 @@ import { ArrowLeft, Clock, Users, User } from "lucide-react";
 interface BatchSelectionProps {
   selectedStyle: string;
   studioId: number;
+  selectedLevel: string;
   selectedBatchIds: string[];
   onToggleBatch: (id: string) => void;
   onContinue: () => void;
   onBack: () => void;
 }
 
-export default function BatchSelection({ selectedStyle, studioId, selectedBatchIds, onToggleBatch, onContinue, onBack }: BatchSelectionProps) {
+export default function BatchSelection({ selectedStyle, studioId, selectedLevel, selectedBatchIds, onToggleBatch, onContinue, onBack }: BatchSelectionProps) {
   const [batches, setBatches] = useState<any[]>([]);
   const [instructors, setInstructors] = useState<Record<number, string>>({});
   const [enrollCounts, setEnrollCounts] = useState<Record<number, number>>({});
@@ -23,7 +24,7 @@ export default function BatchSelection({ selectedStyle, studioId, selectedBatchI
 
   useEffect(() => {
     const fetch = async () => {
-      let query = supabase.from("batches").select("*").eq("organization_id", 1).eq("studio_id", studioId);
+      let query = supabase.from("batches").select("*").eq("organization_id", 1).eq("studio_id", studioId).eq("level", selectedLevel);
       if (selectedStyle === "Kids") {
         query = query.ilike("level", "Kids%");
       } else {
@@ -33,7 +34,6 @@ export default function BatchSelection({ selectedStyle, studioId, selectedBatchI
       const batchList = batchData || [];
       setBatches(batchList);
 
-      // Fetch instructor names
       const instrIds = [...new Set(batchList.map(b => b.instructor_id).filter(Boolean))];
       if (instrIds.length > 0) {
         const { data: users } = await supabase.from("users").select("id, name").in("id", instrIds);
@@ -42,7 +42,6 @@ export default function BatchSelection({ selectedStyle, studioId, selectedBatchI
         setInstructors(map);
       }
 
-      // Fetch active enrollment counts per batch for "spots left"
       const todayStr = new Date().toISOString().split("T")[0];
       const batchIds = batchList.map(b => b.id);
       if (batchIds.length > 0) {
@@ -59,7 +58,7 @@ export default function BatchSelection({ selectedStyle, studioId, selectedBatchI
       setLoading(false);
     };
     fetch();
-  }, [selectedStyle, studioId]);
+  }, [selectedStyle, studioId, selectedLevel]);
 
   const formatSchedule = (schedule: any) => {
     if (!schedule || !Array.isArray(schedule)) return null;
@@ -133,7 +132,7 @@ export default function BatchSelection({ selectedStyle, studioId, selectedBatchI
       </div>
 
       {batches.length === 0 && (
-        <p className="text-center text-muted-foreground py-6">No batches available at this studio</p>
+        <p className="text-center text-muted-foreground py-6">No batches available</p>
       )}
 
       {selectedBatchIds.length > 0 && (
