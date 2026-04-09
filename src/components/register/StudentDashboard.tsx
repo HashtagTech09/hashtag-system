@@ -382,35 +382,49 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
             <Button variant="ghost" size="sm" onClick={() => setMode("view")}>← Back</Button>
           </div>
 
+          {/* Step 1: Select Batches — grouped by Studio → Style */}
+          <div>
+            <Label>Select Batches</Label>
+            <BatchGroupedSelector
+              batches={batches}
+              studios={studios}
+              selectedBatchIds={selectedBatchIds}
+              onToggle={toggleBatch}
+            />
+          </div>
+
+          {/* Step 2: Plan Cards */}
           <div>
             <Label>Subscription Plan</Label>
-            <Select value={selectedPlanId} onValueChange={setSelectedPlanId}>
-              <SelectTrigger><SelectValue placeholder="Select plan" /></SelectTrigger>
-              <SelectContent>
-                {validPlans.map(p => {
-                  const pk = getPlanKey(p.total_regular_cycles || 0, p.total_grid_cycles || 0);
-                  const ft = PLAN_FIXED_TOTALS[pk];
-                  const perBatchFee = ft !== undefined ? Math.round(ft / 1.18) : (p.total_regular_cycles || 0) * REGULAR_PRICE + (p.total_grid_cycles || 0) * GRID_PRICE;
-                  return <SelectItem key={p.id} value={String(p.id)}>{p.name} — ₹{perBatchFee.toLocaleString("en-IN")}/batch</SelectItem>;
-                })}
-              </SelectContent>
-            </Select>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+              {validPlans.map(p => {
+                const pk = getPlanKey(p.total_regular_cycles || 0, p.total_grid_cycles || 0);
+                const ft = PLAN_FIXED_TOTALS[pk];
+                const perBatchFee = ft !== undefined ? Math.round(ft / 1.18) : (p.total_regular_cycles || 0) * REGULAR_PRICE + (p.total_grid_cycles || 0) * GRID_PRICE;
+                const isSelected = selectedPlanId === String(p.id);
+                return (
+                  <Card
+                    key={p.id}
+                    className={`cursor-pointer transition-all duration-200 hover:scale-[1.02] ${isSelected ? "border-primary ring-1 ring-primary" : "hover:border-primary/40"}`}
+                    onClick={() => setSelectedPlanId(String(p.id))}
+                  >
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between mb-1">
+                        <h4 className="font-display font-semibold text-foreground">{p.name}</h4>
+                        {isSelected && <Check className="h-5 w-5 text-primary" />}
+                      </div>
+                      <p className="text-sm text-muted-foreground">₹{perBatchFee.toLocaleString("en-IN")}/batch</p>
+                      <p className="text-xs text-muted-foreground">{p.total_cycles} cycle{p.total_cycles > 1 ? "s" : ""}</p>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
             {assignment && (
               <div className="mt-2 p-2 rounded border border-border text-sm">
                 <p className="text-muted-foreground">Validity: <span className="text-foreground font-medium">{assignment.startCycle.name}</span> → <span className="text-foreground font-medium">{assignment.endCycle.name}</span></p>
               </div>
             )}
-          </div>
-
-          <div>
-            <Label>Select Batches</Label>
-            <div className="flex flex-wrap gap-2 mt-2">
-              {batches.map(b => (
-                <Badge key={b.id} variant={selectedBatchIds.includes(String(b.id)) ? "default" : "outline"}
-                  className={`cursor-pointer ${selectedBatchIds.includes(String(b.id)) ? "gradient-primary" : ""}`}
-                  onClick={() => toggleBatch(String(b.id))}>{b.name}</Badge>
-              ))}
-            </div>
           </div>
 
           <div>
