@@ -10,9 +10,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Search, Trash2, Edit, Upload, Star } from "lucide-react";
+import { Plus, Search, Trash2, Edit, Upload, Star, KeyRound } from "lucide-react";
 import { toast } from "sonner";
 import { ALL_ROLES, roleColors, type UserRole } from "@/lib/roleUtils";
+import { useAuth } from "@/hooks/useAuth";
 
 interface RoleRecord {
   id: number;
@@ -21,6 +22,7 @@ interface RoleRecord {
 }
 
 const UsersPage = () => {
+  const { session } = useAuth();
   const [staff, setStaff] = useState<any[]>([]);
   const [roles, setRoles] = useState<RoleRecord[]>([]);
   const [search, setSearch] = useState("");
@@ -31,6 +33,9 @@ const UsersPage = () => {
   const [editId, setEditId] = useState<number | null>(null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [authDialogOpen, setAuthDialogOpen] = useState(false);
+  const [authForm, setAuthForm] = useState({ userId: 0, userName: "", email: "", password: "" });
+  const [authLoading, setAuthLoading] = useState(false);
 
   const fetchData = async () => {
     const [staffRes, rolesRes] = await Promise.all([
