@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { todayIST } from "@/lib/dateUtils";
 import { supabase } from "@/integrations/supabase/client";
 import { getCurrentCycle } from "@/lib/cycleUtils";
+import { useAuth } from "@/hooks/useAuth";
 import AdminLayout from "@/components/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,7 @@ import { Check, X } from "lucide-react";
 import { getDisplayPhone } from "@/lib/studentUtils";
 
 const AttendancePage = () => {
+  const { staffUser, isInstructor, isAdminOrManager } = useAuth();
   const [batches, setBatches] = useState<any[]>([]);
   const [selectedBatch, setSelectedBatch] = useState<string>("");
   const [students, setStudents] = useState<any[]>([]);
@@ -21,15 +23,20 @@ const AttendancePage = () => {
 
   useEffect(() => {
     const fetchBatches = async () => {
+      let batchQuery = supabase.from("batches").select("*").eq("organization_id", 1).order("name");
+      // If instructor, only show their batches
+      if (isInstructor && !isAdminOrManager && staffUser) {
+        batchQuery = batchQuery.or(`instructor_id.eq.${staffUser.id},instructor_2_id.eq.${staffUser.id}`);
+      }
       const [batchRes, cycleRes] = await Promise.all([
-        supabase.from("batches").select("*").eq("organization_id", 1).order("name"),
+        batchQuery,
         supabase.from("plan_cycles").select("*").eq("organization_id", 1).order("start_date"),
       ]);
       setBatches(batchRes.data || []);
       setPlanCycles(cycleRes.data || []);
     };
     fetchBatches();
-  }, []);
+  }, [staffUser, isInstructor, isAdminOrManager]);
 
   // Helper to get schedule days from batch
   const getBatchDays = (batch: any): string[] => {
