@@ -852,7 +852,7 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
                         {addBatchBreakdown.batchAllocations.map((alloc, idx) => (
                           <div key={idx} className="flex justify-between text-xs">
                             <span className={alloc.amount === 0 ? "text-muted-foreground line-through" : alloc.is_existing ? "text-foreground" : "text-foreground font-medium"}>
-                              {alloc.batch_name}
+                              {alloc.batch_name}{(() => { const b = batches.find(b => b.id === alloc.batch_id); return b?.batch_code ? ` (${b.batch_code})` : ""; })()}
                               {alloc.is_existing
                                 ? alloc.amount === 0 ? " (Covered)" : ` (+${alloc.missingCycleIds.length} cycle${alloc.missingCycleIds.length > 1 ? "s" : ""}${alloc.discountPct > 0 ? `, ${Math.round(alloc.discountPct * 100)}% off` : ""})`
                                 : alloc.discountPct > 0 ? ` (New, ${Math.round(alloc.discountPct * 100)}% off)` : " (New)"
