@@ -1,37 +1,56 @@
 
 
-# Studio Dropdown, Batch Cards, and Add Batch Primary Logic
+# Add Hashtag Logo + Rebrand to "Hashtag"
+
+## Overview
+Copy the uploaded logo files into the project, use `Pink.png` as favicon, and replace the `#` text / Music icon with the actual logo image across all branding touchpoints. Rename "Hashtag Dance" / "Dance Studio" to just "Hashtag" (or "Hashtag For Dance" where a longer form is needed).
+
+## Assets
+- Copy `user-uploads://hashtaglogo.png` → `public/images/hashtag-logo.png` (main logo, white bg — for dark UI use)
+- Copy `user-uploads://Pink.png` → `public/favicon.png` and `src/assets/hashtag-pink.png` (pink logo — favicon + small inline use)
 
 ## Changes
 
-### 1. Studios: Replace card grid with a dropdown
-In the "studio" sub-step (and "batches" sub-step header), replace the grid of studio cards with a `Select` dropdown. When a studio is selected, immediately show batches below (merge "studio" and "batches" into one step — dropdown at top, batch cards below).
+### `index.html`
+- Delete `public/favicon.ico` if exists
+- Add `<link rel="icon" href="/favicon.png" type="image/png">`
+- Title: "Hashtag | Management System"
+- Meta descriptions: "Hashtag For Dance" instead of "Hashtag Dance Company/Studio"
 
-### 2. Batches: Replace small badges with larger cards
-Replace the current `Badge` toggles with proper `Card` components showing:
-- **Batch name** (e.g., "Jazz1-NDA")
-- **Batch code** (batch_code field)
-- **Timings** — parsed from the `schedule` JSONB field (day + start/end time)
-- **Current validity** — if the student has an active enrollment for this batch, show the enrollment end_date with a green "Active till..." indicator
-- Selected state indicated by a border highlight + checkmark
+### `src/pages/Login.tsx`
+- Replace `<span className="text-gradient">#</span> Dance Studio` with `<img>` of pink logo (small, ~32px) + "Hashtag"
+- Subtitle: "Staff Portal" stays
 
-### 3. Add Batch pricing logic: New batch = primary (no discount)
-Current logic: existing batches keep their positional rank (1st=0%, 2nd=12%, etc.) and new batches get the next position's discount.
+### `src/components/AppSidebar.tsx`
+- Replace text `# Dance Studio` (line 78) with pink logo img (~24px) + "Hashtag"
+- Collapsed state (line 81): show just the small pink logo instead of `#` text
 
-New logic:
-- The **new batch(es) being added become position 1** (primary, full price for their full plan cycles)
-- **Existing batches that need validity extension** are charged for missing cycles at discounted rates (2nd=12%, 3rd=13%, etc.)
-- Existing batches already fully covered = ₹0
+### `src/pages/Register.tsx`
+- Replace Music icon + "Hashtag Dance" with pink logo img (~32px) + "Hashtag"
+- Subtitle: "Student Registration Portal" stays
 
-Update `computeAddBatchBreakdown` in `enrollmentUtils.ts` to reorder: new batches first (position 1, 2, ...), then existing batches that need extension (position N+1, N+2, ...).
+### `src/pages/ConfirmCash.tsx`
+- Same as Register — replace Music icon with pink logo + rename to "Hashtag"
 
-### Example
-Student has 2 batches (valid till May). Adds 1 new batch, selects Apr+May+Grid plan:
-- New batch = position 1: full price for 3 cycles (Apr+May+Grid) = base
-- Existing batch 1 = position 2: Grid only at 12% discount
-- Existing batch 2 = position 3: Grid only at 13% discount
+### `src/lib/razorpayUtils.ts`
+- Change `name: "Hashtag Dance"` → `name: "Hashtag"`
+
+### Edge functions (email templates)
+- `send-receipt/index.ts`: Change `<h1>Hashtag Dance</h1>` → `<h1>Hashtag</h1>`, `from:` field to `"Hashtag <receipts@hashtagdance.in>"`
+- `send-cash-confirmation/index.ts`: Same rename in HTML and `from:` field
+- `send-test-message/index.ts`: Same rename throughout
+
+### `src/components/AdminLayout.tsx`
+- No logo needed here (just shows page title), no changes
 
 ## Files changed
-- `src/components/register/StudentDashboard.tsx` — dropdown for studios, batch cards with timings/validity, UI restructure
-- `src/lib/enrollmentUtils.ts` — reorder `computeAddBatchBreakdown` so new batches are primary (position 1+) and existing batches are secondary
+- `index.html` — favicon + title/meta rebrand
+- `src/pages/Login.tsx` — logo + rename
+- `src/components/AppSidebar.tsx` — logo + rename
+- `src/pages/Register.tsx` — logo + rename
+- `src/pages/ConfirmCash.tsx` — logo + rename
+- `src/lib/razorpayUtils.ts` — rename
+- `supabase/functions/send-receipt/index.ts` — rename
+- `supabase/functions/send-cash-confirmation/index.ts` — rename
+- `supabase/functions/send-test-message/index.ts` — rename
 
