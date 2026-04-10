@@ -14,6 +14,23 @@ import { initiateRazorpayPayment } from "@/lib/razorpayUtils";
 import { sortBatchesByHierarchy, computePaymentAllocations } from "@/lib/styleHierarchy";
 import { MapPin, ChevronRight, ShoppingCart, X, Check, ArrowLeft, Trash2 } from "lucide-react";
 
+/** Format "2026-07-31" → "31 Jul'26" */
+function formatDate(dateStr: string): string {
+  if (!dateStr) return "";
+  const [y, m, d] = dateStr.split("-");
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  return `${parseInt(d)} ${months[parseInt(m) - 1]}'${y.slice(2)}`;
+}
+
+/** Find gap cycles between start and end that are NOT in matched */
+function findGapCycles(planCycles: PlanCycle[], matched: PlanCycle[], startCycleId: number, endCycleId: number): PlanCycle[] {
+  const matchedIds = new Set(matched.map(c => c.id));
+  const startIdx = planCycles.findIndex(c => c.id === startCycleId);
+  const endIdx = planCycles.findIndex(c => c.id === endCycleId);
+  if (startIdx === -1 || endIdx === -1) return [];
+  return planCycles.slice(startIdx, endIdx + 1).filter(c => !matchedIds.has(c.id));
+}
+
 interface StudentDashboardProps {
   student: any;
   user: any;
@@ -45,7 +62,7 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
 
   const fetchData = async () => {
     const [enrollRes, batchRes, planRes, cycleRes, studioRes] = await Promise.all([
-      supabase.from("enrollments").select("*, batches(name, studio_id, style_base), subscription_plans(name), start_cycle:plan_cycles!enrollments_start_cycle_id_fkey(name), end_cycle:plan_cycles!enrollments_end_cycle_id_fkey(name)").eq("student_id", student.id).eq("organization_id", 1).order("end_date", { ascending: false }),
+      supabase.from("enrollments").select("*, batches(name, batch_code, studio_id, style_base), subscription_plans(name), start_cycle:plan_cycles!enrollments_start_cycle_id_fkey(name), end_cycle:plan_cycles!enrollments_end_cycle_id_fkey(name)").eq("student_id", student.id).eq("organization_id", 1).order("end_date", { ascending: false }),
       supabase.from("batches").select("*").eq("organization_id", 1).order("name"),
       supabase.from("subscription_plans").select("*").eq("organization_id", 1).eq("is_active", true).order("id"),
       supabase.from("plan_cycles").select("*").eq("organization_id", 1).order("start_date"),
@@ -515,7 +532,7 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="font-medium text-foreground">{e.batches?.name}</p>
-                        <p className="text-xs text-muted-foreground">{e.start_date} → {e.end_date}</p>
+                        <p className="text-xs text-muted-foreground">{formatDate(e.start_date)} → {formatDate(e.end_date)}</p>
                         {e.subscription_plans?.name && <p className="text-xs text-muted-foreground">{e.subscription_plans.name}</p>}
                       </div>
                       <Badge variant="secondary" className="bg-success/20 text-success">Active</Badge>
@@ -533,7 +550,7 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
                 <Card key={e.id} className="border-border/30">
                   <CardContent className="p-3 opacity-60">
                     <p className="font-medium text-foreground">{e.batches?.name}</p>
-                    <p className="text-xs text-muted-foreground">{e.start_date} → {e.end_date}</p>
+                    <p className="text-xs text-muted-foreground">{formatDate(e.start_date)} → {formatDate(e.end_date)}</p>
                   </CardContent>
                 </Card>
               ))}
@@ -571,7 +588,10 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
             <div>
               <Label className="text-xs text-muted-foreground">Current Batches</Label>
               <div className="flex flex-wrap gap-2 mt-1">
-                {activeEnrollments.map(e => <Badge key={e.id} variant="secondary" className="opacity-60">{e.batches?.name}</Badge>)}
+                {activeEnrollments.map(e => {
+                  const studio = studios.find(s => s.id === e.batches?.studio_id);
+                  return <Badge key={e.id} variant="secondary" className="opacity-60">{e.batches?.name}{e.batches?.batch_code ? ` (${e.batches.batch_code})` : ""}{studio ? ` · ${studio.name}` : ""}</Badge>;
+                })}
               </div>
             </div>
           )}
@@ -638,7 +658,7 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
                                     )}
                                     {existingEnrollment && (
                                       <Badge variant="secondary" className="bg-success/20 text-success text-[10px] mt-1">
-                                        Active till {existingEnrollment.end_date}
+                                        Active till {formatDate(existingEnrollment.end_date)}
                                       </Badge>
                                     )}
                                   </div>
@@ -719,7 +739,17 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
                     </div>
                     {assignment && (
                       <div className="mt-2 p-2 rounded border border-border text-sm">
-                        <p className="text-muted-foreground">Validity: <span className="text-foreground font-medium">{assignment.startCycle.name}</span> → <span className="text-foreground font-medium">{assignment.endCycle.name}</span></p>
+                        <p className="text-muted-foreground">Validity: <span className="text-foreground font-medium">{formatDate(assignment.startCycle.start_date)}</span> → <span className="text-foreground font-medium">{formatDate(assignment.endCycle.end_date || assignment.endCycle.start_date)}</span></p>
+                        {(() => {
+                          const gaps = findGapCycles(planCycles, assignment.matched, assignment.startCycle.id, assignment.endCycle.id);
+                          return gaps.length > 0 ? (
+                            <div className="mt-1 space-y-0.5">
+                              {gaps.map(g => (
+                                <p key={g.id} className="text-xs text-warning">Not valid: {g.name} ({formatDate(g.start_date)} → {formatDate(g.end_date || g.start_date)})</p>
+                              ))}
+                            </div>
+                          ) : null;
+                        })()}
                       </div>
                     )}
                   </div>
@@ -750,7 +780,14 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
                   <div>
                     <Label className="text-xs text-muted-foreground">Existing Batches ({activeEnrollments.length})</Label>
                     <div className="flex flex-wrap gap-2 mt-1">
-                      {activeEnrollments.map(e => <Badge key={e.id} variant="secondary" className="opacity-60">{e.batches?.name}</Badge>)}
+                      {activeEnrollments.map(e => {
+                        const studio = studios.find(s => s.id === e.batches?.studio_id);
+                        return (
+                          <Badge key={e.id} variant="secondary" className="opacity-60">
+                            {e.batches?.name}{e.batches?.batch_code ? ` (${e.batches.batch_code})` : ""}{studio ? ` · ${studio.name}` : ""}
+                          </Badge>
+                        );
+                      })}
                     </div>
                   </div>
 
@@ -783,7 +820,17 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
                     </div>
                     {addAssignment && (
                       <div className="mt-2 p-2 rounded border border-border text-sm">
-                        <p className="text-muted-foreground">Validity: <span className="text-foreground font-medium">{addAssignment.startCycle.name}</span> → <span className="text-foreground font-medium">{addAssignment.endCycle.name}</span></p>
+                        <p className="text-muted-foreground">Validity: <span className="text-foreground font-medium">{formatDate(addAssignment.startCycle.start_date)}</span> → <span className="text-foreground font-medium">{formatDate(addAssignment.endCycle.end_date || addAssignment.endCycle.start_date)}</span></p>
+                        {(() => {
+                          const gaps = findGapCycles(planCycles, addAssignment.matched, addAssignment.startCycle.id, addAssignment.endCycle.id);
+                          return gaps.length > 0 ? (
+                            <div className="mt-1 space-y-0.5">
+                              {gaps.map(g => (
+                                <p key={g.id} className="text-xs text-warning">Not valid: {g.name} ({formatDate(g.start_date)} → {formatDate(g.end_date || g.start_date)})</p>
+                              ))}
+                            </div>
+                          ) : null;
+                        })()}
                       </div>
                     )}
                   </div>
@@ -808,7 +855,7 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
                         {addBatchBreakdown.batchAllocations.map((alloc, idx) => (
                           <div key={idx} className="flex justify-between text-xs">
                             <span className={alloc.amount === 0 ? "text-muted-foreground line-through" : alloc.is_existing ? "text-foreground" : "text-foreground font-medium"}>
-                              {alloc.batch_name}
+                              {alloc.batch_name}{(() => { const b = batches.find(b => b.id === alloc.batch_id); return b?.batch_code ? ` (${b.batch_code})` : ""; })()}
                               {alloc.is_existing
                                 ? alloc.amount === 0 ? " (Covered)" : ` (+${alloc.missingCycleIds.length} cycle${alloc.missingCycleIds.length > 1 ? "s" : ""}${alloc.discountPct > 0 ? `, ${Math.round(alloc.discountPct * 100)}% off` : ""})`
                                 : alloc.discountPct > 0 ? ` (New, ${Math.round(alloc.discountPct * 100)}% off)` : " (New)"
