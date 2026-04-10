@@ -14,6 +14,23 @@ import { initiateRazorpayPayment } from "@/lib/razorpayUtils";
 import { sortBatchesByHierarchy, computePaymentAllocations } from "@/lib/styleHierarchy";
 import { MapPin, ChevronRight, ShoppingCart, X, Check, ArrowLeft, Trash2 } from "lucide-react";
 
+/** Format "2026-07-31" → "31 Jul'26" */
+function formatDate(dateStr: string): string {
+  if (!dateStr) return "";
+  const [y, m, d] = dateStr.split("-");
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  return `${parseInt(d)} ${months[parseInt(m) - 1]}'${y.slice(2)}`;
+}
+
+/** Find gap cycles between start and end that are NOT in matched */
+function findGapCycles(planCycles: PlanCycle[], matched: PlanCycle[], startCycleId: number, endCycleId: number): PlanCycle[] {
+  const matchedIds = new Set(matched.map(c => c.id));
+  const startIdx = planCycles.findIndex(c => c.id === startCycleId);
+  const endIdx = planCycles.findIndex(c => c.id === endCycleId);
+  if (startIdx === -1 || endIdx === -1) return [];
+  return planCycles.slice(startIdx, endIdx + 1).filter(c => !matchedIds.has(c.id));
+}
+
 interface StudentDashboardProps {
   student: any;
   user: any;
