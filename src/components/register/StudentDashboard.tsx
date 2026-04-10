@@ -532,7 +532,7 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="font-medium text-foreground">{e.batches?.name}</p>
-                        <p className="text-xs text-muted-foreground">{e.start_date} → {e.end_date}</p>
+                        <p className="text-xs text-muted-foreground">{formatDate(e.start_date)} → {formatDate(e.end_date)}</p>
                         {e.subscription_plans?.name && <p className="text-xs text-muted-foreground">{e.subscription_plans.name}</p>}
                       </div>
                       <Badge variant="secondary" className="bg-success/20 text-success">Active</Badge>
