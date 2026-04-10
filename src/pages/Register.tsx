@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Music } from "lucide-react";
+import hashtagLogo from "@/assets/hashtag-pink.png";
 import JoinBatchFlow from "@/components/register/JoinBatchFlow";
 import DropInFlow from "@/components/register/DropInFlow";
 import AccountFlow from "@/components/register/AccountFlow";
@@ -13,11 +13,9 @@ const RegisterPage = () => {
       {/* Header */}
       <div className="border-b border-border bg-card/50 backdrop-blur-xl sticky top-0 z-50">
         <div className="max-w-2xl mx-auto px-4 py-4 flex items-center gap-3">
-          <div className="h-10 w-10 rounded-lg gradient-primary flex items-center justify-center">
-            <Music className="h-5 w-5 text-primary-foreground" />
-          </div>
+          <img src={hashtagLogo} alt="Hashtag" className="h-10 w-10 rounded-lg" />
           <div>
-            <h1 className="font-display font-bold text-foreground text-lg">Hashtag Dance</h1>
+            <h1 className="font-display font-bold text-foreground text-lg">Hashtag</h1>
             <p className="text-xs text-muted-foreground">Student Registration Portal</p>
           </div>
         </div>
