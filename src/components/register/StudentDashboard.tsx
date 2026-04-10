@@ -550,7 +550,7 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
                 <Card key={e.id} className="border-border/30">
                   <CardContent className="p-3 opacity-60">
                     <p className="font-medium text-foreground">{e.batches?.name}</p>
-                    <p className="text-xs text-muted-foreground">{e.start_date} → {e.end_date}</p>
+                    <p className="text-xs text-muted-foreground">{formatDate(e.start_date)} → {formatDate(e.end_date)}</p>
                   </CardContent>
                 </Card>
               ))}
@@ -655,7 +655,7 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
                                     )}
                                     {existingEnrollment && (
                                       <Badge variant="secondary" className="bg-success/20 text-success text-[10px] mt-1">
-                                        Active till {existingEnrollment.end_date}
+                                        Active till {formatDate(existingEnrollment.end_date)}
                                       </Badge>
                                     )}
                                   </div>
@@ -736,7 +736,17 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
                     </div>
                     {assignment && (
                       <div className="mt-2 p-2 rounded border border-border text-sm">
-                        <p className="text-muted-foreground">Validity: <span className="text-foreground font-medium">{assignment.startCycle.name}</span> → <span className="text-foreground font-medium">{assignment.endCycle.name}</span></p>
+                        <p className="text-muted-foreground">Validity: <span className="text-foreground font-medium">{formatDate(assignment.startCycle.start_date)}</span> → <span className="text-foreground font-medium">{formatDate(assignment.endCycle.end_date || assignment.endCycle.start_date)}</span></p>
+                        {(() => {
+                          const gaps = findGapCycles(planCycles, assignment.matched, assignment.startCycle.id, assignment.endCycle.id);
+                          return gaps.length > 0 ? (
+                            <div className="mt-1 space-y-0.5">
+                              {gaps.map(g => (
+                                <p key={g.id} className="text-xs text-warning">Not valid: {g.name} ({formatDate(g.start_date)} → {formatDate(g.end_date || g.start_date)})</p>
+                              ))}
+                            </div>
+                          ) : null;
+                        })()}
                       </div>
                     )}
                   </div>
@@ -800,7 +810,17 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
                     </div>
                     {addAssignment && (
                       <div className="mt-2 p-2 rounded border border-border text-sm">
-                        <p className="text-muted-foreground">Validity: <span className="text-foreground font-medium">{addAssignment.startCycle.name}</span> → <span className="text-foreground font-medium">{addAssignment.endCycle.name}</span></p>
+                        <p className="text-muted-foreground">Validity: <span className="text-foreground font-medium">{formatDate(addAssignment.startCycle.start_date)}</span> → <span className="text-foreground font-medium">{formatDate(addAssignment.endCycle.end_date || addAssignment.endCycle.start_date)}</span></p>
+                        {(() => {
+                          const gaps = findGapCycles(planCycles, addAssignment.matched, addAssignment.startCycle.id, addAssignment.endCycle.id);
+                          return gaps.length > 0 ? (
+                            <div className="mt-1 space-y-0.5">
+                              {gaps.map(g => (
+                                <p key={g.id} className="text-xs text-warning">Not valid: {g.name} ({formatDate(g.start_date)} → {formatDate(g.end_date || g.start_date)})</p>
+                              ))}
+                            </div>
+                          ) : null;
+                        })()}
                       </div>
                     )}
                   </div>
