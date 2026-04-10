@@ -588,7 +588,10 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
             <div>
               <Label className="text-xs text-muted-foreground">Current Batches</Label>
               <div className="flex flex-wrap gap-2 mt-1">
-                {activeEnrollments.map(e => <Badge key={e.id} variant="secondary" className="opacity-60">{e.batches?.name}</Badge>)}
+                {activeEnrollments.map(e => {
+                  const studio = studios.find(s => s.id === e.batches?.studio_id);
+                  return <Badge key={e.id} variant="secondary" className="opacity-60">{e.batches?.name}{e.batches?.batch_code ? ` (${e.batches.batch_code})` : ""}{studio ? ` · ${studio.name}` : ""}</Badge>;
+                })}
               </div>
             </div>
           )}
