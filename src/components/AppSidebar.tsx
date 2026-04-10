@@ -74,11 +74,12 @@ export function AppSidebar() {
       <SidebarContent>
         <div className="p-4 mb-2">
           {!collapsed && (
-            <h2 className="text-lg font-bold font-display">
-              <span className="text-gradient">#</span> Dance Studio
-            </h2>
+            <div className="flex items-center gap-2">
+              <img src="/favicon.png" alt="Hashtag" className="h-6 w-6" />
+              <h2 className="text-lg font-bold font-display">Hashtag</h2>
+            </div>
           )}
-          {collapsed && <span className="text-xl font-bold text-gradient">#</span>}
+          {collapsed && <img src="/favicon.png" alt="Hashtag" className="h-6 w-6" />}
         </div>
 
         {mainItems.length > 0 && (

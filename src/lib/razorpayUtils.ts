@@ -69,7 +69,7 @@ export async function initiateRazorpayPayment({ orderParams, onSuccess, onFailur
       key: razorpay_key_id,
       amount,
       currency: "INR",
-      name: "Hashtag Dance",
+      name: "Hashtag",
       description: `Registration - ${orderParams.plan_name}`,
       order_id,
       prefill: {

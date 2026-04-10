@@ -29,9 +29,10 @@ const LoginPage = () => {
     <div className="min-h-screen flex items-center justify-center bg-background">
       <div className="w-full max-w-md p-8 glass-card rounded-xl glow-primary animate-fade-in">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold font-display">
-            <span className="text-gradient">#</span> Dance Studio
-          </h1>
+          <div className="flex items-center justify-center gap-2">
+            <img src="/favicon.png" alt="Hashtag" className="h-8 w-8" />
+            <h1 className="text-3xl font-bold font-display">Hashtag</h1>
+          </div>
           <p className="text-muted-foreground mt-2">Staff Portal</p>
         </div>
 

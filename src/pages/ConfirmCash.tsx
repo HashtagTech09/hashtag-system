@@ -4,7 +4,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Music, CheckCircle, XCircle, Loader2 } from "lucide-react";
+import { CheckCircle, XCircle, Loader2 } from "lucide-react";
+import hashtagLogo from "@/assets/hashtag-pink.png";
 
 const ConfirmCashPage = () => {
   const [searchParams] = useSearchParams();
@@ -119,11 +120,9 @@ const ConfirmCashPage = () => {
     <div className="min-h-screen bg-background">
       <div className="border-b border-border bg-card/50 backdrop-blur-xl sticky top-0 z-50">
         <div className="max-w-lg mx-auto px-4 py-4 flex items-center gap-3">
-          <div className="h-10 w-10 rounded-lg gradient-primary flex items-center justify-center">
-            <Music className="h-5 w-5 text-primary-foreground" />
-          </div>
+          <img src={hashtagLogo} alt="Hashtag" className="h-10 w-10 rounded-lg" />
           <div>
-            <h1 className="font-display font-bold text-foreground text-lg">Hashtag Dance</h1>
+            <h1 className="font-display font-bold text-foreground text-lg">Hashtag</h1>
             <p className="text-xs text-muted-foreground">Cash Payment Confirmation</p>
           </div>
         </div>

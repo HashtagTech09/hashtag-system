@@ -37,7 +37,7 @@ Deno.serve(async (req) => {
 <body style="font-family:Arial,sans-serif;background:#f9f9f9;padding:20px">
 <div style="max-width:500px;margin:0 auto;background:#fff;border-radius:12px;padding:30px;box-shadow:0 2px 10px rgba(0,0,0,0.08)">
   <div style="text-align:center;margin-bottom:20px">
-    <h1 style="color:#7c3aed;margin:0;font-size:24px">Hashtag Dance</h1>
+    <h1 style="color:#7c3aed;margin:0;font-size:24px">Hashtag</h1>
     <p style="color:#888;font-size:13px;margin:4px 0">Cash Payment Confirmation</p>
   </div>
   <hr style="border:none;border-top:1px solid #eee;margin:16px 0">
@@ -58,7 +58,7 @@ Deno.serve(async (req) => {
       method: "POST",
       headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        from: "Hashtag Dance <receipts@hashtagdance.in>",
+        from: "Hashtag <receipts@hashtagdance.in>",
         to: [staff_email],
         subject: `Cash Payment Confirmation - ${student_name} - ₹${amount}`,
         html: htmlContent,
