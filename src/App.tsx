@@ -20,6 +20,7 @@ import DropInsPage from "./pages/DropIns";
 import ImportPage from "./pages/Import";
 import RegisterPage from "./pages/Register";
 import ConfirmCashPage from "./pages/ConfirmCash";
+import ResetPasswordPage from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -62,6 +63,7 @@ const AppRoutes = () => (
     <Route path="/import" element={<ProtectedRoute><ImportPage /></ProtectedRoute>} />
     <Route path="/register" element={<RegisterPage />} />
     <Route path="/confirm-cash" element={<ConfirmCashPage />} />
+    <Route path="/reset-password" element={<ResetPasswordPage />} />
     <Route path="*" element={<NotFound />} />
   </Routes>
 );

@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 
 const LoginPage = () => {
@@ -11,6 +11,7 @@ const LoginPage = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [forgotPassword, setForgotPassword] = useState(false);
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,6 +21,22 @@ const LoginPage = () => {
       toast.success("Logged in successfully");
     } catch (err: any) {
       toast.error(err.message || "Login failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      if (error) throw error;
+      toast.success("Check your email for a password reset link");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to send reset email");
     } finally {
       setLoading(false);
     }
@@ -36,11 +53,35 @@ const LoginPage = () => {
           <p className="text-muted-foreground mt-2">Staff Portal</p>
         </div>
 
-        <Tabs defaultValue="email">
-          <TabsList className="w-full mb-4">
-            <TabsTrigger value="email" className="flex-1">Email & Password</TabsTrigger>
-          </TabsList>
-          <TabsContent value="email">
+        {forgotPassword ? (
+          <form onSubmit={handleForgotPassword} className="space-y-5">
+            <p className="text-sm text-muted-foreground">
+              Enter your email and we'll send you a link to reset your password.
+            </p>
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="staff@hashtag.dance"
+                required
+              />
+            </div>
+            <Button type="submit" className="w-full gradient-primary" disabled={loading}>
+              {loading ? "Sending..." : "Send Reset Link"}
+            </Button>
+            <button
+              type="button"
+              onClick={() => setForgotPassword(false)}
+              className="w-full text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Back to login
+            </button>
+          </form>
+        ) : (
+          <>
             <form onSubmit={handleEmailLogin} className="space-y-5">
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
@@ -69,8 +110,15 @@ const LoginPage = () => {
                 {loading ? "Signing in..." : "Sign In"}
               </Button>
             </form>
-          </TabsContent>
-        </Tabs>
+            <button
+              type="button"
+              onClick={() => setForgotPassword(true)}
+              className="w-full mt-3 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Forgot password?
+            </button>
+          </>
+        )}
 
         <p className="text-center text-xs text-muted-foreground mt-6">
           Login credentials are provided by your admin.
