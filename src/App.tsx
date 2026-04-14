@@ -63,6 +63,7 @@ const AppRoutes = () => (
     <Route path="/import" element={<ProtectedRoute><ImportPage /></ProtectedRoute>} />
     <Route path="/register" element={<RegisterPage />} />
     <Route path="/confirm-cash" element={<ConfirmCashPage />} />
+    <Route path="/reset-password" element={<ResetPasswordPage />} />
     <Route path="*" element={<NotFound />} />
   </Routes>
 );
