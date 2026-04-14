@@ -20,6 +20,7 @@ import DropInsPage from "./pages/DropIns";
 import ImportPage from "./pages/Import";
 import RegisterPage from "./pages/Register";
 import ConfirmCashPage from "./pages/ConfirmCash";
+import ResetPasswordPage from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
