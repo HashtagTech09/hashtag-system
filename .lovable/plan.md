@@ -1,33 +1,50 @@
 
 
-# Forgot Password / Reset Password Flow
+# Remove All Non-Staff Users
 
-## Overview
-Add a "Forgot password?" link on the Login page and a `/reset-password` page where staff can set a new password after clicking the email link.
+## What gets kept
+The 14 staff users (anyone with an `organization`-type role: admin / manager / instructor / frontdesk):
+Priyanshi Kamboj, Manas Yellapantula, Jahnvi Rao, Dhriti Khanduja, Ayushi Pathania, Kriti Rao, Jhilmil Modi, Divija Malhotra, Shivek Singhal, Tarun Ahuja, Ashish, Astha Tomar (×2), Rubani Manaktala — plus their `user_roles` rows and any batch/studio assignments (untouched).
 
-## Changes
+## What gets deleted
+| Table | Approx rows |
+|---|---|
+| enrollment_cycles | 3,683 |
+| enrollments | 1,056 |
+| students | 818 (all — none belong to staff) |
+| abandoned_carts | 7 |
+| user_roles (non-staff) | ~785 |
+| users (non-staff) | ~785 |
 
-### 1. `src/pages/Login.tsx`
-- Add a `forgotPassword` state toggle
-- When active, show an email-only form that calls `supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + '/reset-password' })`
-- Add a "Forgot password?" link below the sign-in button
-- Add a "Back to login" link on the forgot password view
-- Show success toast: "Check your email for a password reset link"
+Tables already empty (payments, drop_ins, drop_in_credits, attendance, cash_payment_requests, cycle_adjustments, payment_allocations, pending_enrollments) — nothing to do.
 
-### 2. `src/pages/ResetPassword.tsx` (new)
-- Public page at `/reset-password`
-- On mount, detect `type=recovery` in URL hash (Supabase redirects with this)
-- Show a form with "New Password" + "Confirm Password" fields
-- On submit, call `supabase.auth.updateUser({ password })`
-- Show success message and link back to `/login`
-- Match the existing Login page styling (glass-card, Hashtag logo, etc.)
+## Deletion order (respects references)
+```text
+1. enrollment_cycles    → references enrollments/students
+2. enrollments          → references students
+3. abandoned_carts      → references students
+4. students             → references users
+5. user_roles (non-staff) → references users
+6. users (non-staff)    → final
+```
 
-### 3. `src/App.tsx`
-- Import `ResetPasswordPage`
-- Add route: `<Route path="/reset-password" element={<ResetPasswordPage />} />` (public, no auth wrapper)
+The single SQL transaction will use this filter to identify non-staff users:
+```sql
+user_id NOT IN (
+  SELECT DISTINCT ur.user_id FROM user_roles ur
+  JOIN roles r ON r.id = ur.role_id
+  WHERE r.type = 'organization'
+)
+```
+
+## Safety checks
+- batches.instructor_id / instructor_2_id and studios.wingperson_id / dreamcatcher_id only reference staff IDs → no nulling needed
+- No staff has any associated student record → safe to wipe `students` entirely
+- Wrapped in a single transaction so partial failure rolls back
+
+## Execution
+Run the deletion via the Supabase insert/data tool (delete is a data operation, not a schema change) — no code changes, no migration.
 
 ## Files changed
-- `src/pages/Login.tsx` — forgot password form + link
-- `src/pages/ResetPassword.tsx` — new page
-- `src/App.tsx` — new route
+None — this is a one-time data cleanup.
 
