@@ -1,50 +1,32 @@
 
 
-# Remove All Non-Staff Users
+## Show Batch ID & Studio in Enrollments table
 
-## What gets kept
-The 14 staff users (anyone with an `organization`-type role: admin / manager / instructor / frontdesk):
-Priyanshi Kamboj, Manas Yellapantula, Jahnvi Rao, Dhriti Khanduja, Ayushi Pathania, Kriti Rao, Jhilmil Modi, Divija Malhotra, Shivek Singhal, Tarun Ahuja, Ashish, Astha Tomar (×2), Rubani Manaktala — plus their `user_roles` rows and any batch/studio assignments (untouched).
+Add two new columns to the Enrollments listing table so each row shows the batch's identifier (`batch_code`, e.g. `Jazz3-NDA`) and the studio it belongs to.
 
-## What gets deleted
-| Table | Approx rows |
-|---|---|
-| enrollment_cycles | 3,683 |
-| enrollments | 1,056 |
-| students | 818 (all — none belong to staff) |
-| abandoned_carts | 7 |
-| user_roles (non-staff) | ~785 |
-| users (non-staff) | ~785 |
+### Changes to `src/pages/Enrollments.tsx`
 
-Tables already empty (payments, drop_ins, drop_in_credits, attendance, cash_payment_requests, cycle_adjustments, payment_allocations, pending_enrollments) — nothing to do.
+**1. Extend the data fetch** (line 51) — pull `batch_code` and the joined studio name from the existing `batches` relation:
+```ts
+batches(name, batch_code, studio_id, studios(name, code))
+```
 
-## Deletion order (respects references)
+**2. Add two table headers** (after the existing "Batch" column, line 752):
+- `Batch Code` — hidden on mobile (`hidden sm:table-cell`)
+- `Studio` — hidden on small screens (`hidden md:table-cell`)
+
+**3. Add two table cells** in the row render (after line 765):
+- `{e.batches?.batch_code || "—"}`
+- `{e.batches?.studios?.name || "—"}` (with studio code as muted suffix if present)
+
+**4. Update `colSpan`** on the empty-state row from `8` to `10` (line 775).
+
+### Layout (1189px viewport)
+
 ```text
-1. enrollment_cycles    → references enrollments/students
-2. enrollments          → references students
-3. abandoned_carts      → references students
-4. students             → references users
-5. user_roles (non-staff) → references users
-6. users (non-staff)    → final
+Student | Phone | Batch | Batch Code | Type | Plan | Cycles | Studio | Start | End
 ```
 
-The single SQL transaction will use this filter to identify non-staff users:
-```sql
-user_id NOT IN (
-  SELECT DISTINCT ur.user_id FROM user_roles ur
-  JOIN roles r ON r.id = ur.role_id
-  WHERE r.type = 'organization'
-)
-```
-
-## Safety checks
-- batches.instructor_id / instructor_2_id and studios.wingperson_id / dreamcatcher_id only reference staff IDs → no nulling needed
-- No staff has any associated student record → safe to wipe `students` entirely
-- Wrapped in a single transaction so partial failure rolls back
-
-## Execution
-Run the deletion via the Supabase insert/data tool (delete is a data operation, not a schema change) — no code changes, no migration.
-
-## Files changed
-None — this is a one-time data cleanup.
+### Files
+- `src/pages/Enrollments.tsx` (single edit)
 
