@@ -750,9 +750,11 @@ const EnrollmentsPage = () => {
                 <TableHead>Student</TableHead>
                 <TableHead>Phone</TableHead>
                 <TableHead>Batch</TableHead>
+                <TableHead className="hidden sm:table-cell">Batch Code</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead className="hidden md:table-cell">Plan</TableHead>
                 <TableHead className="hidden md:table-cell">Cycles</TableHead>
+                <TableHead className="hidden md:table-cell">Studio</TableHead>
                 <TableHead className="hidden md:table-cell">Start</TableHead>
                 <TableHead className="hidden md:table-cell">End</TableHead>
               </TableRow>
@@ -763,16 +765,21 @@ const EnrollmentsPage = () => {
                   <TableCell className="font-medium">{e.students?.name}</TableCell>
                   <TableCell className="text-muted-foreground">{e.students ? getDisplayPhone(e.students) : "—"}</TableCell>
                   <TableCell className="text-muted-foreground">{e.batches?.name}</TableCell>
+                  <TableCell className="hidden sm:table-cell text-muted-foreground font-mono text-xs">{e.batches?.batch_code || "—"}</TableCell>
                   <TableCell><Badge className={statusColors[e.status_type] || ""} variant="secondary">{e.status_type}{e.late_renewal ? " (Late)" : ""}</Badge></TableCell>
                   <TableCell className="hidden md:table-cell text-muted-foreground">{e.subscription_plans?.name || "—"}</TableCell>
                   <TableCell className="hidden md:table-cell text-muted-foreground">
                     {e.start_cycle && e.end_cycle ? `${e.start_cycle.name} → ${e.end_cycle.name}` : "—"}
                   </TableCell>
+                  <TableCell className="hidden md:table-cell text-muted-foreground">
+                    {e.batches?.studios?.name || "—"}
+                    {e.batches?.studios?.code && <span className="text-xs ml-1 opacity-60">({e.batches.studios.code})</span>}
+                  </TableCell>
                   <TableCell className="hidden md:table-cell text-muted-foreground">{e.start_date}</TableCell>
                   <TableCell className="hidden md:table-cell text-muted-foreground">{e.end_date}</TableCell>
                 </TableRow>
               ))}
-              {filtered.length === 0 && <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">No enrollments found</TableCell></TableRow>}
+              {filtered.length === 0 && <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground py-8">No enrollments found</TableCell></TableRow>}
             </TableBody>
           </Table>
         </CardContent>
