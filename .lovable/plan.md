@@ -1,32 +1,36 @@
 
 
-## Show Batch ID & Studio in Enrollments table
+## Remove all non-staff enrollments
 
-Add two new columns to the Enrollments listing table so each row shows the batch's identifier (`batch_code`, e.g. `Jazz3-NDA`) and the studio it belongs to.
+Since the prior cleanup, the system has accumulated **36 enrollments** and **139 enrollment cycles** — all from non-staff students (0 belong to staff). Easy wipe.
 
-### Changes to `src/pages/Enrollments.tsx`
+### What gets deleted
+| Table | Rows |
+|---|---|
+| enrollment_cycles | 139 |
+| enrollments | 36 |
 
-**1. Extend the data fetch** (line 51) — pull `batch_code` and the joined studio name from the existing `batches` relation:
-```ts
-batches(name, batch_code, studio_id, studios(name, code))
-```
+### What gets kept
+- All 14 staff users + their `user_roles` (untouched)
+- All 828 students (untouched — only their enrollments are removed)
+- Batches, studios, plan cycles, subscription plans, system settings (untouched)
 
-**2. Add two table headers** (after the existing "Batch" column, line 752):
-- `Batch Code` — hidden on mobile (`hidden sm:table-cell`)
-- `Studio` — hidden on small screens (`hidden md:table-cell`)
+### Empty tables (nothing to do)
+payments, payment_allocations, pending_enrollments, cycle_adjustments, drop_ins, drop_in_credits, attendance, cash_payment_requests
 
-**3. Add two table cells** in the row render (after line 765):
-- `{e.batches?.batch_code || "—"}`
-- `{e.batches?.studios?.name || "—"}` (with studio code as muted suffix if present)
-
-**4. Update `colSpan`** on the empty-state row from `8` to `10` (line 775).
-
-### Layout (1189px viewport)
-
+### Deletion order (respects references)
 ```text
-Student | Phone | Batch | Batch Code | Type | Plan | Cycles | Studio | Start | End
+1. enrollment_cycles  → references enrollments
+2. enrollments        → final
 ```
 
-### Files
-- `src/pages/Enrollments.tsx` (single edit)
+### SQL (single transaction via insert/data tool)
+```sql
+DELETE FROM enrollment_cycles;
+DELETE FROM enrollments;
+```
+(No filter needed — every row is non-staff.)
+
+### Files changed
+None — one-time data cleanup.
 
