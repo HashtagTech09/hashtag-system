@@ -1,36 +1,47 @@
 
 
-## Remove all non-staff enrollments
+## Continue branded auth email setup
 
-Since the prior cleanup, the system has accumulated **36 enrollments** and **139 enrollment cycles** — all from non-staff students (0 belong to staff). Easy wipe.
+DNS records are in at the registrar — now scaffold the branded templates and deploy the hook so password reset emails route through `notify.hashtag.dance` once DNS finishes propagating.
 
-### What gets deleted
-| Table | Rows |
+### Step 1 — Scaffold the 6 auth email templates
+
+Generate the `auth-email-hook` edge function plus React Email templates for: `recovery`, `signup`, `magic-link`, `invite`, `email-change`, `reauthentication`.
+
+### Step 2 — Apply Hashtag brand styling
+
+Update each template to match the app's visual identity:
+
+| Element | Value |
 |---|---|
-| enrollment_cycles | 139 |
-| enrollments | 36 |
+| Body background | `#ffffff` (always white for deliverability) |
+| Heading / body text | Black on white |
+| CTA button background | `#ff007f` (hot pink) |
+| CTA button text | `#ffffff` |
+| Button radius | from `--radius` in `src/index.css` |
+| Font stack | `'Space Grotesk', -apple-system, Arial, sans-serif` |
+| Header logo | `/favicon.png` uploaded to a new public `email-assets` bucket |
+| Footer | `Sent by Hashtag · hashtag.dance` (muted) |
+| Tone | Concise, brand voice (e.g. recovery: *"Reset your Hashtag password"* + single pink CTA) |
 
-### What gets kept
-- All 14 staff users + their `user_roles` (untouched)
-- All 828 students (untouched — only their enrollments are removed)
-- Batches, studios, plan cycles, subscription plans, system settings (untouched)
+### Step 3 — Deploy
 
-### Empty tables (nothing to do)
-payments, payment_allocations, pending_enrollments, cycle_adjustments, drop_ins, drop_in_credits, attendance, cash_payment_requests
+Deploy `auth-email-hook`. From this moment, every `supabase.auth.resetPasswordForEmail(...)` call (already wired in `Login.tsx`) renders through the branded template. Until DNS verifies, default Supabase emails continue shipping — zero downtime.
 
-### Deletion order (respects references)
-```text
-1. enrollment_cycles  → references enrollments
-2. enrollments        → final
-```
+### Step 4 — Confirm
 
-### SQL (single transaction via insert/data tool)
-```sql
-DELETE FROM enrollment_cycles;
-DELETE FROM enrollments;
-```
-(No filter needed — every row is non-staff.)
+Open Cloud → Emails so you can monitor DNS verification status. Once green, password reset emails ship from `Hashtag <noreply@notify.hashtag.dance>` with the branded template.
 
-### Files changed
-None — one-time data cleanup.
+### What does NOT change
+
+- No edits to `Login.tsx`, `ResetPassword.tsx`, `useAuth.tsx`, or `create-staff-auth`
+- No new secrets needed
+- Resend (used for payment receipts) stays untouched on its own path
+
+### Files added
+
+- `supabase/functions/auth-email-hook/index.ts` + `deno.json`
+- `supabase/functions/_shared/email-templates/{recovery,signup,magic-link,invite,email-change,reauthentication}.tsx`
+- `supabase/config.toml` — auto-updated with the new function block
+- New public `email-assets` storage bucket (for logo)
 
