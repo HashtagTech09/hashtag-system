@@ -16,9 +16,10 @@ import StyleSelection from "./StyleSelection";
 import LevelSelection from "./LevelSelection";
 import BatchSelection from "./BatchSelection";
 import PhoneEntry from "./PhoneEntry";
+import UserHub from "./UserHub";
 import FeeBreakdownDisplay from "./FeeBreakdown";
 
-type Step = "studio" | "style" | "level" | "batch" | "phone" | "details" | "pay" | "waiting";
+type Step = "studio" | "style" | "level" | "batch" | "phone" | "hub" | "details" | "pay" | "waiting";
 
 export default function JoinBatchFlow() {
   const [step, setStep] = useState<Step>("studio");
@@ -28,8 +29,11 @@ export default function JoinBatchFlow() {
   const [selectedBatchIds, setSelectedBatchIds] = useState<string[]>([]);
   const [student, setStudent] = useState<any>(null);
   const [user, setUser] = useState<any>(null);
+  const [students, setStudents] = useState<any[]>([]);
   const [newPhone, setNewPhone] = useState("");
-  const [newName, setNewName] = useState("");
+  const [ownerName, setOwnerName] = useState("");
+  const [studentName, setStudentName] = useState("");
+  const [studentSameAsOwner, setStudentSameAsOwner] = useState(true);
   const [planCycles, setPlanCycles] = useState<PlanCycle[]>([]);
   const [subPlans, setSubPlans] = useState<SubPlan[]>([]);
   const [selectedPlanId, setSelectedPlanId] = useState("");
@@ -109,26 +113,48 @@ export default function JoinBatchFlow() {
     setSelectedBatchIds(prev => prev.includes(id) ? prev.filter(b => b !== id) : [...prev, id]);
   };
 
-  const handleCreateAndProceed = async () => {
-    if (!newName.trim()) { toast.error("Please enter your name"); return; }
+  const handleUserResolved = (u: any, list: any[]) => {
+    setUser(u);
+    setStudents(list);
+    if (list.length === 0) {
+      // Verified user with no students yet — go to hub so they can add one
+      setStep("hub");
+    } else if (list.length === 1) {
+      setStudent(list[0]);
+      setStep("pay");
+    } else {
+      setStep("hub");
+    }
+  };
+
+  const handleSignup = async () => {
+    if (!ownerName.trim()) { toast.error("Enter the account owner's name"); return; }
+    const sName = studentSameAsOwner ? ownerName.trim() : studentName.trim();
+    if (!sName) { toast.error("Enter the student's name"); return; }
     setSubmitting(true);
     try {
-      const { data: existingUsers } = await supabase.from("users").select("id").eq("organization_id", 1).ilike("phone", `%${newPhone}`);
+      // Re-check in case the user signed up in another tab
+      const { data: existingUsers } = await supabase.from("users").select("*").eq("organization_id", 1).ilike("phone", `%${newPhone}`);
       if (existingUsers && existingUsers.length > 0) {
-        const { data: existingStudents } = await supabase.from("students").select("*, users(*)").eq("user_id", existingUsers[0].id);
-        if (existingStudents && existingStudents.length > 0) {
-          setUser(existingStudents[0].users);
-          setStudent(existingStudents[0]);
-          toast.info("Account already exists! Proceeding with your profile.");
+        const ownerUser = existingUsers[0];
+        const { data: existingStudents } = await supabase.from("students").select("*, users(*)").eq("user_id", ownerUser.id);
+        setUser(ownerUser);
+        setStudents(existingStudents || []);
+        toast.info("Account already exists! Continuing with your profile.");
+        if ((existingStudents || []).length === 1) {
+          setStudent(existingStudents![0]);
           setStep("pay");
-          return;
+        } else {
+          setStep("hub");
         }
+        return;
       }
-      const { data: newUser, error: userErr } = await supabase.from("users").insert({ organization_id: 1, name: newName.trim(), phone: newPhone }).select().single();
+      const { data: newUser, error: userErr } = await supabase.from("users").insert({ organization_id: 1, name: ownerName.trim(), phone: newPhone }).select().single();
       if (userErr) throw userErr;
-      const { data: newStudent, error: studErr } = await supabase.from("students").insert({ organization_id: 1, name: newName.trim(), phone: newPhone, user_id: newUser.id }).select().single();
+      const { data: newStudent, error: studErr } = await supabase.from("students").insert({ organization_id: 1, name: sName, user_id: newUser.id }).select("*, users(*)").single();
       if (studErr) throw studErr;
       setUser(newUser);
+      setStudents([newStudent]);
       setStudent(newStudent);
       setStep("pay");
     } catch (e: any) {
@@ -218,12 +244,17 @@ export default function JoinBatchFlow() {
     setSelectedBatchIds([]);
     setStudent(null);
     setUser(null);
+    setStudents([]);
+    setOwnerName("");
+    setStudentName("");
+    setStudentSameAsOwner(true);
     setSelectedPlanId("");
     setSelectedStaffId("");
   };
 
   const stepLabels = ["Studio", "Style", "Level", "Batch", "Verify", "Pay"];
-  const stepIdx = { studio: 0, style: 1, level: 2, batch: 3, phone: 4, details: 4, pay: 5, waiting: 5 }[step];
+  const stepIdx = { studio: 0, style: 1, level: 2, batch: 3, phone: 4, hub: 4, details: 4, pay: 5, waiting: 5 }[step];
+
 
   const getPlanPerBatchFee = (p: SubPlan) => (p.total_regular_cycles || 0) * 3767 + (p.total_grid_cycles || 0) * 5300;
 
@@ -279,28 +310,54 @@ export default function JoinBatchFlow() {
         <Card className="glass-card">
           <CardContent className="p-6">
             <PhoneEntry
-              onStudentFound={(s, u) => { setStudent(s); setUser(u); setStep("pay"); }}
+              onUserResolved={handleUserResolved}
               onNewUser={(phone) => { setNewPhone(phone); setStep("details"); }}
             />
           </CardContent>
         </Card>
       )}
 
+      {step === "hub" && user && (
+        <UserHub
+          user={user}
+          students={students}
+          ctaVerb="Continue"
+          onBack={() => setStep("phone")}
+          onPickStudent={(s) => {
+            setStudent(s);
+            setStudents(prev => prev.some(x => x.id === s.id) ? prev : [...prev, s]);
+            setStep("pay");
+          }}
+        />
+      )}
+
       {step === "details" && (
         <Card className="glass-card">
           <CardContent className="p-6 space-y-4">
-            <h3 className="font-display font-semibold text-foreground">Create Your Account</h3>
+            <h3 className="font-display font-semibold text-foreground">Create your account</h3>
             <p className="text-sm text-muted-foreground">Phone: {newPhone}</p>
             <div>
-              <Label>Your Name</Label>
-              <Input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Enter your full name" className="mt-1" />
+              <Label>Account owner name</Label>
+              <Input value={ownerName} onChange={e => setOwnerName(e.target.value)} placeholder="Parent or your own name" className="mt-1" />
+              <p className="text-xs text-muted-foreground mt-1">This is who manages the account.</p>
             </div>
-            <Button className="w-full gradient-primary" onClick={handleCreateAndProceed} disabled={submitting}>
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input type="checkbox" checked={studentSameAsOwner} onChange={e => setStudentSameAsOwner(e.target.checked)} />
+              <span>I am the student</span>
+            </label>
+            {!studentSameAsOwner && (
+              <div>
+                <Label>Student name</Label>
+                <Input value={studentName} onChange={e => setStudentName(e.target.value)} placeholder="Child or member's name" className="mt-1" />
+              </div>
+            )}
+            <Button className="w-full gradient-primary" onClick={handleSignup} disabled={submitting}>
               {submitting ? "Creating..." : "Continue"}
             </Button>
           </CardContent>
         </Card>
       )}
+
 
       {step === "pay" && (
         <Card className="glass-card">
