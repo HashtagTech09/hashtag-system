@@ -16,9 +16,10 @@ import StyleSelection from "./StyleSelection";
 import LevelSelection from "./LevelSelection";
 import BatchSelection from "./BatchSelection";
 import PhoneEntry from "./PhoneEntry";
+import UserHub from "./UserHub";
 import FeeBreakdownDisplay from "./FeeBreakdown";
 
-type Step = "studio" | "style" | "level" | "batch" | "phone" | "details" | "pay" | "waiting";
+type Step = "studio" | "style" | "level" | "batch" | "phone" | "hub" | "details" | "pay" | "waiting";
 
 export default function JoinBatchFlow() {
   const [step, setStep] = useState<Step>("studio");
@@ -28,8 +29,11 @@ export default function JoinBatchFlow() {
   const [selectedBatchIds, setSelectedBatchIds] = useState<string[]>([]);
   const [student, setStudent] = useState<any>(null);
   const [user, setUser] = useState<any>(null);
+  const [students, setStudents] = useState<any[]>([]);
   const [newPhone, setNewPhone] = useState("");
-  const [newName, setNewName] = useState("");
+  const [ownerName, setOwnerName] = useState("");
+  const [studentName, setStudentName] = useState("");
+  const [studentSameAsOwner, setStudentSameAsOwner] = useState(true);
   const [planCycles, setPlanCycles] = useState<PlanCycle[]>([]);
   const [subPlans, setSubPlans] = useState<SubPlan[]>([]);
   const [selectedPlanId, setSelectedPlanId] = useState("");
