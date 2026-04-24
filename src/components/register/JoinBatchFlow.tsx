@@ -113,26 +113,48 @@ export default function JoinBatchFlow() {
     setSelectedBatchIds(prev => prev.includes(id) ? prev.filter(b => b !== id) : [...prev, id]);
   };
 
-  const handleCreateAndProceed = async () => {
-    if (!newName.trim()) { toast.error("Please enter your name"); return; }
+  const handleUserResolved = (u: any, list: any[]) => {
+    setUser(u);
+    setStudents(list);
+    if (list.length === 0) {
+      // Verified user with no students yet — go to hub so they can add one
+      setStep("hub");
+    } else if (list.length === 1) {
+      setStudent(list[0]);
+      setStep("pay");
+    } else {
+      setStep("hub");
+    }
+  };
+
+  const handleSignup = async () => {
+    if (!ownerName.trim()) { toast.error("Enter the account owner's name"); return; }
+    const sName = studentSameAsOwner ? ownerName.trim() : studentName.trim();
+    if (!sName) { toast.error("Enter the student's name"); return; }
     setSubmitting(true);
     try {
-      const { data: existingUsers } = await supabase.from("users").select("id").eq("organization_id", 1).ilike("phone", `%${newPhone}`);
+      // Re-check in case the user signed up in another tab
+      const { data: existingUsers } = await supabase.from("users").select("*").eq("organization_id", 1).ilike("phone", `%${newPhone}`);
       if (existingUsers && existingUsers.length > 0) {
-        const { data: existingStudents } = await supabase.from("students").select("*, users(*)").eq("user_id", existingUsers[0].id);
-        if (existingStudents && existingStudents.length > 0) {
-          setUser(existingStudents[0].users);
-          setStudent(existingStudents[0]);
-          toast.info("Account already exists! Proceeding with your profile.");
+        const ownerUser = existingUsers[0];
+        const { data: existingStudents } = await supabase.from("students").select("*, users(*)").eq("user_id", ownerUser.id);
+        setUser(ownerUser);
+        setStudents(existingStudents || []);
+        toast.info("Account already exists! Continuing with your profile.");
+        if ((existingStudents || []).length === 1) {
+          setStudent(existingStudents![0]);
           setStep("pay");
-          return;
+        } else {
+          setStep("hub");
         }
+        return;
       }
-      const { data: newUser, error: userErr } = await supabase.from("users").insert({ organization_id: 1, name: newName.trim(), phone: newPhone }).select().single();
+      const { data: newUser, error: userErr } = await supabase.from("users").insert({ organization_id: 1, name: ownerName.trim(), phone: newPhone }).select().single();
       if (userErr) throw userErr;
-      const { data: newStudent, error: studErr } = await supabase.from("students").insert({ organization_id: 1, name: newName.trim(), phone: newPhone, user_id: newUser.id }).select().single();
+      const { data: newStudent, error: studErr } = await supabase.from("students").insert({ organization_id: 1, name: sName, user_id: newUser.id }).select("*, users(*)").single();
       if (studErr) throw studErr;
       setUser(newUser);
+      setStudents([newStudent]);
       setStudent(newStudent);
       setStep("pay");
     } catch (e: any) {
