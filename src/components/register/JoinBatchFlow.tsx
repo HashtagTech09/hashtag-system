@@ -244,12 +244,17 @@ export default function JoinBatchFlow() {
     setSelectedBatchIds([]);
     setStudent(null);
     setUser(null);
+    setStudents([]);
+    setOwnerName("");
+    setStudentName("");
+    setStudentSameAsOwner(true);
     setSelectedPlanId("");
     setSelectedStaffId("");
   };
 
   const stepLabels = ["Studio", "Style", "Level", "Batch", "Verify", "Pay"];
-  const stepIdx = { studio: 0, style: 1, level: 2, batch: 3, phone: 4, details: 4, pay: 5, waiting: 5 }[step];
+  const stepIdx = { studio: 0, style: 1, level: 2, batch: 3, phone: 4, hub: 4, details: 4, pay: 5, waiting: 5 }[step];
+
 
   const getPlanPerBatchFee = (p: SubPlan) => (p.total_regular_cycles || 0) * 3767 + (p.total_grid_cycles || 0) * 5300;
 
@@ -305,28 +310,54 @@ export default function JoinBatchFlow() {
         <Card className="glass-card">
           <CardContent className="p-6">
             <PhoneEntry
-              onStudentFound={(s, u) => { setStudent(s); setUser(u); setStep("pay"); }}
+              onUserResolved={handleUserResolved}
               onNewUser={(phone) => { setNewPhone(phone); setStep("details"); }}
             />
           </CardContent>
         </Card>
       )}
 
+      {step === "hub" && user && (
+        <UserHub
+          user={user}
+          students={students}
+          ctaVerb="Continue"
+          onBack={() => setStep("phone")}
+          onPickStudent={(s) => {
+            setStudent(s);
+            setStudents(prev => prev.some(x => x.id === s.id) ? prev : [...prev, s]);
+            setStep("pay");
+          }}
+        />
+      )}
+
       {step === "details" && (
         <Card className="glass-card">
           <CardContent className="p-6 space-y-4">
-            <h3 className="font-display font-semibold text-foreground">Create Your Account</h3>
+            <h3 className="font-display font-semibold text-foreground">Create your account</h3>
             <p className="text-sm text-muted-foreground">Phone: {newPhone}</p>
             <div>
-              <Label>Your Name</Label>
-              <Input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Enter your full name" className="mt-1" />
+              <Label>Account owner name</Label>
+              <Input value={ownerName} onChange={e => setOwnerName(e.target.value)} placeholder="Parent or your own name" className="mt-1" />
+              <p className="text-xs text-muted-foreground mt-1">This is who manages the account.</p>
             </div>
-            <Button className="w-full gradient-primary" onClick={handleCreateAndProceed} disabled={submitting}>
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input type="checkbox" checked={studentSameAsOwner} onChange={e => setStudentSameAsOwner(e.target.checked)} />
+              <span>I am the student</span>
+            </label>
+            {!studentSameAsOwner && (
+              <div>
+                <Label>Student name</Label>
+                <Input value={studentName} onChange={e => setStudentName(e.target.value)} placeholder="Child or member's name" className="mt-1" />
+              </div>
+            )}
+            <Button className="w-full gradient-primary" onClick={handleSignup} disabled={submitting}>
               {submitting ? "Creating..." : "Continue"}
             </Button>
           </CardContent>
         </Card>
       )}
+
 
       {step === "pay" && (
         <Card className="glass-card">
