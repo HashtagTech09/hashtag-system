@@ -9,11 +9,13 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2 } from "lucide-react";
 
 interface PhoneEntryProps {
-  onStudentFound: (student: any, user: any) => void;
+  /** Called when an existing user is found. `students` is the full list under that user (can be empty). */
+  onUserResolved: (user: any, students: any[]) => void;
+  /** Called when the phone number is not in the system yet. */
   onNewUser: (phone: string) => void;
 }
 
-export default function PhoneEntry({ onStudentFound, onNewUser }: PhoneEntryProps) {
+export default function PhoneEntry({ onUserResolved, onNewUser }: PhoneEntryProps) {
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
@@ -71,29 +73,24 @@ export default function PhoneEntry({ onStudentFound, onNewUser }: PhoneEntryProp
         return;
       }
 
-      // OTP verified — proceed with student lookup
-      await lookupStudent(cleanedPhone);
+      await lookupUser(cleanedPhone);
     } finally {
       setVerifying(false);
     }
   };
 
-  const lookupStudent = async (searchPhone: string) => {
+  /**
+   * Resolve a phone number to a single User and ALL of their Students.
+   * Strategy (split queries — see mem://logic/student-identification-strategy):
+   *   1. Look up users by phone first (the account owner).
+   *   2. If found, fetch every student linked to that user_id.
+   *   3. Fallback: if no user matches but a student row carries the phone,
+   *      use that student's user_id to load the full sibling set.
+   */
+  const lookupUser = async (searchPhone: string) => {
     setLookingUp(true);
     try {
-      // Query 1: Search students table directly by phone
-      const { data: studentsByPhone } = await supabase
-        .from("students")
-        .select("*, users(*)")
-        .eq("organization_id", 1)
-        .ilike("phone", `%${searchPhone}`);
-
-      if (studentsByPhone && studentsByPhone.length > 0) {
-        onStudentFound(studentsByPhone[0], studentsByPhone[0].users);
-        return;
-      }
-
-      // Query 2: Search users table by phone, then find linked students
+      // 1. user-first lookup (the account owner)
       const { data: users } = await supabase
         .from("users")
         .select("*")
@@ -101,15 +98,33 @@ export default function PhoneEntry({ onStudentFound, onNewUser }: PhoneEntryProp
         .ilike("phone", `%${searchPhone}`);
 
       if (users && users.length > 0) {
-        const { data: studentsByUser } = await supabase
+        const user = users[0];
+        const { data: students } = await supabase
           .from("students")
           .select("*, users(*)")
-          .eq("user_id", users[0].id);
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: true });
+        onUserResolved(user, students || []);
+        return;
+      }
 
-        if (studentsByUser && studentsByUser.length > 0) {
-          onStudentFound(studentsByUser[0], users[0]);
-          return;
-        }
+      // 2. fallback: phone lives only on a student row
+      const { data: studentsByPhone } = await supabase
+        .from("students")
+        .select("*, users(*)")
+        .eq("organization_id", 1)
+        .ilike("phone", `%${searchPhone}`);
+
+      if (studentsByPhone && studentsByPhone.length > 0) {
+        const ownerUser = studentsByPhone[0].users;
+        const ownerId = studentsByPhone[0].user_id;
+        const { data: siblings } = await supabase
+          .from("students")
+          .select("*, users(*)")
+          .eq("user_id", ownerId)
+          .order("created_at", { ascending: true });
+        onUserResolved(ownerUser, siblings || studentsByPhone);
+        return;
       }
 
       onNewUser(searchPhone);
@@ -124,7 +139,7 @@ export default function PhoneEntry({ onStudentFound, onNewUser }: PhoneEntryProp
     return (
       <div className="flex flex-col items-center justify-center py-8 gap-3">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="text-sm text-muted-foreground">Looking up your account...</p>
+        <p className="text-sm text-muted-foreground">Logging you in...</p>
       </div>
     );
   }
@@ -181,8 +196,10 @@ export default function PhoneEntry({ onStudentFound, onNewUser }: PhoneEntryProp
   return (
     <div className="space-y-4">
       <div>
-        <Label className="text-base">Enter your phone number</Label>
-        <p className="text-sm text-muted-foreground mt-1">We'll send you a WhatsApp OTP to verify</p>
+        <Label className="text-base">Log in to your account</Label>
+        <p className="text-sm text-muted-foreground mt-1">
+          One account per phone number — manage all your students from one login.
+        </p>
       </div>
       <div className="flex gap-2">
         <Input
