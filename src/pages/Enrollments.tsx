@@ -30,6 +30,8 @@ const EnrollmentsPage = () => {
   const [filterStudioId, setFilterStudioId] = useState<string>("all");
   const [filterBatchId, setFilterBatchId] = useState<string>("all");
   const [filterType, setFilterType] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<string>("newest");
+  const [validMonth, setValidMonth] = useState<string>("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [addBatchOpen, setAddBatchOpen] = useState(false);
   const [addBatchForm, setAddBatchForm] = useState({ student_id: "", new_batch_ids: [] as string[], payment_mode: "cash" });
@@ -502,8 +504,30 @@ const EnrollmentsPage = () => {
     const matchesStudio = filterStudioId === "all" || String(e.batches?.studio_id) === filterStudioId;
     const matchesBatch = filterBatchId === "all" || String(e.batch_id) === filterBatchId;
     const matchesType = filterType === "all" || e.status_type === filterType;
-    return matchesSearch && matchesStudio && matchesBatch && matchesType;
+    let matchesMonth = true;
+    if (validMonth) {
+      const monthStart = `${validMonth}-01`;
+      const [y, m] = validMonth.split("-").map(Number);
+      const lastDay = new Date(y, m, 0).getDate();
+      const monthEnd = `${validMonth}-${String(lastDay).padStart(2, "0")}`;
+      matchesMonth = e.start_date <= monthEnd && e.end_date >= monthStart;
+    }
+    return matchesSearch && matchesStudio && matchesBatch && matchesType && matchesMonth;
   });
+
+  const displayed = [...filtered].sort((a, b) => {
+    switch (sortBy) {
+      case "oldest": return (a.created_at || "").localeCompare(b.created_at || "");
+      case "name_asc": return (a.students?.name || "").localeCompare(b.students?.name || "");
+      case "name_desc": return (b.students?.name || "").localeCompare(a.students?.name || "");
+      case "end_asc": return (a.end_date || "").localeCompare(b.end_date || "");
+      case "end_desc": return (b.end_date || "").localeCompare(a.end_date || "");
+      case "newest":
+      default: return (b.created_at || "").localeCompare(a.created_at || "");
+    }
+  });
+
+  const monthLabel = validMonth ? new Date(`${validMonth}-01`).toLocaleString("en-US", { month: "long", year: "numeric" }) : "";
 
   return (
     <AdminLayout title="Enrollments">
@@ -739,7 +763,25 @@ const EnrollmentsPage = () => {
               <SelectItem value="REV">REV</SelectItem>
             </SelectContent>
           </Select>
+          <Select value={sortBy} onValueChange={setSortBy}>
+            <SelectTrigger className="w-[170px]"><SelectValue placeholder="Sort" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="newest">Newest first</SelectItem>
+              <SelectItem value="oldest">Oldest first</SelectItem>
+              <SelectItem value="name_asc">Name A–Z</SelectItem>
+              <SelectItem value="name_desc">Name Z–A</SelectItem>
+              <SelectItem value="end_asc">End date (soonest)</SelectItem>
+              <SelectItem value="end_desc">End date (latest)</SelectItem>
+            </SelectContent>
+          </Select>
+          <div className="flex items-center gap-2">
+            <Input type="month" value={validMonth} onChange={(e) => setValidMonth(e.target.value)} className="w-[160px]" placeholder="Valid in month" />
+            {validMonth && <Button variant="ghost" size="sm" onClick={() => setValidMonth("")}>Clear</Button>}
+          </div>
         </div>
+        {validMonth && (
+          <p className="text-sm text-muted-foreground">Valid students for {monthLabel} — {displayed.length} enrollment{displayed.length !== 1 ? "s" : ""}</p>
+        )}
       </div>
 
       <Card className="glass-card">
@@ -747,6 +789,7 @@ const EnrollmentsPage = () => {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-12">#</TableHead>
                 <TableHead>Student</TableHead>
                 <TableHead>Phone</TableHead>
                 <TableHead>Batch</TableHead>
@@ -760,8 +803,9 @@ const EnrollmentsPage = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((e) => (
+              {displayed.map((e, idx) => (
                 <TableRow key={e.id}>
+                  <TableCell className="text-muted-foreground">{idx + 1}</TableCell>
                   <TableCell className="font-medium">{e.students?.name}</TableCell>
                   <TableCell className="text-muted-foreground">{e.students ? getDisplayPhone(e.students) : "—"}</TableCell>
                   <TableCell className="text-muted-foreground">{e.batches?.name}</TableCell>
@@ -779,7 +823,7 @@ const EnrollmentsPage = () => {
                   <TableCell className="hidden md:table-cell text-muted-foreground">{e.end_date}</TableCell>
                 </TableRow>
               ))}
-              {filtered.length === 0 && <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground py-8">No enrollments found</TableCell></TableRow>}
+              {displayed.length === 0 && <TableRow><TableCell colSpan={11} className="text-center text-muted-foreground py-8">No enrollments found</TableCell></TableRow>}
             </TableBody>
           </Table>
         </CardContent>
