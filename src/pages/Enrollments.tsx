@@ -504,8 +504,30 @@ const EnrollmentsPage = () => {
     const matchesStudio = filterStudioId === "all" || String(e.batches?.studio_id) === filterStudioId;
     const matchesBatch = filterBatchId === "all" || String(e.batch_id) === filterBatchId;
     const matchesType = filterType === "all" || e.status_type === filterType;
-    return matchesSearch && matchesStudio && matchesBatch && matchesType;
+    let matchesMonth = true;
+    if (validMonth) {
+      const monthStart = `${validMonth}-01`;
+      const [y, m] = validMonth.split("-").map(Number);
+      const lastDay = new Date(y, m, 0).getDate();
+      const monthEnd = `${validMonth}-${String(lastDay).padStart(2, "0")}`;
+      matchesMonth = e.start_date <= monthEnd && e.end_date >= monthStart;
+    }
+    return matchesSearch && matchesStudio && matchesBatch && matchesType && matchesMonth;
   });
+
+  const displayed = [...filtered].sort((a, b) => {
+    switch (sortBy) {
+      case "oldest": return (a.created_at || "").localeCompare(b.created_at || "");
+      case "name_asc": return (a.students?.name || "").localeCompare(b.students?.name || "");
+      case "name_desc": return (b.students?.name || "").localeCompare(a.students?.name || "");
+      case "end_asc": return (a.end_date || "").localeCompare(b.end_date || "");
+      case "end_desc": return (b.end_date || "").localeCompare(a.end_date || "");
+      case "newest":
+      default: return (b.created_at || "").localeCompare(a.created_at || "");
+    }
+  });
+
+  const monthLabel = validMonth ? new Date(`${validMonth}-01`).toLocaleString("en-US", { month: "long", year: "numeric" }) : "";
 
   return (
     <AdminLayout title="Enrollments">
