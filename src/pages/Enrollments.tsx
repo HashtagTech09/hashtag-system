@@ -513,7 +513,12 @@ const EnrollmentsPage = () => {
       const monthEnd = `${validMonth}-${String(lastDay).padStart(2, "0")}`;
       matchesMonth = e.start_date <= monthEnd && e.end_date >= monthStart;
     }
-    return matchesSearch && matchesStudio && matchesBatch && matchesType && matchesMonth;
+    let matchesValidNow = true;
+    if (validNow) {
+      const t = todayIST();
+      matchesValidNow = e.start_date <= t && e.end_date >= t;
+    }
+    return matchesSearch && matchesStudio && matchesBatch && matchesType && matchesMonth && matchesValidNow;
   });
 
   const displayed = [...filtered].sort((a, b) => {
