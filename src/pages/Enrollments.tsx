@@ -30,6 +30,8 @@ const EnrollmentsPage = () => {
   const [filterStudioId, setFilterStudioId] = useState<string>("all");
   const [filterBatchId, setFilterBatchId] = useState<string>("all");
   const [filterType, setFilterType] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<string>("newest");
+  const [validMonth, setValidMonth] = useState<string>("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [addBatchOpen, setAddBatchOpen] = useState(false);
   const [addBatchForm, setAddBatchForm] = useState({ student_id: "", new_batch_ids: [] as string[], payment_mode: "cash" });
