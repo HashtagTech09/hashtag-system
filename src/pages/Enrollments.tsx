@@ -780,11 +780,21 @@ const EnrollmentsPage = () => {
               <SelectItem value="end_desc">End date (latest)</SelectItem>
             </SelectContent>
           </Select>
+          <Button
+            variant={validNow ? "default" : "outline"}
+            size="sm"
+            onClick={() => { setValidNow(v => !v); if (!validNow) setValidMonth(""); }}
+          >
+            Valid now
+          </Button>
           <div className="flex items-center gap-2">
-            <Input type="month" value={validMonth} onChange={(e) => setValidMonth(e.target.value)} className="w-[160px]" placeholder="Valid in month" />
+            <Input type="month" value={validMonth} onChange={(e) => { setValidMonth(e.target.value); if (e.target.value) setValidNow(false); }} className="w-[160px]" placeholder="Valid in month" />
             {validMonth && <Button variant="ghost" size="sm" onClick={() => setValidMonth("")}>Clear</Button>}
           </div>
         </div>
+        {validNow && (
+          <p className="text-sm text-muted-foreground">Currently valid — {displayed.length} enrollment{displayed.length !== 1 ? "s" : ""}</p>
+        )}
         {validMonth && (
           <p className="text-sm text-muted-foreground">Valid students for {monthLabel} — {displayed.length} enrollment{displayed.length !== 1 ? "s" : ""}</p>
         )}
