@@ -763,7 +763,25 @@ const EnrollmentsPage = () => {
               <SelectItem value="REV">REV</SelectItem>
             </SelectContent>
           </Select>
+          <Select value={sortBy} onValueChange={setSortBy}>
+            <SelectTrigger className="w-[170px]"><SelectValue placeholder="Sort" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="newest">Newest first</SelectItem>
+              <SelectItem value="oldest">Oldest first</SelectItem>
+              <SelectItem value="name_asc">Name A–Z</SelectItem>
+              <SelectItem value="name_desc">Name Z–A</SelectItem>
+              <SelectItem value="end_asc">End date (soonest)</SelectItem>
+              <SelectItem value="end_desc">End date (latest)</SelectItem>
+            </SelectContent>
+          </Select>
+          <div className="flex items-center gap-2">
+            <Input type="month" value={validMonth} onChange={(e) => setValidMonth(e.target.value)} className="w-[160px]" placeholder="Valid in month" />
+            {validMonth && <Button variant="ghost" size="sm" onClick={() => setValidMonth("")}>Clear</Button>}
+          </div>
         </div>
+        {validMonth && (
+          <p className="text-sm text-muted-foreground">Valid students for {monthLabel} — {displayed.length} enrollment{displayed.length !== 1 ? "s" : ""}</p>
+        )}
       </div>
 
       <Card className="glass-card">
@@ -771,6 +789,7 @@ const EnrollmentsPage = () => {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-12">#</TableHead>
                 <TableHead>Student</TableHead>
                 <TableHead>Phone</TableHead>
                 <TableHead>Batch</TableHead>
