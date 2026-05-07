@@ -18,6 +18,8 @@ import BatchSelection from "./BatchSelection";
 import PhoneEntry from "./PhoneEntry";
 import UserHub from "./UserHub";
 import FeeBreakdownDisplay from "./FeeBreakdown";
+import ReceiptPreviewDialog from "./ReceiptPreviewDialog";
+import { useSimulatedToday } from "@/contexts/TestDateContext";
 
 type Step = "studio" | "style" | "level" | "batch" | "phone" | "hub" | "details" | "pay" | "waiting";
 
@@ -44,6 +46,9 @@ export default function JoinBatchFlow() {
   const [latestEndDate, setLatestEndDate] = useState<string | null>(null);
   const [staffList, setStaffList] = useState<any[]>([]);
   const [selectedStaffId, setSelectedStaffId] = useState("");
+  const [receiptOpen, setReceiptOpen] = useState(false);
+  const [receiptData, setReceiptData] = useState<any>(null);
+  const simulatedToday = useSimulatedToday();
 
   useEffect(() => {
     supabase.from("batches").select("*").eq("organization_id", 1).then(({ data }) => setAllBatches(data || []));
