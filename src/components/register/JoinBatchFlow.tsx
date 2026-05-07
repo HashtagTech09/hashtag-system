@@ -190,9 +190,23 @@ export default function JoinBatchFlow() {
         breakdown.perBatchFee, breakdown.discountPct
       );
 
+      const planName = subPlans.find(p => p.id === Number(selectedPlanId))?.name || "";
+      const batchNames = sortedSelectedBatches.map(b => b.name).join(", ");
+
+      const showReceipt = (mode: string, txnId: string) => {
+        setReceiptData({
+          student_name: student.name,
+          plan_name: planName,
+          batches: batchNames,
+          amount: breakdown.total.toLocaleString("en-IN"),
+          payment_mode: mode,
+          transaction_id: txnId,
+          date: simulatedToday,
+        });
+        setReceiptOpen(true);
+      };
+
       if (paymentMode === "razorpay") {
-        const batchNames = selectedBatchIds.map(id => "Batch#" + id).join(", ");
-        const planName = subPlans.find(p => p.id === Number(selectedPlanId))?.name || "";
         await initiateRazorpayPayment({
           orderParams: {
             student_id: student.id, organization_id: 1, batch_ids: selectedBatchIds.map(Number),
@@ -202,7 +216,7 @@ export default function JoinBatchFlow() {
           },
           onSuccess: () => {
             toast.success("Payment initiated! Enrollment will be confirmed once payment is captured.");
-            resetFlow();
+            showReceipt("Razorpay", "Pending capture");
           },
           onFailure: (err) => toast.error(err),
         });
@@ -234,6 +248,7 @@ export default function JoinBatchFlow() {
       });
 
       toast.success("Cash payment request sent to staff for confirmation!");
+      showReceipt("Cash", `CASH-${cashReq.id}`);
       setStep("waiting");
     } catch {
       toast.error("Enrollment failed. Please try again.");
