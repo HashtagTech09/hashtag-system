@@ -24,9 +24,9 @@ export interface StudentBatchSummary {
 }
 
 /** Find the cycle where today falls between start_date and end_date */
-export function getCurrentCycle(planCycles: PlanCycle[]): PlanCycle | null {
-  const today = todayIST();
-  return planCycles.find(c => c.start_date <= today && (c.end_date || "2099-12-31") >= today) || null;
+export function getCurrentCycle(planCycles: PlanCycle[], today?: string): PlanCycle | null {
+  const t = today || todayIST();
+  return planCycles.find(c => c.start_date <= t && (c.end_date || "2099-12-31") >= t) || null;
 }
 
 /** Compute effective cycles after adjustments: enrollment_cycles - shifted_out + shifted_in */

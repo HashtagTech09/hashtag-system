@@ -18,6 +18,8 @@ import BatchSelection from "./BatchSelection";
 import PhoneEntry from "./PhoneEntry";
 import UserHub from "./UserHub";
 import FeeBreakdownDisplay from "./FeeBreakdown";
+import ReceiptPreviewDialog from "./ReceiptPreviewDialog";
+import { useSimulatedToday } from "@/contexts/TestDateContext";
 
 type Step = "studio" | "style" | "level" | "batch" | "phone" | "hub" | "details" | "pay" | "waiting";
 
@@ -44,6 +46,9 @@ export default function JoinBatchFlow() {
   const [latestEndDate, setLatestEndDate] = useState<string | null>(null);
   const [staffList, setStaffList] = useState<any[]>([]);
   const [selectedStaffId, setSelectedStaffId] = useState("");
+  const [receiptOpen, setReceiptOpen] = useState(false);
+  const [receiptData, setReceiptData] = useState<any>(null);
+  const simulatedToday = useSimulatedToday();
 
   useEffect(() => {
     supabase.from("batches").select("*").eq("organization_id", 1).then(({ data }) => setAllBatches(data || []));
@@ -73,7 +78,7 @@ export default function JoinBatchFlow() {
     fetch();
   }, []);
 
-  const startCycleIdx = planCycles.length > 0 ? getStartCycleIndex(planCycles) : 0;
+  const startCycleIdx = planCycles.length > 0 ? getStartCycleIndex(planCycles, simulatedToday) : 0;
   const validPlans = subPlans.filter(p => isPlanValid(p, planCycles, startCycleIdx));
 
   useEffect(() => {
@@ -92,7 +97,7 @@ export default function JoinBatchFlow() {
       if (!student) { setDetectedStatus("NEW"); setLatestEndDate(null); return; }
       const { data: enrollments } = await supabase
         .from("enrollments").select("end_date").eq("student_id", student.id).order("end_date", { ascending: false });
-      const result = detectStudentStatus(enrollments || [], planCycles);
+      const result = detectStudentStatus(enrollments || [], planCycles, simulatedToday);
       setDetectedStatus(result.status);
       setLatestEndDate(result.latestEndDate);
     };
@@ -107,6 +112,7 @@ export default function JoinBatchFlow() {
     latestEndDate,
     dropInAmount: 0,
     sortedBatches: sortedSelectedBatches.map(b => ({ id: b.id, name: b.name, style_base: b.style_base })),
+    today: simulatedToday,
   }) : null;
 
   const toggleBatch = (id: string) => {
@@ -184,9 +190,23 @@ export default function JoinBatchFlow() {
         breakdown.perBatchFee, breakdown.discountPct
       );
 
+      const planName = subPlans.find(p => p.id === Number(selectedPlanId))?.name || "";
+      const batchNames = sortedSelectedBatches.map(b => b.name).join(", ");
+
+      const showReceipt = (mode: string, txnId: string) => {
+        setReceiptData({
+          student_name: student.name,
+          plan_name: planName,
+          batches: batchNames,
+          amount: breakdown.total.toLocaleString("en-IN"),
+          payment_mode: mode,
+          transaction_id: txnId,
+          date: simulatedToday,
+        });
+        setReceiptOpen(true);
+      };
+
       if (paymentMode === "razorpay") {
-        const batchNames = selectedBatchIds.map(id => "Batch#" + id).join(", ");
-        const planName = subPlans.find(p => p.id === Number(selectedPlanId))?.name || "";
         await initiateRazorpayPayment({
           orderParams: {
             student_id: student.id, organization_id: 1, batch_ids: selectedBatchIds.map(Number),
@@ -196,7 +216,7 @@ export default function JoinBatchFlow() {
           },
           onSuccess: () => {
             toast.success("Payment initiated! Enrollment will be confirmed once payment is captured.");
-            resetFlow();
+            showReceipt("Razorpay", "Pending capture");
           },
           onFailure: (err) => toast.error(err),
         });
@@ -228,6 +248,7 @@ export default function JoinBatchFlow() {
       });
 
       toast.success("Cash payment request sent to staff for confirmation!");
+      showReceipt("Cash", `CASH-${cashReq.id}`);
       setStep("waiting");
     } catch {
       toast.error("Enrollment failed. Please try again.");
@@ -455,6 +476,14 @@ export default function JoinBatchFlow() {
           </CardContent>
         </Card>
       )}
+
+      <ReceiptPreviewDialog
+        open={receiptOpen}
+        onClose={() => { setReceiptOpen(false); resetFlow(); }}
+        data={receiptData || {}}
+        recipientEmail={student?.email || student?.users?.email}
+        recipientPhone={student?.phone || student?.users?.phone}
+      />
     </div>
   );
 }

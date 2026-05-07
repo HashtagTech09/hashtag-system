@@ -10,6 +10,8 @@ import { Sparkles } from "lucide-react";
 import SessionBrowser from "./SessionBrowser";
 import PhoneEntry from "./PhoneEntry";
 import UserHub from "./UserHub";
+import ReceiptPreviewDialog from "./ReceiptPreviewDialog";
+import { useSimulatedToday } from "@/contexts/TestDateContext";
 
 type Step = "browse" | "phone" | "hub" | "details" | "confirm";
 
@@ -26,6 +28,9 @@ export default function DropInFlow() {
   const [dropInFee, setDropInFee] = useState(700);
   const [paymentMode, setPaymentMode] = useState("cash");
   const [submitting, setSubmitting] = useState(false);
+  const [receiptOpen, setReceiptOpen] = useState(false);
+  const [receiptData, setReceiptData] = useState<any>(null);
+  const simulatedToday = useSimulatedToday();
 
   useEffect(() => {
     supabase.from("system_settings").select("*").eq("organization_id", 1).eq("key", "drop_in_fee").then(({ data }) => {
@@ -101,7 +106,16 @@ export default function DropInFlow() {
       if (error) throw error;
 
       toast.success(`Drop-in booked! Amount: ₹${total.toLocaleString()}`);
-      reset();
+      setReceiptData({
+        student_name: student.name,
+        plan_name: "Drop-In",
+        batches: `${selectedSession?.session_date} • ${selectedSession?.start_time}–${selectedSession?.end_time}`,
+        amount: total.toLocaleString("en-IN"),
+        payment_mode: paymentMode === "razorpay" ? "Razorpay" : "Cash",
+        transaction_id: `DROP-${payment.id}`,
+        date: simulatedToday,
+      });
+      setReceiptOpen(true);
     } catch {
       toast.error("Booking failed. Please try again.");
     } finally {
@@ -220,6 +234,14 @@ export default function DropInFlow() {
           </CardContent>
         </Card>
       )}
+
+      <ReceiptPreviewDialog
+        open={receiptOpen}
+        onClose={() => { setReceiptOpen(false); reset(); }}
+        data={receiptData || {}}
+        recipientEmail={student?.email || student?.users?.email}
+        recipientPhone={student?.phone || student?.users?.phone}
+      />
     </div>
   );
 }
