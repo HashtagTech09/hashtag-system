@@ -50,8 +50,8 @@ export interface SubPlan {
 }
 
 /** Find the first cycle with open registration (or next upcoming) */
-export function getStartCycleIndex(planCycles: PlanCycle[]): number {
-  const todayStr = todayIST();
+export function getStartCycleIndex(planCycles: PlanCycle[], today?: string): number {
+  const todayStr = today || todayIST();
   const openIdx = planCycles.findIndex(c => {
     if (c.registration_deadline && todayStr > c.registration_deadline) return false;
     const endDate = c.end_date || "2099-12-31";
@@ -164,13 +164,14 @@ export function computeFeeBreakdown(params: {
   dropInAmount: number;
   /** Sorted batches by hierarchy (highest priority first) */
   sortedBatches?: { id: number; name: string; style_base?: string | null }[];
+  today?: string;
 }): FeeBreakdown {
-  const { batchCount, regularCycles, gridCycles, detectedStatus, latestEndDate, dropInAmount, sortedBatches } = params;
+  const { batchCount, regularCycles, gridCycles, detectedStatus, latestEndDate, dropInAmount, sortedBatches, today } = params;
   const planKey = getPlanKey(regularCycles, gridCycles);
   const fixedTotal = PLAN_FIXED_TOTALS[planKey];
   const isFixedPricePlan = fixedTotal !== undefined;
 
-  const todayStr = new Date().toISOString().split("T")[0];
+  const todayStr = today || todayIST();
   let applyRegFee = detectedStatus === "NEW" || detectedStatus === "REV" || (detectedStatus === "REN" && latestEndDate ? todayStr > latestEndDate : false);
   if (isFixedPricePlan) applyRegFee = false;
   const regFee = applyRegFee ? REG_FEE : 0;
@@ -220,12 +221,13 @@ export function computeFeeBreakdown(params: {
 /** Detect student enrollment status: NEW, REN, or REV */
 export function detectStudentStatus(
   enrollments: { end_date: string }[],
-  planCycles: PlanCycle[]
+  planCycles: PlanCycle[],
+  today?: string
 ): { status: string; latestEndDate: string | null } {
   if (!enrollments || enrollments.length === 0) return { status: "NEW", latestEndDate: null };
   
   const latest = enrollments[0].end_date;
-  const todayStr = new Date().toISOString().split("T")[0];
+  const todayStr = today || todayIST();
   
   if (latest >= todayStr) return { status: "REN", latestEndDate: latest };
   
