@@ -476,6 +476,14 @@ export default function JoinBatchFlow() {
           </CardContent>
         </Card>
       )}
+
+      <ReceiptPreviewDialog
+        open={receiptOpen}
+        onClose={() => { setReceiptOpen(false); resetFlow(); }}
+        data={receiptData || {}}
+        recipientEmail={student?.email || student?.users?.email}
+        recipientPhone={student?.phone || student?.users?.phone}
+      />
     </div>
   );
 }
