@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, PackagePlus } from "lucide-react";
+import { Plus, Search, PackagePlus, Download } from "lucide-react";
 import { toast } from "sonner";
 import { getDisplayPhone } from "@/lib/studentUtils";
 import { parseISO } from "date-fns";
@@ -791,6 +791,45 @@ const EnrollmentsPage = () => {
             <Input type="month" value={validMonth} onChange={(e) => { setValidMonth(e.target.value); if (e.target.value) setValidNow(false); }} className="w-[160px]" placeholder="Valid in month" />
             {validMonth && <Button variant="ghost" size="sm" onClick={() => setValidMonth("")}>Clear</Button>}
           </div>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={displayed.length === 0}
+            onClick={() => {
+              const esc = (v: any) => {
+                const s = v === null || v === undefined ? "" : String(v);
+                return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+              };
+              const headers = ["S.No","Student Name","Phone","Studio","Batch","Batch Code","Type","Plan","Cycles","Start Date","End Date"];
+              const lines = [headers.join(",")];
+              displayed.forEach((e, i) => {
+                lines.push([
+                  i + 1,
+                  e.students?.name || "",
+                  e.students ? getDisplayPhone(e.students) : "",
+                  e.batches?.studios?.name || "",
+                  e.batches?.name || "",
+                  e.batches?.batch_code || "",
+                  `${e.status_type || ""}${e.late_renewal ? " (Late)" : ""}`,
+                  e.subscription_plans?.name || "",
+                  e.start_cycle && e.end_cycle ? `${e.start_cycle.name} → ${e.end_cycle.name}` : "",
+                  e.start_date || "",
+                  e.end_date || "",
+                ].map(esc).join(","));
+              });
+              const blob = new Blob(["\uFEFF" + lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `enrollments-${todayIST()}.csv`;
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              URL.revokeObjectURL(url);
+            }}
+          >
+            <Download className="h-4 w-4" /> CSV
+          </Button>
         </div>
         {validNow && (
           <p className="text-sm text-muted-foreground">Currently valid — {displayed.length} enrollment{displayed.length !== 1 ? "s" : ""}</p>
