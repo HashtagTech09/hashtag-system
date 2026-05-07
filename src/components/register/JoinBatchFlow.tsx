@@ -78,7 +78,7 @@ export default function JoinBatchFlow() {
     fetch();
   }, []);
 
-  const startCycleIdx = planCycles.length > 0 ? getStartCycleIndex(planCycles) : 0;
+  const startCycleIdx = planCycles.length > 0 ? getStartCycleIndex(planCycles, simulatedToday) : 0;
   const validPlans = subPlans.filter(p => isPlanValid(p, planCycles, startCycleIdx));
 
   useEffect(() => {
@@ -97,7 +97,7 @@ export default function JoinBatchFlow() {
       if (!student) { setDetectedStatus("NEW"); setLatestEndDate(null); return; }
       const { data: enrollments } = await supabase
         .from("enrollments").select("end_date").eq("student_id", student.id).order("end_date", { ascending: false });
-      const result = detectStudentStatus(enrollments || [], planCycles);
+      const result = detectStudentStatus(enrollments || [], planCycles, simulatedToday);
       setDetectedStatus(result.status);
       setLatestEndDate(result.latestEndDate);
     };
@@ -112,6 +112,7 @@ export default function JoinBatchFlow() {
     latestEndDate,
     dropInAmount: 0,
     sortedBatches: sortedSelectedBatches.map(b => ({ id: b.id, name: b.name, style_base: b.style_base })),
+    today: simulatedToday,
   }) : null;
 
   const toggleBatch = (id: string) => {
