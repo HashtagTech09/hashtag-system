@@ -234,6 +234,14 @@ export default function DropInFlow() {
           </CardContent>
         </Card>
       )}
+
+      <ReceiptPreviewDialog
+        open={receiptOpen}
+        onClose={() => { setReceiptOpen(false); reset(); }}
+        data={receiptData || {}}
+        recipientEmail={student?.email || student?.users?.email}
+        recipientPhone={student?.phone || student?.users?.phone}
+      />
     </div>
   );
 }
