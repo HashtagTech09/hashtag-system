@@ -1,47 +1,64 @@
-## Test Mode: simulated registration date + receipt preview
+# Application Cases Workflow
 
-Two related additions, gated by the existing `system_settings.test_mode` flag.
+A manager or admin can request to move an enrollment into "Application Case" status. The request goes to admins for approval. On approval, the enrollment is marked inactive (hidden from Enrollments) and listed under Application Cases. No "send back" flow — once approved the enrollment stays inactive.
 
-### 1. Simulated "registration date" in Register flow
+## Database changes
 
-When test mode is ON, show a date picker at the top of the Register page so each test registration can simulate that the registration happened on a chosen date. The simulated date is **passed into cycle/plan-matching logic** so the correct plan and fee for that date are picked — but it does NOT modify enrollment timestamps, payment timestamps, or any DB fields. It is purely a "what would the system charge if today were X?" preview.
+1. Add `is_active boolean NOT NULL DEFAULT true` to `enrollments`.
+2. New table `application_cases`:
+   - `enrollment_id` (the target enrollment)
+   - `student_id`, `batch_id`, `organization_id`
+   - `requested_by_user_id`, `requested_at`, `reason` (text, optional)
+   - `status` text — `pending` | `approved` | `rejected` (default `pending`)
+   - `reviewed_by_user_id`, `reviewed_at`, `review_notes`
+3. Index on `(organization_id, status)` for fast pending-count queries.
+4. Realtime publication on `application_cases` so the pending badge updates live.
+5. RLS: authenticated users can read/insert/update (matches existing pattern in this project).
 
-UI:
-- Banner at top of `src/pages/Register.tsx` (only when `test_mode === "true"`):
-  - Yellow/warning style matching the Settings test-mode banner.
-  - Label: "TEST MODE — simulating registration on:" + shadcn DatePicker.
-  - Default value: today (IST).
-  - Reset button to clear back to today.
-- The chosen date is held in a small React Context (`TestDateContext`) provided in `Register.tsx` so all child flows (`JoinBatchFlow`, `BatchSelection`, `DropInFlow`, `FeeBreakdown`, `cycleUtils`) can read it via a single hook `useSimulatedToday()` that returns either the override or `todayIST()`.
+## Backend rules (enforced in UI for now, since RLS is permissive)
 
-Logic wiring (only the *read* of "today" is swapped — no DB writes change):
-- `src/lib/cycleUtils.ts` — accept an optional `today` arg (defaults to `todayIST()`), use it to pick the active/upcoming cycle for plan + fee matching.
-- `src/components/register/BatchSelection.tsx`, `FeeBreakdown.tsx`, `JoinBatchFlow.tsx` — when computing eligible cycles, plan price, and discount tier, pass `simulatedToday` instead of calling `todayIST()` directly.
-- The actual `start_date`, `end_date`, payment `created_at`, and any inserted rows continue to use real `nowIST()` / `todayIST()`. No backend / edge function changes.
+- Anyone with the manager or admin role can INSERT a pending case.
+- Only admin can UPDATE status to `approved` / `rejected`.
+- On `approved`: set `enrollments.is_active = false` for that enrollment_id (single transaction via two awaited calls; acceptable given existing patterns).
+- Re-requesting on an already-pending or approved enrollment is blocked client-side.
 
-### 2. Receipt preview modal after payment
+## UI changes
 
-After a successful payment in the Register flow, open a modal that previews the receipt the student will receive.
+### Enrollments page (`src/pages/Enrollments.tsx`)
+- Default query filters `is_active = true` so approved cases disappear from the list.
+- Add row action **"Request Application Case"** (visible to manager + admin). Opens a small dialog asking for an optional reason. Submitting inserts a pending row. Toast confirmation.
+- If a pending case already exists for that enrollment, show a yellow "Pending Application Case" badge instead of the action.
 
-- New component `src/components/register/ReceiptPreviewDialog.tsx`:
-  - Renders the same HTML used by the receipt email (extracted into a shared helper).
-  - Iframe-renders the HTML so styles are isolated.
-  - Shows recipient details (email + phone) and a "Close" button.
-- Receipt template extracted from `supabase/functions/send-receipt/index.ts` into a frontend helper `src/lib/receiptTemplate.ts` so it can be rendered client-side. (Edge function imports the same string template via duplication — safe and tiny; we don't share code across the boundary.)
-- Trigger: in `JoinBatchFlow` / `DropInFlow` Razorpay `onSuccess` handler (see `src/lib/razorpayUtils.ts`), after the existing success toast, open the dialog with the current student + payment details. Dialog appears for both test-mode and live-mode payments (as confirmed: receipt preview is independent of the test-date feature).
+### New page `src/pages/ApplicationCases.tsx` (route `/application-cases`)
+- Three tabs: **Pending**, **Approved**, **Rejected**.
+- Pending tab shows: student, batch, requested by, requested at, reason, and (admin only) **Approve** / **Reject** buttons. Reject opens a small notes field.
+- Approved/Rejected tabs are read-only history with reviewer + timestamp.
+- Top of page shows an orange notification banner for admins when pending count > 0: "X application case(s) awaiting your approval".
+- Search + studio filter to match the Enrollments UX.
 
-### Out of scope
+### Sidebar (`src/components/AppSidebar.tsx`)
+- New "Application Cases" entry under Enrollments.
+- Pending count badge (red dot with number) visible only to admins, sourced from a small `useApplicationCasesCount` hook subscribing to realtime.
 
-- No DB schema changes.
-- No edge function logic changes (receipt is still auto-sent server-side as it is today).
-- Test date does NOT alter what is stored in `enrollments`, `payments`, or cycles — it only changes which plan/cycle the UI selects.
-- No changes to other admin pages.
+### Routing (`src/App.tsx`)
+- Register `/application-cases` route, admin/manager-gated like other admin pages.
 
-### Files touched
+## Technical notes
 
-- `src/pages/Register.tsx` — test-date banner + context provider.
-- New `src/contexts/TestDateContext.tsx` — provider + `useSimulatedToday()`.
-- `src/lib/cycleUtils.ts` — accept optional `today` parameter.
-- `src/components/register/JoinBatchFlow.tsx`, `BatchSelection.tsx`, `FeeBreakdown.tsx`, `DropInFlow.tsx` — use `useSimulatedToday()` when computing eligibility / pricing; open receipt preview on success.
-- New `src/components/register/ReceiptPreviewDialog.tsx`.
-- New `src/lib/receiptTemplate.ts` — shared HTML builder.
+- Use existing role helpers from `useAuth()` (`isAdmin`, `isAdminOrManager`).
+- Approval flow:
+  ```ts
+  await supabase.from("application_cases")
+    .update({ status: "approved", reviewed_by_user_id, reviewed_at: nowIST() })
+    .eq("id", caseId);
+  await supabase.from("enrollments")
+    .update({ is_active: false })
+    .eq("id", enrollmentId);
+  ```
+- Update Dashboard / analytics queries that read `enrollments` to add `.eq("is_active", true)` so renewal/headcount metrics aren't skewed by application-case rows. (Will audit `Dashboard.tsx`, `Students.tsx`, `cycleUtils.ts`, registration flow queries during implementation.)
+- No edge function needed.
+- No changes to payments, cycles, or `cycle_adjustments`.
+
+## Out of scope (per your answer)
+
+- Re-activating an enrollment with new cycles. If you want that later, we can add a "Send back" admin action that resets `is_active` and optionally calls `cycle_adjustments`.

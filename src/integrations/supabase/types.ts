@@ -47,6 +47,90 @@ export type Database = {
         }
         Relationships: []
       }
+      application_cases: {
+        Row: {
+          batch_id: number
+          created_at: string
+          enrollment_id: number
+          id: number
+          organization_id: number
+          reason: string | null
+          requested_at: string
+          requested_by_user_id: number | null
+          review_notes: string | null
+          reviewed_at: string | null
+          reviewed_by_user_id: number | null
+          status: string
+          student_id: number
+        }
+        Insert: {
+          batch_id: number
+          created_at?: string
+          enrollment_id: number
+          id?: number
+          organization_id?: number
+          reason?: string | null
+          requested_at?: string
+          requested_by_user_id?: number | null
+          review_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by_user_id?: number | null
+          status?: string
+          student_id: number
+        }
+        Update: {
+          batch_id?: number
+          created_at?: string
+          enrollment_id?: number
+          id?: number
+          organization_id?: number
+          reason?: string | null
+          requested_at?: string
+          requested_by_user_id?: number | null
+          review_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by_user_id?: number | null
+          status?: string
+          student_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "application_cases_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "application_cases_enrollment_id_fkey"
+            columns: ["enrollment_id"]
+            isOneToOne: false
+            referencedRelation: "enrollments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "application_cases_requested_by_user_id_fkey"
+            columns: ["requested_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "application_cases_reviewed_by_user_id_fkey"
+            columns: ["reviewed_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "application_cases_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       attendance: {
         Row: {
           batch_id: number
@@ -541,6 +625,7 @@ export type Database = {
           end_cycle_id: number | null
           end_date: string
           id: number
+          is_active: boolean
           late_renewal: boolean | null
           organization_id: number
           payment_id: number | null
@@ -558,6 +643,7 @@ export type Database = {
           end_cycle_id?: number | null
           end_date: string
           id?: never
+          is_active?: boolean
           late_renewal?: boolean | null
           organization_id: number
           payment_id?: number | null
@@ -575,6 +661,7 @@ export type Database = {
           end_cycle_id?: number | null
           end_date?: string
           id?: never
+          is_active?: boolean
           late_renewal?: boolean | null
           organization_id?: number
           payment_id?: number | null

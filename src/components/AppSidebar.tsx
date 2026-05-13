@@ -12,7 +12,9 @@ import {
   LogOut,
   Zap,
   FileUp,
+  FileWarning,
 } from "lucide-react";
+import { useApplicationCasesCount } from "@/hooks/useApplicationCasesCount";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
@@ -41,6 +43,7 @@ const allMainItems = [
 
 const allOperationItems = [
   { title: "Enrollments", url: "/enrollments", icon: ClipboardList, roles: ["admin", "manager", "frontdesk"] },
+  { title: "Application Cases", url: "/application-cases", icon: FileWarning, roles: ["admin", "manager"] },
   { title: "Drop-ins", url: "/drop-ins", icon: Zap, roles: ["admin", "manager", "frontdesk"] },
   { title: "Payments", url: "/payments", icon: CreditCard, roles: ["admin", "manager", "frontdesk"] },
   { title: "Attendance", url: "/attendance", icon: UserCheck, roles: ["admin", "manager", "instructor", "frontdesk"] },
@@ -53,6 +56,7 @@ export function AppSidebar() {
   const collapsed = state === "collapsed";
   const location = useLocation();
   const { signOut, staffRoles, isAdminOrManager } = useAuth();
+  const { pendingCount } = useApplicationCasesCount();
 
   const roleNames = staffRoles.map(r => r.roles?.name).filter(Boolean) as string[];
   // If no staff record found (e.g. superadmin), show everything
@@ -107,16 +111,33 @@ export function AppSidebar() {
             <SidebarGroupLabel>Operations</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                {operationItems.map((item) => (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton asChild isActive={isActive(item.url)}>
-                      <NavLink to={item.url}>
-                        <item.icon className="h-4 w-4" />
-                        {!collapsed && <span>{item.title}</span>}
-                      </NavLink>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
+                {operationItems.map((item) => {
+                  const showBadge = item.url === "/application-cases" && pendingCount > 0;
+                  return (
+                    <SidebarMenuItem key={item.title}>
+                      <SidebarMenuButton asChild isActive={isActive(item.url)}>
+                        <NavLink to={item.url}>
+                          <item.icon className="h-4 w-4" />
+                          {!collapsed && (
+                            <span className="flex-1 flex items-center justify-between">
+                              <span>{item.title}</span>
+                              {showBadge && (
+                                <span className="ml-2 inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-destructive text-destructive-foreground text-[10px] font-semibold">
+                                  {pendingCount}
+                                </span>
+                              )}
+                            </span>
+                          )}
+                          {collapsed && showBadge && (
+                            <span className="absolute top-0 right-0 inline-flex items-center justify-center min-w-4 h-4 px-1 rounded-full bg-destructive text-destructive-foreground text-[9px] font-semibold">
+                              {pendingCount}
+                            </span>
+                          )}
+                        </NavLink>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>

@@ -12,6 +12,7 @@ import UsersPage from "./pages/Staff";
 import StudentsPage from "./pages/Students";
 import BatchesPage from "./pages/Batches";
 import EnrollmentsPage from "./pages/Enrollments";
+import ApplicationCasesPage from "./pages/ApplicationCases";
 import PaymentsPage from "./pages/Payments";
 import AttendancePage from "./pages/Attendance";
 import SettingsPage from "./pages/Settings";
@@ -56,6 +57,7 @@ const AppRoutes = () => (
     <Route path="/batches" element={<ProtectedRoute><BatchesPage /></ProtectedRoute>} />
     <Route path="/plan-cycles" element={<ProtectedRoute><PlanCyclesPage /></ProtectedRoute>} />
     <Route path="/enrollments" element={<ProtectedRoute><EnrollmentsPage /></ProtectedRoute>} />
+    <Route path="/application-cases" element={<ProtectedRoute><ApplicationCasesPage /></ProtectedRoute>} />
     <Route path="/drop-ins" element={<ProtectedRoute><DropInsPage /></ProtectedRoute>} />
     <Route path="/payments" element={<ProtectedRoute><PaymentsPage /></ProtectedRoute>} />
     <Route path="/attendance" element={<ProtectedRoute><AttendancePage /></ProtectedRoute>} />

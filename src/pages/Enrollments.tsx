@@ -10,14 +10,21 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, PackagePlus, Download } from "lucide-react";
+import { Plus, Search, PackagePlus, Download, FileWarning } from "lucide-react";
 import { toast } from "sonner";
 import { getDisplayPhone } from "@/lib/studentUtils";
 import { parseISO } from "date-fns";
 import { allocateCyclesForPlan, insertEnrollmentCycles } from "@/lib/cycleUtils";
+import { useAuth } from "@/hooks/useAuth";
+import { Textarea } from "@/components/ui/textarea";
 
 const EnrollmentsPage = () => {
+  const { staffUser, isAdminOrManager } = useAuth();
   const [enrollments, setEnrollments] = useState<any[]>([]);
+  const [pendingCases, setPendingCases] = useState<Record<number, boolean>>({});
+  const [caseDialogOpen, setCaseDialogOpen] = useState(false);
+  const [caseEnrollment, setCaseEnrollment] = useState<any>(null);
+  const [caseReason, setCaseReason] = useState("");
   const [students, setStudents] = useState<any[]>([]);
   const [batches, setBatches] = useState<any[]>([]);
   const [studios, setStudios] = useState<any[]>([]);
@@ -51,7 +58,7 @@ const EnrollmentsPage = () => {
 
   const fetchData = async () => {
     const [enrollRes, studentRes, batchRes, studioRes, planRes, seqRes, cycleRes, pricingRes] = await Promise.all([
-      supabase.from("enrollments").select("*, students(name, phone, users(phone)), batches(name, batch_code, studio_id, studios(name, code)), subscription_plans(name), start_cycle:plan_cycles!enrollments_start_cycle_id_fkey(name), end_cycle:plan_cycles!enrollments_end_cycle_id_fkey(name)").eq("organization_id", 1).order("created_at", { ascending: false }),
+      supabase.from("enrollments").select("*, students(name, phone, users(phone)), batches(name, batch_code, studio_id, studios(name, code)), subscription_plans(name), start_cycle:plan_cycles!enrollments_start_cycle_id_fkey(name), end_cycle:plan_cycles!enrollments_end_cycle_id_fkey(name)").eq("organization_id", 1).eq("is_active", true).order("created_at", { ascending: false }),
       supabase.from("students").select("*").eq("organization_id", 1).order("name"),
       supabase.from("batches").select("*").eq("organization_id", 1).order("name"),
       supabase.from("studios").select("id, name, code").eq("organization_id", 1).order("name"),
@@ -68,9 +75,49 @@ const EnrollmentsPage = () => {
     setSubPlanCycles(seqRes.data || []);
     setPlanCycles(cycleRes.data || []);
     setPricingPlans(pricingRes.data || []);
+
+    // Fetch pending application cases keyed by enrollment_id
+    const { data: caseData } = await supabase
+      .from("application_cases")
+      .select("enrollment_id")
+      .eq("organization_id", 1)
+      .eq("status", "pending");
+    const map: Record<number, boolean> = {};
+    (caseData || []).forEach(c => { map[c.enrollment_id] = true; });
+    setPendingCases(map);
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => {
+    fetchData();
+    const channel = supabase
+      .channel("enrollments_app_cases")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "application_cases" },
+        () => fetchData()
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
+  const requestApplicationCase = async () => {
+    if (!caseEnrollment) return;
+    const { error } = await supabase.from("application_cases").insert({
+      organization_id: 1,
+      enrollment_id: caseEnrollment.id,
+      student_id: caseEnrollment.student_id,
+      batch_id: caseEnrollment.batch_id,
+      requested_by_user_id: staffUser?.id ?? null,
+      reason: caseReason || null,
+      status: "pending",
+    });
+    if (error) { toast.error("Failed to raise application case"); return; }
+    toast.success("Application case raised — awaiting admin approval");
+    setCaseDialogOpen(false);
+    setCaseEnrollment(null);
+    setCaseReason("");
+    fetchData();
+  };
 
   // Auto-detect student status based on enrollment history
   useEffect(() => {
@@ -855,6 +902,7 @@ const EnrollmentsPage = () => {
                 <TableHead className="hidden md:table-cell">Studio</TableHead>
                 <TableHead className="hidden md:table-cell">Start</TableHead>
                 <TableHead className="hidden md:table-cell">End</TableHead>
+                {isAdminOrManager && <TableHead className="text-right">Actions</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -876,13 +924,64 @@ const EnrollmentsPage = () => {
                   </TableCell>
                   <TableCell className="hidden md:table-cell text-muted-foreground">{e.start_date}</TableCell>
                   <TableCell className="hidden md:table-cell text-muted-foreground">{e.end_date}</TableCell>
+                  {isAdminOrManager && (
+                    <TableCell className="text-right">
+                      {pendingCases[e.id] ? (
+                        <Badge variant="secondary" className="bg-warning/20 text-warning">
+                          Pending Case
+                        </Badge>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => { setCaseEnrollment(e); setCaseReason(""); setCaseDialogOpen(true); }}
+                        >
+                          <FileWarning className="h-4 w-4 mr-1" />
+                          Application Case
+                        </Button>
+                      )}
+                    </TableCell>
+                  )}
                 </TableRow>
               ))}
-              {displayed.length === 0 && <TableRow><TableCell colSpan={11} className="text-center text-muted-foreground py-8">No enrollments found</TableCell></TableRow>}
+              {displayed.length === 0 && <TableRow><TableCell colSpan={isAdminOrManager ? 12 : 11} className="text-center text-muted-foreground py-8">No enrollments found</TableCell></TableRow>}
             </TableBody>
           </Table>
         </CardContent>
       </Card>
+      <Dialog open={caseDialogOpen} onOpenChange={setCaseDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Request Application Case</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            {caseEnrollment && (
+              <div className="p-3 rounded border border-border text-sm space-y-1">
+                <p><span className="text-muted-foreground">Student:</span> <span className="font-medium">{caseEnrollment.students?.name}</span></p>
+                <p><span className="text-muted-foreground">Batch:</span> {caseEnrollment.batches?.name}</p>
+                <p><span className="text-muted-foreground">Validity:</span> {caseEnrollment.start_date} → {caseEnrollment.end_date}</p>
+              </div>
+            )}
+            <div>
+              <Label>Reason (optional)</Label>
+              <Textarea
+                value={caseReason}
+                onChange={(e) => setCaseReason(e.target.value)}
+                placeholder="e.g. Validity shifted to next month due to studio closure"
+                rows={3}
+                className="mt-1.5"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              An admin will review and approve. Once approved, this enrollment will be removed from the active list.
+            </p>
+          </div>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setCaseDialogOpen(false)}>Cancel</Button>
+            <Button className="gradient-primary" onClick={requestApplicationCase}>Submit Request</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </AdminLayout>
   );
 };
