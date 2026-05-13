@@ -902,6 +902,7 @@ const EnrollmentsPage = () => {
                 <TableHead className="hidden md:table-cell">Studio</TableHead>
                 <TableHead className="hidden md:table-cell">Start</TableHead>
                 <TableHead className="hidden md:table-cell">End</TableHead>
+                {isAdminOrManager && <TableHead className="text-right">Actions</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -923,9 +924,27 @@ const EnrollmentsPage = () => {
                   </TableCell>
                   <TableCell className="hidden md:table-cell text-muted-foreground">{e.start_date}</TableCell>
                   <TableCell className="hidden md:table-cell text-muted-foreground">{e.end_date}</TableCell>
+                  {isAdminOrManager && (
+                    <TableCell className="text-right">
+                      {pendingCases[e.id] ? (
+                        <Badge variant="secondary" className="bg-warning/20 text-warning">
+                          Pending Case
+                        </Badge>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => { setCaseEnrollment(e); setCaseReason(""); setCaseDialogOpen(true); }}
+                        >
+                          <FileWarning className="h-4 w-4 mr-1" />
+                          Application Case
+                        </Button>
+                      )}
+                    </TableCell>
+                  )}
                 </TableRow>
               ))}
-              {displayed.length === 0 && <TableRow><TableCell colSpan={11} className="text-center text-muted-foreground py-8">No enrollments found</TableCell></TableRow>}
+              {displayed.length === 0 && <TableRow><TableCell colSpan={isAdminOrManager ? 12 : 11} className="text-center text-muted-foreground py-8">No enrollments found</TableCell></TableRow>}
             </TableBody>
           </Table>
         </CardContent>
