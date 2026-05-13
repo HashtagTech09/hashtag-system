@@ -10,11 +10,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, PackagePlus, Download } from "lucide-react";
+import { Plus, Search, PackagePlus, Download, FileWarning } from "lucide-react";
 import { toast } from "sonner";
 import { getDisplayPhone } from "@/lib/studentUtils";
 import { parseISO } from "date-fns";
 import { allocateCyclesForPlan, insertEnrollmentCycles } from "@/lib/cycleUtils";
+import { useAuth } from "@/hooks/useAuth";
+import { Textarea } from "@/components/ui/textarea";
 
 const EnrollmentsPage = () => {
   const [enrollments, setEnrollments] = useState<any[]>([]);
