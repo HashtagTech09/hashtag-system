@@ -12,6 +12,7 @@ import UsersPage from "./pages/Staff";
 import StudentsPage from "./pages/Students";
 import BatchesPage from "./pages/Batches";
 import EnrollmentsPage from "./pages/Enrollments";
+import ApplicationCasesPage from "./pages/ApplicationCases";
 import PaymentsPage from "./pages/Payments";
 import AttendancePage from "./pages/Attendance";
 import SettingsPage from "./pages/Settings";
