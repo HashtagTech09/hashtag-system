@@ -19,7 +19,12 @@ import { useAuth } from "@/hooks/useAuth";
 import { Textarea } from "@/components/ui/textarea";
 
 const EnrollmentsPage = () => {
+  const { staffUser, isAdminOrManager } = useAuth();
   const [enrollments, setEnrollments] = useState<any[]>([]);
+  const [pendingCases, setPendingCases] = useState<Record<number, boolean>>({});
+  const [caseDialogOpen, setCaseDialogOpen] = useState(false);
+  const [caseEnrollment, setCaseEnrollment] = useState<any>(null);
+  const [caseReason, setCaseReason] = useState("");
   const [students, setStudents] = useState<any[]>([]);
   const [batches, setBatches] = useState<any[]>([]);
   const [studios, setStudios] = useState<any[]>([]);
