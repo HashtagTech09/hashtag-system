@@ -75,9 +75,49 @@ const EnrollmentsPage = () => {
     setSubPlanCycles(seqRes.data || []);
     setPlanCycles(cycleRes.data || []);
     setPricingPlans(pricingRes.data || []);
+
+    // Fetch pending application cases keyed by enrollment_id
+    const { data: caseData } = await supabase
+      .from("application_cases")
+      .select("enrollment_id")
+      .eq("organization_id", 1)
+      .eq("status", "pending");
+    const map: Record<number, boolean> = {};
+    (caseData || []).forEach(c => { map[c.enrollment_id] = true; });
+    setPendingCases(map);
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => {
+    fetchData();
+    const channel = supabase
+      .channel("enrollments_app_cases")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "application_cases" },
+        () => fetchData()
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
+  const requestApplicationCase = async () => {
+    if (!caseEnrollment) return;
+    const { error } = await supabase.from("application_cases").insert({
+      organization_id: 1,
+      enrollment_id: caseEnrollment.id,
+      student_id: caseEnrollment.student_id,
+      batch_id: caseEnrollment.batch_id,
+      requested_by_user_id: staffUser?.id ?? null,
+      reason: caseReason || null,
+      status: "pending",
+    });
+    if (error) { toast.error("Failed to raise application case"); return; }
+    toast.success("Application case raised — awaiting admin approval");
+    setCaseDialogOpen(false);
+    setCaseEnrollment(null);
+    setCaseReason("");
+    fetchData();
+  };
 
   // Auto-detect student status based on enrollment history
   useEffect(() => {
