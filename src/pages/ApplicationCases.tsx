@@ -81,7 +81,7 @@ const ApplicationCasesPage = () => {
       .update({
         status: "approved",
         reviewed_by_user_id: staffUser?.id ?? null,
-        reviewed_at: nowIST(),
+        reviewed_at: nowIST().toISOString(),
       })
       .eq("id", c.id);
     if (updErr) {
@@ -117,7 +117,7 @@ const ApplicationCasesPage = () => {
       .update({
         status: "rejected",
         reviewed_by_user_id: staffUser?.id ?? null,
-        reviewed_at: nowIST(),
+        reviewed_at: nowIST().toISOString(),
         review_notes: reviewNotes || null,
       })
       .eq("id", activeCase.id);
