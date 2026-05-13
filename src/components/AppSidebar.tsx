@@ -56,6 +56,7 @@ export function AppSidebar() {
   const collapsed = state === "collapsed";
   const location = useLocation();
   const { signOut, staffRoles, isAdminOrManager } = useAuth();
+  const { pendingCount } = useApplicationCasesCount();
 
   const roleNames = staffRoles.map(r => r.roles?.name).filter(Boolean) as string[];
   // If no staff record found (e.g. superadmin), show everything
