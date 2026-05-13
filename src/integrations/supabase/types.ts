@@ -47,6 +47,54 @@ export type Database = {
         }
         Relationships: []
       }
+      application_cases: {
+        Row: {
+          batch_id: number
+          created_at: string
+          enrollment_id: number
+          id: number
+          organization_id: number
+          reason: string | null
+          requested_at: string
+          requested_by_user_id: number | null
+          review_notes: string | null
+          reviewed_at: string | null
+          reviewed_by_user_id: number | null
+          status: string
+          student_id: number
+        }
+        Insert: {
+          batch_id: number
+          created_at?: string
+          enrollment_id: number
+          id?: number
+          organization_id?: number
+          reason?: string | null
+          requested_at?: string
+          requested_by_user_id?: number | null
+          review_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by_user_id?: number | null
+          status?: string
+          student_id: number
+        }
+        Update: {
+          batch_id?: number
+          created_at?: string
+          enrollment_id?: number
+          id?: number
+          organization_id?: number
+          reason?: string | null
+          requested_at?: string
+          requested_by_user_id?: number | null
+          review_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by_user_id?: number | null
+          status?: string
+          student_id?: number
+        }
+        Relationships: []
+      }
       attendance: {
         Row: {
           batch_id: number
@@ -541,6 +589,7 @@ export type Database = {
           end_cycle_id: number | null
           end_date: string
           id: number
+          is_active: boolean
           late_renewal: boolean | null
           organization_id: number
           payment_id: number | null
@@ -558,6 +607,7 @@ export type Database = {
           end_cycle_id?: number | null
           end_date: string
           id?: never
+          is_active?: boolean
           late_renewal?: boolean | null
           organization_id: number
           payment_id?: number | null
@@ -575,6 +625,7 @@ export type Database = {
           end_cycle_id?: number | null
           end_date?: string
           id?: never
+          is_active?: boolean
           late_renewal?: boolean | null
           organization_id?: number
           payment_id?: number | null
