@@ -949,6 +949,39 @@ const EnrollmentsPage = () => {
           </Table>
         </CardContent>
       </Card>
+      <Dialog open={caseDialogOpen} onOpenChange={setCaseDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Request Application Case</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            {caseEnrollment && (
+              <div className="p-3 rounded border border-border text-sm space-y-1">
+                <p><span className="text-muted-foreground">Student:</span> <span className="font-medium">{caseEnrollment.students?.name}</span></p>
+                <p><span className="text-muted-foreground">Batch:</span> {caseEnrollment.batches?.name}</p>
+                <p><span className="text-muted-foreground">Validity:</span> {caseEnrollment.start_date} → {caseEnrollment.end_date}</p>
+              </div>
+            )}
+            <div>
+              <Label>Reason (optional)</Label>
+              <Textarea
+                value={caseReason}
+                onChange={(e) => setCaseReason(e.target.value)}
+                placeholder="e.g. Validity shifted to next month due to studio closure"
+                rows={3}
+                className="mt-1.5"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              An admin will review and approve. Once approved, this enrollment will be removed from the active list.
+            </p>
+          </div>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setCaseDialogOpen(false)}>Cancel</Button>
+            <Button className="gradient-primary" onClick={requestApplicationCase}>Submit Request</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </AdminLayout>
   );
 };
