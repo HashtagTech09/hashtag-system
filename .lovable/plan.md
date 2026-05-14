@@ -1,26 +1,20 @@
-## Problem
+## Plan
 
-The "Application Case" button is rendered in the rightmost **Actions** column of the Enrollments table (`src/pages/Enrollments.tsx`, lines 927–944). With 12 columns at a 981px viewport, the table overflows horizontally and the Actions column is clipped off-screen, so it looks like the option doesn't exist.
+1. **Show the logged-in staff account in the Staff Portal header**
+   - Add the current staff name/email and role badges to the top header, next to the page title.
+   - If the logged-in auth account has no matching staff record, show a clear fallback like “Signed in: <email> · No staff profile”.
 
-## Fix
+2. **Explain why the Application Case button may be missing**
+   - The current Enrollments page only shows the Application Case menu when `isAdminOrManager` is true.
+   - Showing the logged-in staff role will make it immediately clear if the account is not admin/manager.
 
-Make the action reliably reachable regardless of table width by switching from a trailing column to an inline row menu.
+3. **Make the Application Case action easier to find**
+   - Keep the existing kebab menu in the `#` column.
+   - Add accessible tooltip/label text so the icon is understandable.
+   - Optionally show a small “Application Case” text button for admin/manager rows instead of only the icon, if space allows.
 
-### Changes (UI only, `src/pages/Enrollments.tsx`)
+## Technical details
 
-1. **Remove the standalone "Actions" `<TableHead>` and `<TableCell>`** at the end of each row.
-2. **Add a compact actions trigger to the `#` (index) cell** — a small kebab/`MoreVertical` icon button next to the row number, always visible (no horizontal scroll required).
-3. The icon opens a `DropdownMenu` containing:
-   - **Request Application Case** (managers + admins) — opens the existing dialog.
-   - If a pending case already exists for that enrollment, show a disabled item labeled **"Pending Case (awaiting approval)"** instead.
-4. Keep the existing dialog, submit handler, `pendingCases` map, and role gating untouched.
-5. Adjust `colSpan` on the empty-state row from `isAdminOrManager ? 12 : 11` to a single value (11) since the trailing column is gone.
-
-### Out of scope
-
-- No changes to data fetching, `application_cases` schema, approval flow, or `ApplicationCases.tsx`.
-- No new routes or backend changes.
-
-## Result
-
-Every enrollment row gets a visible kebab button at the far left, so managers/admins can request an Application Case without scrolling horizontally. The button currently being clipped on the right is removed.
+- Update `src/components/AdminLayout.tsx` to read `user`, `staffUser`, and `staffRoles` from `useAuth()` and render account identity in the header.
+- Update `src/pages/Enrollments.tsx` so the action trigger has a visible label or tooltip and remains gated to admin/manager accounts.
+- No database changes are needed.
