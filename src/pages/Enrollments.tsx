@@ -10,7 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, PackagePlus, Download, FileWarning } from "lucide-react";
+import { Plus, Search, PackagePlus, Download, FileWarning, MoreVertical } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { getDisplayPhone } from "@/lib/studentUtils";
 import { parseISO } from "date-fns";
@@ -891,7 +892,7 @@ const EnrollmentsPage = () => {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-12">#</TableHead>
+                <TableHead className="w-16">#</TableHead>
                 <TableHead>Student</TableHead>
                 <TableHead>Phone</TableHead>
                 <TableHead>Batch</TableHead>
@@ -902,13 +903,40 @@ const EnrollmentsPage = () => {
                 <TableHead className="hidden md:table-cell">Studio</TableHead>
                 <TableHead className="hidden md:table-cell">Start</TableHead>
                 <TableHead className="hidden md:table-cell">End</TableHead>
-                {isAdminOrManager && <TableHead className="text-right">Actions</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
               {displayed.map((e, idx) => (
                 <TableRow key={e.id}>
-                  <TableCell className="text-muted-foreground">{idx + 1}</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    <div className="flex items-center gap-1">
+                      <span>{idx + 1}</span>
+                      {isAdminOrManager && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-7 w-7">
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="start">
+                            {pendingCases[e.id] ? (
+                              <DropdownMenuItem disabled>
+                                <FileWarning className="h-4 w-4 mr-2" />
+                                Pending Case (awaiting approval)
+                              </DropdownMenuItem>
+                            ) : (
+                              <DropdownMenuItem
+                                onClick={() => { setCaseEnrollment(e); setCaseReason(""); setCaseDialogOpen(true); }}
+                              >
+                                <FileWarning className="h-4 w-4 mr-2" />
+                                Request Application Case
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell className="font-medium">{e.students?.name}</TableCell>
                   <TableCell className="text-muted-foreground">{e.students ? getDisplayPhone(e.students) : "—"}</TableCell>
                   <TableCell className="text-muted-foreground">{e.batches?.name}</TableCell>
@@ -924,27 +952,9 @@ const EnrollmentsPage = () => {
                   </TableCell>
                   <TableCell className="hidden md:table-cell text-muted-foreground">{e.start_date}</TableCell>
                   <TableCell className="hidden md:table-cell text-muted-foreground">{e.end_date}</TableCell>
-                  {isAdminOrManager && (
-                    <TableCell className="text-right">
-                      {pendingCases[e.id] ? (
-                        <Badge variant="secondary" className="bg-warning/20 text-warning">
-                          Pending Case
-                        </Badge>
-                      ) : (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => { setCaseEnrollment(e); setCaseReason(""); setCaseDialogOpen(true); }}
-                        >
-                          <FileWarning className="h-4 w-4 mr-1" />
-                          Application Case
-                        </Button>
-                      )}
-                    </TableCell>
-                  )}
                 </TableRow>
               ))}
-              {displayed.length === 0 && <TableRow><TableCell colSpan={isAdminOrManager ? 12 : 11} className="text-center text-muted-foreground py-8">No enrollments found</TableCell></TableRow>}
+              {displayed.length === 0 && <TableRow><TableCell colSpan={11} className="text-center text-muted-foreground py-8">No enrollments found</TableCell></TableRow>}
             </TableBody>
           </Table>
         </CardContent>
