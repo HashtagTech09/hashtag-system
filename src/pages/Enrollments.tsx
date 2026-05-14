@@ -914,7 +914,7 @@ const EnrollmentsPage = () => {
                       {isAdminOrManager && (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-7 w-7">
+                            <Button variant="ghost" size="icon" className="h-7 w-7" title="Row actions (Application Case)" aria-label="Row actions">
                               <MoreVertical className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
