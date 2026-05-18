@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { toISTDateString } from "@/lib/dateUtils";
+import { toISTDateString, todayIST } from "@/lib/dateUtils";
 import { supabase } from "@/integrations/supabase/client";
 import AdminLayout from "@/components/AdminLayout";
 import { Card, CardContent } from "@/components/ui/card";
@@ -7,18 +7,24 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Search, Send } from "lucide-react";
+import { Search, Send, Download } from "lucide-react";
 import { getDisplayPhone } from "@/lib/studentUtils";
 import { toast } from "sonner";
+import { useAuth } from "@/hooks/useAuth";
 
 const PaymentsPage = () => {
   const [payments, setPayments] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [sendingReceipt, setSendingReceipt] = useState<number | null>(null);
+  const { isAdminOrManager } = useAuth();
 
   useEffect(() => {
     const fetchPayments = async () => {
-      const { data } = await supabase.from("payments").select("*, students(name, phone, email, users(phone, email))").eq("organization_id", 1).order("created_at", { ascending: false });
+      const { data } = await supabase
+        .from("payments")
+        .select("*, students(name, phone, email, users(phone, email)), enrollments(start_date, end_date, batches(name))")
+        .eq("organization_id", 1)
+        .order("created_at", { ascending: false });
       setPayments(data || []);
     };
     fetchPayments();
@@ -27,6 +33,73 @@ const PaymentsPage = () => {
   const statusColors: Record<string, string> = { success: "bg-success/20 text-success", pending: "bg-warning/20 text-warning", failed: "bg-destructive/20 text-destructive" };
 
   const filtered = payments.filter((p) => p.students?.name?.toLowerCase().includes(search.toLowerCase()));
+
+  const getDisplayEmail = (student: any): string => student?.email || student?.users?.email || "";
+
+  const csvEscape = (val: any): string => {
+    if (val === null || val === undefined) return "";
+    const s = String(val);
+    if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+    return s;
+  };
+
+  const formatDDMMYYYY = (iso: string) => {
+    const [y, m, d] = iso.split("-");
+    return `${d}/${m}/${y}`;
+  };
+
+  const handleDownloadCSV = () => {
+    const headers = [
+      "Date", "Name", "Phone No.", "Email ID", "Receipt No.", "Status", "Validity",
+      "Online/Offline", "Batch", "No. Of Batches", "Gross Amount", "GST @18%",
+      "Amount Paid", "Mode of Payment", "Paid To",
+    ];
+
+    const rows = filtered.map((p) => {
+      const student = p.students;
+      const enrollments = Array.isArray(p.enrollments) ? p.enrollments : (p.enrollments ? [p.enrollments] : []);
+      const batchNames = enrollments.map((e: any) => e?.batches?.name).filter(Boolean).join(", ");
+      const validity = enrollments.length
+        ? enrollments.map((e: any) =>
+            e?.start_date && e?.end_date ? `${formatDDMMYYYY(e.start_date)} - ${formatDDMMYYYY(e.end_date)}` : ""
+          ).filter(Boolean).join(" | ")
+        : "";
+      const gross = Number(p.amount || 0);
+      const gst = p.gst != null ? Number(p.gst) : Math.round(gross * 0.18);
+      const paid = p.final_amount != null ? Number(p.final_amount) : gross + gst;
+      const paidTo = p.payment_mode === "cash" ? "" : (p.rzp_account || "");
+
+      return [
+        formatDDMMYYYY(toISTDateString(p.created_at)),
+        student?.name || "",
+        student ? getDisplayPhone(student) || "" : "",
+        getDisplayEmail(student),
+        "", // Receipt No.
+        p.status || "",
+        validity,
+        "", // Online/Offline
+        batchNames,
+        "", // No. Of Batches
+        gross,
+        gst,
+        paid,
+        p.payment_mode || "",
+        paidTo,
+      ];
+    });
+
+    const csv = [headers, ...rows].map((r) => r.map(csvEscape).join(",")).join("\r\n");
+    const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `payments-${todayIST()}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast.success(`Exported ${rows.length} payment${rows.length === 1 ? "" : "s"}`);
+  };
 
   const handleResendReceipt = async (payment: any) => {
     setSendingReceipt(payment.id);
@@ -66,11 +139,17 @@ const PaymentsPage = () => {
 
   return (
     <AdminLayout title="Payments">
-      <div className="mb-6">
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="relative w-full sm:w-72">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input placeholder="Search by student..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10" />
         </div>
+        {isAdminOrManager && (
+          <Button onClick={handleDownloadCSV} disabled={filtered.length === 0} variant="outline">
+            <Download className="h-4 w-4" />
+            Download CSV
+          </Button>
+        )}
       </div>
 
       <Card className="glass-card">
