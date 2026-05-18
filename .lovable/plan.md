@@ -1,20 +1,42 @@
-## Plan
+# Delete recently imported data
 
-1. **Show the logged-in staff account in the Staff Portal header**
-   - Add the current staff name/email and role badges to the top header, next to the page title.
-   - If the logged-in auth account has no matching staff record, show a clear fallback like “Signed in: <email> · No staff profile”.
+## What was imported
 
-2. **Explain why the Application Case button may be missing**
-   - The current Enrollments page only shows the Application Case menu when `isAdminOrManager` is true.
-   - Showing the logged-in staff role will make it immediately clear if the account is not admin/manager.
+A single import ran today at 18:22–18:23 UTC and created:
 
-3. **Make the Application Case action easier to find**
-   - Keep the existing kebab menu in the `#` column.
-   - Add accessible tooltip/label text so the icon is understandable.
-   - Optionally show a small “Application Case” text button for admin/manager rows instead of only the icon, if space allows.
+- 21 users
+- 25 students
+- 120 enrollments
+- 334 enrollment_cycles
+- 0 payments, 0 payment_allocations, 0 user_roles
+
+No payments or roles were created, so cleanup is contained to the four tables above.
+
+## What this plan does
+
+Delete every record from those four tables whose `created_at >= 2026-05-18 18:22:00 UTC` (covers the full import window). Cutoff is exact and excludes anything older.
+
+Run as a migration in this order (children first to respect references):
+
+1. `enrollment_cycles` — 334 rows
+2. `enrollments` — 120 rows
+3. `students` — 25 rows
+4. `users` — 21 rows
+
+Nothing else is touched. RLS, triggers, schema, auth accounts, and your staff record stay as they are.
+
+## Safety check before delete
+
+I will first run a dry-count inside the migration's transaction-style block to confirm the row counts match (25 / 21 / 120 / 334). If they don't, I'll stop and show you what differs before deleting.
 
 ## Technical details
 
-- Update `src/components/AdminLayout.tsx` to read `user`, `staffUser`, and `staffRoles` from `useAuth()` and render account identity in the header.
-- Update `src/pages/Enrollments.tsx` so the action trigger has a visible label or tooltip and remains gated to admin/manager accounts.
-- No database changes are needed.
+```sql
+DELETE FROM enrollment_cycles    WHERE created_at >= '2026-05-18 18:22:00+00';
+DELETE FROM enrollments          WHERE created_at >= '2026-05-18 18:22:00+00';
+DELETE FROM students             WHERE created_at >= '2026-05-18 18:22:00+00';
+DELETE FROM users                WHERE created_at >= '2026-05-18 18:22:00+00'
+  AND auth_id IS NULL;  -- guard: never delete a user that has been linked to a login
+```
+
+The `auth_id IS NULL` guard on `users` ensures we cannot accidentally remove a staff/admin account if one happened to be created in that window.
