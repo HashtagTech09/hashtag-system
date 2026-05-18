@@ -1,42 +1,43 @@
-# Delete recently imported data
+# Payments CSV Export
 
-## What was imported
+Add a "Download CSV" button on the Payments page (top right, next to the search bar) that exports all currently-filtered payments as a CSV file matching your old system's column layout.
 
-A single import ran today at 18:22–18:23 UTC and created:
+## CSV columns (in order)
 
-- 21 users
-- 25 students
-- 120 enrollments
-- 334 enrollment_cycles
-- 0 payments, 0 payment_allocations, 0 user_roles
+| Column | Source | Notes |
+|---|---|---|
+| Date | `payments.created_at` (IST, DD/MM/YYYY) | |
+| Name | `students.name` | |
+| Phone No. | student phone, fallback to linked user phone | |
+| Email ID | student email, fallback to linked user email | |
+| Receipt No. | — | left blank |
+| Status | `payments.status` | success / pending / failed |
+| Validity | enrollment start–end dates for this payment | see technical notes |
+| Online/Offline | — | left blank |
+| Batch | batch name(s) from enrollments linked to this payment | comma-separated if multiple |
+| No. Of Batches | — | left blank |
+| Gross Amount | `payments.amount` | pre-GST |
+| GST @18% | `payments.gst` (falls back to amount × 0.18 if null) | |
+| Amount Paid | `payments.final_amount` (falls back to amount + gst) | |
+| Mode of Payment | `payments.payment_mode` | cash / razorpay |
+| Paid To | `payments.rzp_account` for online; blank for cash | "pride" / "prudent" |
 
-No payments or roles were created, so cleanup is contained to the four tables above.
+## Behaviour
 
-## What this plan does
+- Button appears only for managers/admins (uses `isAdminOrManager` from `useAuth`).
+- Exports the **currently filtered** list (respects the search box).
+- Filename: `payments-YYYY-MM-DD.csv` using today's IST date.
+- Values containing commas, quotes, or newlines are properly CSV-escaped.
 
-Delete every record from those four tables whose `created_at >= 2026-05-18 18:22:00 UTC` (covers the full import window). Cutoff is exact and excludes anything older.
+## Technical notes
 
-Run as a migration in this order (children first to respect references):
+- Extend the existing `fetchPayments` query in `src/pages/Payments.tsx` to also pull `enrollments(start_date, end_date, batches(name))` so Validity and Batch are available without extra round-trips.
+- Use existing `toISTDateString` from `src/lib/dateUtils.ts` for dates.
+- Use existing `getDisplayPhone` from `src/lib/studentUtils.ts` for phone fallback; add a small equivalent for email fallback inline.
+- Build the CSV client-side (no new dependency) and trigger download via a Blob + temporary anchor.
 
-1. `enrollment_cycles` — 334 rows
-2. `enrollments` — 120 rows
-3. `students` — 25 rows
-4. `users` — 21 rows
+## Out of scope
 
-Nothing else is touched. RLS, triggers, schema, auth accounts, and your staff record stay as they are.
-
-## Safety check before delete
-
-I will first run a dry-count inside the migration's transaction-style block to confirm the row counts match (25 / 21 / 120 / 334). If they don't, I'll stop and show you what differs before deleting.
-
-## Technical details
-
-```sql
-DELETE FROM enrollment_cycles    WHERE created_at >= '2026-05-18 18:22:00+00';
-DELETE FROM enrollments          WHERE created_at >= '2026-05-18 18:22:00+00';
-DELETE FROM students             WHERE created_at >= '2026-05-18 18:22:00+00';
-DELETE FROM users                WHERE created_at >= '2026-05-18 18:22:00+00'
-  AND auth_id IS NULL;  -- guard: never delete a user that has been linked to a login
-```
-
-The `auth_id IS NULL` guard on `users` ensures we cannot accidentally remove a staff/admin account if one happened to be created in that window.
+- No backend/edge function changes.
+- No schema changes.
+- Receipt No., Online/Offline, and No. Of Batches stay blank as requested.
