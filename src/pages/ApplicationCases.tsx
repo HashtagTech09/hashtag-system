@@ -18,6 +18,7 @@ import {
 import { Search, AlertTriangle, Check, X } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
+import { useScopedStudents } from "@/hooks/useScopedStudents";
 import { nowIST } from "@/lib/dateUtils";
 import { format } from "date-fns";
 
@@ -25,6 +26,7 @@ type CaseRow = any;
 
 const ApplicationCasesPage = () => {
   const { staffUser, isAdmin } = useAuth();
+  const scope = useScopedStudents();
   const [cases, setCases] = useState<CaseRow[]>([]);
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState<"pending" | "approved" | "rejected">("pending");
@@ -33,7 +35,7 @@ const ApplicationCasesPage = () => {
   const [reviewNotes, setReviewNotes] = useState("");
 
   const fetchData = async () => {
-    const { data } = await supabase
+    let q: any = supabase
       .from("application_cases")
       .select(
         `*,
@@ -45,10 +47,16 @@ const ApplicationCasesPage = () => {
       )
       .eq("organization_id", 1)
       .order("created_at", { ascending: false });
+    if (!scope.unrestricted) {
+      if (scope.studentIds.length === 0) { setCases([]); return; }
+      q = q.in("student_id", scope.studentIds);
+    }
+    const { data } = await q;
     setCases(data || []);
   };
 
   useEffect(() => {
+    if (scope.loading) return;
     fetchData();
     const channel = supabase
       .channel("application_cases_page")
@@ -61,7 +69,7 @@ const ApplicationCasesPage = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [scope.loading, scope.unrestricted, scope.studentIds.join(",")]);
 
   const filtered = cases.filter(c => {
     if (c.status !== tab) return false;
