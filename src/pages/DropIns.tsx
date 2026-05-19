@@ -15,8 +15,10 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { getDisplayPhone } from "@/lib/studentUtils";
 import { buildEligibilityKey, STYLE_OPTIONS, LEVEL_OPTIONS } from "@/lib/styleHierarchy";
+import { useScopedStudents } from "@/hooks/useScopedStudents";
 
 const DropInsPage = () => {
+  const scope = useScopedStudents();
   const [dropIns, setDropIns] = useState<any[]>([]);
   const [credits, setCredits] = useState<any[]>([]);
   const [students, setStudents] = useState<any[]>([]);
@@ -45,11 +47,21 @@ const DropInsPage = () => {
   });
 
   const fetchData = async () => {
+    let dropQ: any = supabase.from("drop_ins").select("*, students(name, phone, users(phone)), batch_sessions(session_date, start_time, end_time, style, batches(name))").eq("organization_id", 1).order("created_at", { ascending: false });
+    let studentQ: any = supabase.from("students").select("*").eq("organization_id", 1).order("name");
+    let creditQ: any = supabase.from("drop_in_credits").select("*, students(name)").eq("organization_id", 1).order("created_at", { ascending: false });
+    if (!scope.unrestricted) {
+      if (scope.studentIds.length === 0) {
+        setDropIns([]); setStudents([]); setBatches([]); setCredits([]); return;
+      }
+      dropQ = dropQ.in("student_id", scope.studentIds);
+      studentQ = studentQ.in("id", scope.studentIds);
+      creditQ = creditQ.in("student_id", scope.studentIds);
+    }
     const [dropInRes, studentRes, batchRes, creditRes] = await Promise.all([
-      supabase.from("drop_ins").select("*, students(name, phone, users(phone)), batch_sessions(session_date, start_time, end_time, style, batches(name))").eq("organization_id", 1).order("created_at", { ascending: false }),
-      supabase.from("students").select("*").eq("organization_id", 1).order("name"),
+      dropQ, studentQ,
       supabase.from("batches").select("*").eq("organization_id", 1).order("name"),
-      supabase.from("drop_in_credits").select("*, students(name)").eq("organization_id", 1).order("created_at", { ascending: false }),
+      creditQ,
     ]);
     setDropIns(dropInRes.data || []);
     setStudents(studentRes.data || []);
@@ -57,7 +69,7 @@ const DropInsPage = () => {
     setCredits(creditRes.data || []);
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { if (!scope.loading) fetchData(); }, [scope.loading, scope.unrestricted, scope.studentIds.join(",")]);
 
   // Load default drop-in fee from settings
   useEffect(() => {
