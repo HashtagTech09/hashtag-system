@@ -22,6 +22,7 @@ const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 type ScheduleEntry = { day: string; start_time: string; end_time: string };
 
 const BatchesPage = () => {
+  const scope = useScopedStudents();
   const [batches, setBatches] = useState<any[]>([]);
   const [studios, setStudios] = useState<any[]>([]);
   const [instructors, setInstructors] = useState<any[]>([]);
