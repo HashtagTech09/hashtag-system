@@ -208,7 +208,7 @@ const Dashboard = () => {
       setLoading(false);
     };
     fetchData();
-  }, [selectedCycle, selectedStudio]);
+  }, [selectedCycle, selectedStudio, scope.loading, scope.unrestricted, scope.batchIds.join(",")]);
 
   // Classify enrollments: C/F (carry forward from prior cycle) vs current-cycle
   const classifiedEnrollments = useMemo(() => {
