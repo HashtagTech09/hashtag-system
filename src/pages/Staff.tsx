@@ -86,6 +86,7 @@ const UsersPage = () => {
       source: form.source || null,
     };
     if (photoUrl) payload.photo = photoUrl;
+    payload.scope_restricted = isManagerSelected ? scopeRestricted : false;
 
     let userId: number;
 
@@ -111,6 +112,17 @@ const UsersPage = () => {
     }));
     await supabase.from("user_roles").insert(roleInserts);
 
+    // Sync extra-student access for managers
+    await supabase.from("manager_student_access" as any).delete().eq("manager_user_id", userId);
+    if (isManagerSelected && extraStudentIds.length > 0) {
+      const rows = extraStudentIds.map((sid) => ({
+        manager_user_id: userId,
+        student_id: sid,
+        organization_id: 1,
+      }));
+      await supabase.from("manager_student_access" as any).insert(rows);
+    }
+
     toast.success(editId ? "User updated" : "User added");
     resetForm();
     fetchData();
@@ -124,6 +136,9 @@ const UsersPage = () => {
     setDialogOpen(false);
     setPhotoFile(null);
     setPhotoPreview(null);
+    setScopeRestricted(false);
+    setExtraStudentIds([]);
+    setStudentSearch("");
   };
 
   const handleDelete = async (id: number) => {
