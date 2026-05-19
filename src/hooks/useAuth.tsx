@@ -11,6 +11,7 @@ interface StaffUser {
   photo: string | null;
   organization_id: number;
   auth_id: string | null;
+  scope_restricted?: boolean;
 }
 
 interface AuthContextType {
