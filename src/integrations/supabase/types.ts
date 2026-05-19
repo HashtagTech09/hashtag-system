@@ -725,6 +725,30 @@ export type Database = {
           },
         ]
       }
+      manager_student_access: {
+        Row: {
+          created_at: string
+          id: number
+          manager_user_id: number
+          organization_id: number
+          student_id: number
+        }
+        Insert: {
+          created_at?: string
+          id?: number
+          manager_user_id: number
+          organization_id?: number
+          student_id: number
+        }
+        Update: {
+          created_at?: string
+          id?: number
+          manager_user_id?: number
+          organization_id?: number
+          student_id?: number
+        }
+        Relationships: []
+      }
       notification_log: {
         Row: {
           channel: string
@@ -1299,6 +1323,7 @@ export type Database = {
           organization_id: number
           phone: string | null
           photo: string | null
+          scope_restricted: boolean
           source: string | null
         }
         Insert: {
@@ -1310,6 +1335,7 @@ export type Database = {
           organization_id: number
           phone?: string | null
           photo?: string | null
+          scope_restricted?: boolean
           source?: string | null
         }
         Update: {
@@ -1321,6 +1347,7 @@ export type Database = {
           organization_id?: number
           phone?: string | null
           photo?: string | null
+          scope_restricted?: boolean
           source?: string | null
         }
         Relationships: [

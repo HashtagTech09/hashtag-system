@@ -14,6 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ChevronDown, CalendarIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { useScopedStudents } from "@/hooks/useScopedStudents";
 
 interface Studio { id: number; name: string; code: string | null; }
 interface Batch { id: number; name: string; batch_code: string | null; studio_id: number | null; capacity: number | null; }
@@ -52,6 +53,7 @@ interface PlanCycle {
 const ACCENT = "#ff007f";
 
 const Dashboard = () => {
+  const scope = useScopedStudents();
   const [studios, setStudios] = useState<Studio[]>([]);
   const [selectedStudio, setSelectedStudio] = useState<string>("all");
   const [batches, setBatches] = useState<Batch[]>([]);
@@ -95,12 +97,19 @@ const Dashboard = () => {
   const selectedCycle = useMemo(() => allCycles.find(c => String(c.id) === selectedCycleId) || null, [allCycles, selectedCycleId]);
 
   useEffect(() => {
-    if (!selectedCycle) return;
+    if (!selectedCycle || scope.loading) return;
     const fetchData = async () => {
       setLoading(true);
       let batchQuery = supabase.from("batches").select("id, name, batch_code, studio_id, capacity").eq("organization_id", 1);
       if (selectedStudio !== "all") {
         batchQuery = batchQuery.eq("studio_id", parseInt(selectedStudio));
+      }
+      if (!scope.unrestricted) {
+        if (scope.batchIds.length === 0) {
+          setBatches([]); setEnrollments([]); setPayments([]); setDropIns([]); setDropInPayments([]);
+          setRenewableCount(0); setLoading(false); return;
+        }
+        batchQuery = batchQuery.in("id", scope.batchIds);
       }
       const batchRes = await batchQuery;
       const batchList = (batchRes.data || []) as Batch[];
@@ -199,7 +208,7 @@ const Dashboard = () => {
       setLoading(false);
     };
     fetchData();
-  }, [selectedCycle, selectedStudio]);
+  }, [selectedCycle, selectedStudio, scope.loading, scope.unrestricted, scope.batchIds.join(",")]);
 
   // Classify enrollments: C/F (carry forward from prior cycle) vs current-cycle
   const classifiedEnrollments = useMemo(() => {

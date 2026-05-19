@@ -17,10 +17,12 @@ import { getDisplayPhone } from "@/lib/studentUtils";
 import { parseISO } from "date-fns";
 import { allocateCyclesForPlan, insertEnrollmentCycles } from "@/lib/cycleUtils";
 import { useAuth } from "@/hooks/useAuth";
+import { useScopedStudents } from "@/hooks/useScopedStudents";
 import { Textarea } from "@/components/ui/textarea";
 
 const EnrollmentsPage = () => {
   const { staffUser, isAdminOrManager } = useAuth();
+  const scope = useScopedStudents();
   const [enrollments, setEnrollments] = useState<any[]>([]);
   const [pendingCases, setPendingCases] = useState<Record<number, boolean>>({});
   const [caseDialogOpen, setCaseDialogOpen] = useState(false);
@@ -58,9 +60,21 @@ const EnrollmentsPage = () => {
   });
 
   const fetchData = async () => {
+    let enrollQ: any = supabase.from("enrollments").select("*, students(name, phone, users(phone)), batches(name, batch_code, studio_id, studios(name, code)), subscription_plans(name), start_cycle:plan_cycles!enrollments_start_cycle_id_fkey(name), end_cycle:plan_cycles!enrollments_end_cycle_id_fkey(name)").eq("organization_id", 1).eq("is_active", true).order("created_at", { ascending: false });
+    let studentQ: any = supabase.from("students").select("*").eq("organization_id", 1).order("name");
+    if (!scope.unrestricted) {
+      if (scope.studentIds.length === 0) {
+        setEnrollments([]); setStudents([]); setBatches([]); setStudios([]);
+        setSubPlans([]); setSubPlanCycles([]); setPlanCycles([]); setPricingPlans([]);
+        setPendingCases({});
+        return;
+      }
+      enrollQ = enrollQ.in("student_id", scope.studentIds);
+      studentQ = studentQ.in("id", scope.studentIds);
+    }
     const [enrollRes, studentRes, batchRes, studioRes, planRes, seqRes, cycleRes, pricingRes] = await Promise.all([
-      supabase.from("enrollments").select("*, students(name, phone, users(phone)), batches(name, batch_code, studio_id, studios(name, code)), subscription_plans(name), start_cycle:plan_cycles!enrollments_start_cycle_id_fkey(name), end_cycle:plan_cycles!enrollments_end_cycle_id_fkey(name)").eq("organization_id", 1).eq("is_active", true).order("created_at", { ascending: false }),
-      supabase.from("students").select("*").eq("organization_id", 1).order("name"),
+      enrollQ,
+      studentQ,
       supabase.from("batches").select("*").eq("organization_id", 1).order("name"),
       supabase.from("studios").select("id, name, code").eq("organization_id", 1).order("name"),
       supabase.from("subscription_plans").select("*").eq("organization_id", 1).eq("is_active", true).order("id"),
@@ -89,6 +103,7 @@ const EnrollmentsPage = () => {
   };
 
   useEffect(() => {
+    if (scope.loading) return;
     fetchData();
     const channel = supabase
       .channel("enrollments_app_cases")
@@ -99,7 +114,7 @@ const EnrollmentsPage = () => {
       )
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, []);
+  }, [scope.loading, scope.unrestricted, scope.studentIds.join(",")]);
 
   const requestApplicationCase = async () => {
     if (!caseEnrollment) return;

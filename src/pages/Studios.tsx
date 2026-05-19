@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Search, Trash2, Edit, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
+import { useScopedStudents } from "@/hooks/useScopedStudents";
 
 interface StudioForm {
   name: string;
@@ -23,6 +24,7 @@ interface StudioForm {
 const emptyForm: StudioForm = { name: "", location: "", google_maps_url: "", code: "", wingperson_id: "", dreamcatcher_id: "" };
 
 const StudiosPage = () => {
+  const scope = useScopedStudents();
   const [studios, setStudios] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [search, setSearch] = useState("");
@@ -31,11 +33,16 @@ const StudiosPage = () => {
   const [editId, setEditId] = useState<number | null>(null);
 
   const fetchStudios = async () => {
-    const { data } = await supabase
+    let q: any = supabase
       .from("studios")
       .select("*, wingperson:users!studios_wingperson_id_fkey(id, name), dreamcatcher:users!studios_dreamcatcher_id_fkey(id, name)")
       .eq("organization_id", 1)
       .order("name");
+    if (!scope.unrestricted) {
+      if (scope.studioIds.length === 0) { setStudios([]); return; }
+      q = q.in("id", scope.studioIds);
+    }
+    const { data } = await q;
     setStudios(data || []);
   };
 
@@ -44,7 +51,10 @@ const StudiosPage = () => {
     setUsers(data || []);
   };
 
-  useEffect(() => { fetchStudios(); fetchUsers(); }, []);
+  useEffect(() => {
+    if (scope.loading) return;
+    fetchStudios(); fetchUsers();
+  }, [scope.loading, scope.unrestricted, scope.studioIds.join(",")]);
 
   const handleSave = async () => {
     if (!form.name.trim()) { toast.error("Name is required"); return; }

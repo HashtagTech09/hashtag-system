@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { Plus, Search, Trash2, Edit, Upload, Star, KeyRound } from "lucide-react";
 import { toast } from "sonner";
 import { ALL_ROLES, roleColors, type UserRole } from "@/lib/roleUtils";
@@ -25,6 +26,7 @@ const UsersPage = () => {
   const { session } = useAuth();
   const [staff, setStaff] = useState<any[]>([]);
   const [roles, setRoles] = useState<RoleRecord[]>([]);
+  const [allStudents, setAllStudents] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", phone: "", source: "" });
@@ -36,14 +38,22 @@ const UsersPage = () => {
   const [authDialogOpen, setAuthDialogOpen] = useState(false);
   const [authForm, setAuthForm] = useState({ userId: 0, userName: "", email: "", password: "" });
   const [authLoading, setAuthLoading] = useState(false);
+  const [scopeRestricted, setScopeRestricted] = useState(false);
+  const [extraStudentIds, setExtraStudentIds] = useState<number[]>([]);
+  const [studentSearch, setStudentSearch] = useState("");
+
+  const managerRoleId = roles.find((r) => r.name === "manager")?.id ?? null;
+  const isManagerSelected = managerRoleId != null && selectedRoles.includes(managerRoleId);
 
   const fetchData = async () => {
-    const [staffRes, rolesRes] = await Promise.all([
+    const [staffRes, rolesRes, studentsRes] = await Promise.all([
       supabase.from("users").select("*, user_roles(*, roles(name, type))").eq("organization_id", 1).order("created_at", { ascending: false }),
       supabase.from("roles").select("*"),
+      supabase.from("students").select("id, name, phone").eq("organization_id", 1).order("name"),
     ]);
     setStaff(staffRes.data || []);
     setRoles(rolesRes.data || []);
+    setAllStudents(studentsRes.data || []);
   };
 
   useEffect(() => { fetchData(); }, []);
@@ -76,6 +86,7 @@ const UsersPage = () => {
       source: form.source || null,
     };
     if (photoUrl) payload.photo = photoUrl;
+    payload.scope_restricted = isManagerSelected ? scopeRestricted : false;
 
     let userId: number;
 
@@ -101,6 +112,17 @@ const UsersPage = () => {
     }));
     await supabase.from("user_roles").insert(roleInserts);
 
+    // Sync extra-student access for managers
+    await supabase.from("manager_student_access" as any).delete().eq("manager_user_id", userId);
+    if (isManagerSelected && extraStudentIds.length > 0) {
+      const rows = extraStudentIds.map((sid) => ({
+        manager_user_id: userId,
+        student_id: sid,
+        organization_id: 1,
+      }));
+      await supabase.from("manager_student_access" as any).insert(rows);
+    }
+
     toast.success(editId ? "User updated" : "User added");
     resetForm();
     fetchData();
@@ -114,6 +136,9 @@ const UsersPage = () => {
     setDialogOpen(false);
     setPhotoFile(null);
     setPhotoPreview(null);
+    setScopeRestricted(false);
+    setExtraStudentIds([]);
+    setStudentSearch("");
   };
 
   const handleDelete = async (id: number) => {
@@ -215,6 +240,52 @@ const UsersPage = () => {
                 <p className="text-xs text-muted-foreground mt-1">Click ★ to set primary role</p>
               </div>
               <div><Label>Source</Label><Input placeholder="Instagram, Walk-in, Referral..." value={form.source} onChange={(e) => setForm({ ...form, source: e.target.value })} /></div>
+
+              {isManagerSelected && (
+                <div className="border border-border rounded-md p-3 space-y-3 bg-muted/30">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <Label className="text-sm">Restrict to assigned scope</Label>
+                      <p className="text-xs text-muted-foreground">When on, this manager only sees students in their studios, batches they instruct, or extras below.</p>
+                    </div>
+                    <Switch checked={scopeRestricted} onCheckedChange={setScopeRestricted} />
+                  </div>
+                  {scopeRestricted && (
+                    <div>
+                      <Label className="text-sm">Extra students ({extraStudentIds.length} selected)</Label>
+                      <Input
+                        placeholder="Search students..."
+                        value={studentSearch}
+                        onChange={(e) => setStudentSearch(e.target.value)}
+                        className="mt-1 mb-2"
+                      />
+                      <div className="max-h-40 overflow-y-auto border border-border rounded-md p-2 space-y-1 bg-background">
+                        {allStudents
+                          .filter((st) => st.name?.toLowerCase().includes(studentSearch.toLowerCase()))
+                          .slice(0, 100)
+                          .map((st) => (
+                            <label key={st.id} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 px-1 py-0.5 rounded">
+                              <Checkbox
+                                checked={extraStudentIds.includes(st.id)}
+                                onCheckedChange={(c) => {
+                                  setExtraStudentIds((prev) =>
+                                    c ? [...prev, st.id] : prev.filter((x) => x !== st.id)
+                                  );
+                                }}
+                              />
+                              <span>{st.name}</span>
+                              {st.phone && <span className="text-muted-foreground text-xs ml-auto">{st.phone}</span>}
+                            </label>
+                          ))}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Studios and batches are assigned on the Studios and Batches pages.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <Button className="w-full gradient-primary" onClick={handleSave}>Save</Button>
             </div>
           </DialogContent>
@@ -272,7 +343,7 @@ const UsersPage = () => {
                             <KeyRound className="h-4 w-4 text-primary" />
                           </Button>
                         )}
-                        <Button variant="ghost" size="icon" onClick={() => {
+                        <Button variant="ghost" size="icon" onClick={async () => {
                           setForm({ name: s.name, email: s.email || "", phone: s.phone || "", source: s.source || "" });
                           if (s.photo) setPhotoPreview(s.photo);
                           const urs = getUserRoles(s);
@@ -280,6 +351,12 @@ const UsersPage = () => {
                           const primary = urs.find((ur: UserRole) => ur.is_primary);
                           setPrimaryRoleId(primary?.role_id || null);
                           setEditId(s.id);
+                          setScopeRestricted(!!s.scope_restricted);
+                          const { data: msa } = await supabase
+                            .from("manager_student_access" as any)
+                            .select("student_id")
+                            .eq("manager_user_id", s.id);
+                          setExtraStudentIds(((msa as any[]) || []).map((r) => r.student_id));
                           setDialogOpen(true);
                         }}><Edit className="h-4 w-4" /></Button>
                         <Button variant="ghost" size="icon" onClick={() => handleDelete(s.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>

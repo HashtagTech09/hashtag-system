@@ -11,6 +11,7 @@ interface StaffUser {
   photo: string | null;
   organization_id: number;
   auth_id: string | null;
+  scope_restricted?: boolean;
 }
 
 interface AuthContextType {
@@ -42,7 +43,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const { data: staffData } = await supabase
         .from("users")
-        .select("id, name, email, phone, photo, organization_id, auth_id")
+        .select("id, name, email, phone, photo, organization_id, auth_id, scope_restricted")
         .eq("auth_id", authId)
         .single();
 
