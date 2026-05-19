@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { Plus, Search, Trash2, Edit, Upload, Star, KeyRound } from "lucide-react";
 import { toast } from "sonner";
 import { ALL_ROLES, roleColors, type UserRole } from "@/lib/roleUtils";
