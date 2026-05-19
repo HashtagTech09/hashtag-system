@@ -103,6 +103,7 @@ const EnrollmentsPage = () => {
   };
 
   useEffect(() => {
+    if (scope.loading) return;
     fetchData();
     const channel = supabase
       .channel("enrollments_app_cases")
@@ -113,7 +114,7 @@ const EnrollmentsPage = () => {
       )
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, []);
+  }, [scope.loading, scope.unrestricted, scope.studentIds.join(",")]);
 
   const requestApplicationCase = async () => {
     if (!caseEnrollment) return;
