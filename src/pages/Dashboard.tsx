@@ -14,6 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ChevronDown, CalendarIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { useScopedStudents } from "@/hooks/useScopedStudents";
 
 interface Studio { id: number; name: string; code: string | null; }
 interface Batch { id: number; name: string; batch_code: string | null; studio_id: number | null; capacity: number | null; }
