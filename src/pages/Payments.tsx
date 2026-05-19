@@ -11,24 +11,32 @@ import { Search, Send, Download } from "lucide-react";
 import { getDisplayPhone } from "@/lib/studentUtils";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
+import { useScopedStudents } from "@/hooks/useScopedStudents";
 
 const PaymentsPage = () => {
   const [payments, setPayments] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [sendingReceipt, setSendingReceipt] = useState<number | null>(null);
   const { isAdminOrManager } = useAuth();
+  const scope = useScopedStudents();
 
   useEffect(() => {
+    if (scope.loading) return;
     const fetchPayments = async () => {
-      const { data } = await supabase
+      let q = supabase
         .from("payments")
         .select("*, students(name, phone, email, users(phone, email)), enrollments(start_date, end_date, batches(name))")
         .eq("organization_id", 1)
         .order("created_at", { ascending: false });
+      if (!scope.unrestricted) {
+        if (scope.studentIds.length === 0) { setPayments([]); return; }
+        q = q.in("student_id", scope.studentIds);
+      }
+      const { data } = await q;
       setPayments(data || []);
     };
     fetchPayments();
-  }, []);
+  }, [scope.loading, scope.unrestricted, scope.studentIds.join(",")]);
 
   const statusColors: Record<string, string> = { success: "bg-success/20 text-success", pending: "bg-warning/20 text-warning", failed: "bg-destructive/20 text-destructive" };
 
