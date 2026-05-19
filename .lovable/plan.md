@@ -1,43 +1,76 @@
-# Payments CSV Export
+# Scoped Manager Access
 
-Add a "Download CSV" button on the Payments page (top right, next to the search bar) that exports all currently-filtered payments as a CSV file matching your old system's column layout.
+Limit what a "manager" sees to data tied to studios they run or batches they instruct. Admins remain unrestricted.
 
-## CSV columns (in order)
+## Scope rule
 
-| Column | Source | Notes |
-|---|---|---|
-| Date | `payments.created_at` (IST, DD/MM/YYYY) | |
-| Name | `students.name` | |
-| Phone No. | student phone, fallback to linked user phone | |
-| Email ID | student email, fallback to linked user email | |
-| Receipt No. | — | left blank |
-| Status | `payments.status` | success / pending / failed |
-| Validity | enrollment start–end dates for this payment | see technical notes |
-| Online/Offline | — | left blank |
-| Batch | batch name(s) from enrollments linked to this payment | comma-separated if multiple |
-| No. Of Batches | — | left blank |
-| Gross Amount | `payments.amount` | pre-GST |
-| GST @18% | `payments.gst` (falls back to amount × 0.18 if null) | |
-| Amount Paid | `payments.final_amount` (falls back to amount + gst) | |
-| Mode of Payment | `payments.payment_mode` | cash / razorpay |
-| Paid To | `payments.rzp_account` for online; blank for cash | "pride" / "prudent" |
+A scoped manager sees a student if **any** is true:
+- Student has an enrollment in a batch at a studio where the manager is `dreamcatcher_id` or `wingperson_id` (`studios` table — already exists).
+- Student has an enrollment in a batch where the manager is `instructor_id` or `instructor_2_id` (`batches` table — already exists).
+- Student was created/linked manually by an admin to this manager (optional override list).
 
-## Behaviour
+Admins always see everything. Instructors keep their current StaffDashboard. Scoped manager = manager role + at least one studio/batch link OR override entries.
 
-- Button appears only for managers/admins (uses `isAdminOrManager` from `useAuth`).
-- Exports the **currently filtered** list (respects the search box).
-- Filename: `payments-YYYY-MM-DD.csv` using today's IST date.
-- Values containing commas, quotes, or newlines are properly CSV-escaped.
+## What changes in the UI
+
+A new helper `useScopedStudentIds()` returns:
+- `null` → unrestricted (admin, or manager with no scoping configured if we keep that toggle)
+- `Set<number>` → only these student IDs are visible
+
+Pages that filter by it: Students, Payments, Enrollments, Application Cases, Drop-ins, Attendance, Dashboard metrics. Each query adds `.in("student_id", [...ids])` (or `id` on the students page). Empty set → show empty state, no error.
+
+For batches/sessions/studios pages: a scoped manager sees only their studios and the batches inside them (plus batches they instruct).
+
+Action buttons (edit, delete, add payment) stay enabled within scope, disabled/hidden outside it.
+
+## Assignment UI
+
+On the Staff page, when editing a user with the `manager` role, add a section:
+- **Studios managed** — multi-select of studios (writes `studios.dreamcatcher_id` / `wingperson_id`, same fields already used).
+- **Extra students** (optional) — multi-select for one-off access (new tiny table `manager_student_access`).
+- A toggle "Restrict to assigned scope" defaulting **on** for new managers, **off** for existing managers so nothing breaks.
+
+The toggle lives on the `users` row as a new column `scope_restricted boolean default false`.
 
 ## Technical notes
 
-- Extend the existing `fetchPayments` query in `src/pages/Payments.tsx` to also pull `enrollments(start_date, end_date, batches(name))` so Validity and Batch are available without extra round-trips.
-- Use existing `toISTDateString` from `src/lib/dateUtils.ts` for dates.
-- Use existing `getDisplayPhone` from `src/lib/studentUtils.ts` for phone fallback; add a small equivalent for email fallback inline.
-- Build the CSV client-side (no new dependency) and trigger download via a Blob + temporary anchor.
+New table:
+```
+manager_student_access (
+  id bigserial pk,
+  organization_id bigint not null default 1,
+  manager_user_id bigint not null,   -- users.id
+  student_id bigint not null,
+  created_at timestamptz default now(),
+  unique(manager_user_id, student_id)
+)
+```
+RLS: authenticated all (same pattern as other tables; real enforcement is in the client query layer, consistent with the rest of the app).
+
+New column: `users.scope_restricted boolean not null default false`.
+
+New helper `src/hooks/useScopedStudents.tsx`:
+1. If `isAdmin` or `!staffUser` → return `{ unrestricted: true }`.
+2. If `isManager` and `staffUser.scope_restricted === false` → unrestricted.
+3. Otherwise build the set:
+   - `studios` where dreamcatcher/wingperson = staffUser.id → studio IDs
+   - `batches` where studio_id ∈ studioIds OR instructor_id/instructor_2_id = staffUser.id → batch IDs
+   - `enrollments` where batch_id ∈ batchIds → student IDs
+   - Union with `manager_student_access.student_id` for this manager
+   - Return `{ unrestricted: false, studentIds, batchIds, studioIds }`
+4. Cache via react-query keyed on staffUser.id.
+
+Pages add one line before the query:
+```ts
+const scope = useScopedStudents();
+let q = supabase.from("payments").select(...).eq("organization_id", 1);
+if (!scope.unrestricted) q = q.in("student_id", [...scope.studentIds]);
+```
+
+Instructor scope (the existing StaffDashboard) is untouched — this only affects `manager` role.
 
 ## Out of scope
 
-- No backend/edge function changes.
-- No schema changes.
-- Receipt No., Online/Offline, and No. Of Batches stay blank as requested.
+- No server-side RLS rewrite (current policies are permissive; client-side filtering matches existing pattern).
+- Frontdesk role behaviour unchanged.
+- No bulk reassignment tools — admin sets studios/extra students per manager.
