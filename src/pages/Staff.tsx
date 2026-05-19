@@ -343,7 +343,7 @@ const UsersPage = () => {
                             <KeyRound className="h-4 w-4 text-primary" />
                           </Button>
                         )}
-                        <Button variant="ghost" size="icon" onClick={() => {
+                        <Button variant="ghost" size="icon" onClick={async () => {
                           setForm({ name: s.name, email: s.email || "", phone: s.phone || "", source: s.source || "" });
                           if (s.photo) setPhotoPreview(s.photo);
                           const urs = getUserRoles(s);
@@ -351,6 +351,12 @@ const UsersPage = () => {
                           const primary = urs.find((ur: UserRole) => ur.is_primary);
                           setPrimaryRoleId(primary?.role_id || null);
                           setEditId(s.id);
+                          setScopeRestricted(!!s.scope_restricted);
+                          const { data: msa } = await supabase
+                            .from("manager_student_access" as any)
+                            .select("student_id")
+                            .eq("manager_user_id", s.id);
+                          setExtraStudentIds(((msa as any[]) || []).map((r) => r.student_id));
                           setDialogOpen(true);
                         }}><Edit className="h-4 w-4" /></Button>
                         <Button variant="ghost" size="icon" onClick={() => handleDelete(s.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
