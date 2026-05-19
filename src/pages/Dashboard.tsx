@@ -53,6 +53,7 @@ interface PlanCycle {
 const ACCENT = "#ff007f";
 
 const Dashboard = () => {
+  const scope = useScopedStudents();
   const [studios, setStudios] = useState<Studio[]>([]);
   const [selectedStudio, setSelectedStudio] = useState<string>("all");
   const [batches, setBatches] = useState<Batch[]>([]);
