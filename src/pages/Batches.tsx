@@ -42,9 +42,17 @@ const BatchesPage = () => {
 
   const fetchData = async () => {
     try {
+      let batchQ: any = supabase.from("batches").select("*, studios(name), users(name)").eq("organization_id", 1).order("created_at", { ascending: false });
+      let studioQ: any = supabase.from("studios").select("*").eq("organization_id", 1);
+      if (!scope.unrestricted) {
+        if (scope.batchIds.length === 0) {
+          setBatches([]); setStudios([]); setInstructors([]); setPageLoading(false); return;
+        }
+        batchQ = batchQ.in("id", scope.batchIds);
+        if (scope.studioIds.length > 0) studioQ = studioQ.in("id", scope.studioIds);
+      }
       const [batchRes, studioRes, instrRes] = await Promise.all([
-        supabase.from("batches").select("*, studios(name), users(name)").eq("organization_id", 1).order("created_at", { ascending: false }),
-        supabase.from("studios").select("*").eq("organization_id", 1),
+        batchQ, studioQ,
         supabase.from("users").select("*, user_roles!inner(roles!inner(name))").eq("organization_id", 1).eq("user_roles.roles.name", "instructor"),
       ]);
       if (batchRes.error) throw batchRes.error;
@@ -60,7 +68,7 @@ const BatchesPage = () => {
     }
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { if (!scope.loading) fetchData(); }, [scope.loading, scope.unrestricted, scope.batchIds.join(","), scope.studioIds.join(",")]);
 
   const toggleDay = (day: string) => {
     setForm((f) => {
