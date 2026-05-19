@@ -26,6 +26,7 @@ const UsersPage = () => {
   const { session } = useAuth();
   const [staff, setStaff] = useState<any[]>([]);
   const [roles, setRoles] = useState<RoleRecord[]>([]);
+  const [allStudents, setAllStudents] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", phone: "", source: "" });
@@ -37,14 +38,22 @@ const UsersPage = () => {
   const [authDialogOpen, setAuthDialogOpen] = useState(false);
   const [authForm, setAuthForm] = useState({ userId: 0, userName: "", email: "", password: "" });
   const [authLoading, setAuthLoading] = useState(false);
+  const [scopeRestricted, setScopeRestricted] = useState(false);
+  const [extraStudentIds, setExtraStudentIds] = useState<number[]>([]);
+  const [studentSearch, setStudentSearch] = useState("");
+
+  const managerRoleId = roles.find((r) => r.name === "manager")?.id ?? null;
+  const isManagerSelected = managerRoleId != null && selectedRoles.includes(managerRoleId);
 
   const fetchData = async () => {
-    const [staffRes, rolesRes] = await Promise.all([
+    const [staffRes, rolesRes, studentsRes] = await Promise.all([
       supabase.from("users").select("*, user_roles(*, roles(name, type))").eq("organization_id", 1).order("created_at", { ascending: false }),
       supabase.from("roles").select("*"),
+      supabase.from("students").select("id, name, phone").eq("organization_id", 1).order("name"),
     ]);
     setStaff(staffRes.data || []);
     setRoles(rolesRes.data || []);
+    setAllStudents(studentsRes.data || []);
   };
 
   useEffect(() => { fetchData(); }, []);
