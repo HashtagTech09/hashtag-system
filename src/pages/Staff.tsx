@@ -240,6 +240,52 @@ const UsersPage = () => {
                 <p className="text-xs text-muted-foreground mt-1">Click ★ to set primary role</p>
               </div>
               <div><Label>Source</Label><Input placeholder="Instagram, Walk-in, Referral..." value={form.source} onChange={(e) => setForm({ ...form, source: e.target.value })} /></div>
+
+              {isManagerSelected && (
+                <div className="border border-border rounded-md p-3 space-y-3 bg-muted/30">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <Label className="text-sm">Restrict to assigned scope</Label>
+                      <p className="text-xs text-muted-foreground">When on, this manager only sees students in their studios, batches they instruct, or extras below.</p>
+                    </div>
+                    <Switch checked={scopeRestricted} onCheckedChange={setScopeRestricted} />
+                  </div>
+                  {scopeRestricted && (
+                    <div>
+                      <Label className="text-sm">Extra students ({extraStudentIds.length} selected)</Label>
+                      <Input
+                        placeholder="Search students..."
+                        value={studentSearch}
+                        onChange={(e) => setStudentSearch(e.target.value)}
+                        className="mt-1 mb-2"
+                      />
+                      <div className="max-h-40 overflow-y-auto border border-border rounded-md p-2 space-y-1 bg-background">
+                        {allStudents
+                          .filter((st) => st.name?.toLowerCase().includes(studentSearch.toLowerCase()))
+                          .slice(0, 100)
+                          .map((st) => (
+                            <label key={st.id} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 px-1 py-0.5 rounded">
+                              <Checkbox
+                                checked={extraStudentIds.includes(st.id)}
+                                onCheckedChange={(c) => {
+                                  setExtraStudentIds((prev) =>
+                                    c ? [...prev, st.id] : prev.filter((x) => x !== st.id)
+                                  );
+                                }}
+                              />
+                              <span>{st.name}</span>
+                              {st.phone && <span className="text-muted-foreground text-xs ml-auto">{st.phone}</span>}
+                            </label>
+                          ))}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Studios and batches are assigned on the Studios and Batches pages.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <Button className="w-full gradient-primary" onClick={handleSave}>Save</Button>
             </div>
           </DialogContent>
