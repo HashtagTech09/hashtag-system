@@ -15,6 +15,7 @@ import BatchSessionsDialog from "@/components/BatchSessionsDialog";
 import { TimePickerPopover } from "@/components/ui/time-picker";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
+import { useScopedStudents } from "@/hooks/useScopedStudents";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
