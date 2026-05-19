@@ -97,12 +97,19 @@ const Dashboard = () => {
   const selectedCycle = useMemo(() => allCycles.find(c => String(c.id) === selectedCycleId) || null, [allCycles, selectedCycleId]);
 
   useEffect(() => {
-    if (!selectedCycle) return;
+    if (!selectedCycle || scope.loading) return;
     const fetchData = async () => {
       setLoading(true);
       let batchQuery = supabase.from("batches").select("id, name, batch_code, studio_id, capacity").eq("organization_id", 1);
       if (selectedStudio !== "all") {
         batchQuery = batchQuery.eq("studio_id", parseInt(selectedStudio));
+      }
+      if (!scope.unrestricted) {
+        if (scope.batchIds.length === 0) {
+          setBatches([]); setEnrollments([]); setPayments([]); setDropIns([]); setDropInPayments([]);
+          setRenewableCount(0); setLoading(false); return;
+        }
+        batchQuery = batchQuery.in("id", scope.batchIds);
       }
       const batchRes = await batchQuery;
       const batchList = (batchRes.data || []) as Batch[];
