@@ -17,10 +17,12 @@ import { getDisplayPhone } from "@/lib/studentUtils";
 import { parseISO } from "date-fns";
 import { allocateCyclesForPlan, insertEnrollmentCycles } from "@/lib/cycleUtils";
 import { useAuth } from "@/hooks/useAuth";
+import { useScopedStudents } from "@/hooks/useScopedStudents";
 import { Textarea } from "@/components/ui/textarea";
 
 const EnrollmentsPage = () => {
   const { staffUser, isAdminOrManager } = useAuth();
+  const scope = useScopedStudents();
   const [enrollments, setEnrollments] = useState<any[]>([]);
   const [pendingCases, setPendingCases] = useState<Record<number, boolean>>({});
   const [caseDialogOpen, setCaseDialogOpen] = useState(false);
