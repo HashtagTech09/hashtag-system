@@ -8,23 +8,30 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, Search } from "lucide-react";
 import { toast } from "sonner";
+import { useScopedStudents } from "@/hooks/useScopedStudents";
 
 const StudentsPage = () => {
   const [students, setStudents] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editStudent, setEditStudent] = useState<any>(null);
+  const scope = useScopedStudents();
 
   const fetchStudents = async () => {
-    const { data } = await supabase
+    let q = supabase
       .from("students")
       .select("*, users(name, phone, email)")
       .eq("organization_id", 1)
       .order("created_at", { ascending: false });
+    if (!scope.unrestricted) {
+      if (scope.studentIds.length === 0) { setStudents([]); return; }
+      q = q.in("id", scope.studentIds);
+    }
+    const { data } = await q;
     setStudents(data || []);
   };
 
-  useEffect(() => { fetchStudents(); }, []);
+  useEffect(() => { if (!scope.loading) fetchStudents(); }, [scope.loading, scope.unrestricted, scope.studentIds.join(",")]);
 
   const handleDelete = async (id: number) => {
     await supabase.from("students").delete().eq("id", id);
