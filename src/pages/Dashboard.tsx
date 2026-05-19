@@ -126,6 +126,7 @@ const Dashboard = () => {
         supabase.from("enrollments")
           .select("id, student_id, batch_id, status_type, start_date, end_date, payment_id, created_at, start_cycle_id, end_cycle_id")
           .eq("organization_id", 1)
+          .eq("is_active", true)
           .in("batch_id", batchIds)
           .gte("end_date", selectedCycle.start_date)
           .lte("start_date", selectedCycle.end_date || "2099-12-31")
