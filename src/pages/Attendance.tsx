@@ -11,9 +11,11 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Check, X } from "lucide-react";
 import { getDisplayPhone } from "@/lib/studentUtils";
+import { useScopedStudents } from "@/hooks/useScopedStudents";
 
 const AttendancePage = () => {
   const { staffUser, isInstructor, isAdminOrManager } = useAuth();
+  const scope = useScopedStudents();
   const [batches, setBatches] = useState<any[]>([]);
   const [selectedBatch, setSelectedBatch] = useState<string>("");
   const [students, setStudents] = useState<any[]>([]);
@@ -22,11 +24,15 @@ const AttendancePage = () => {
   const [planCycles, setPlanCycles] = useState<any[]>([]);
 
   useEffect(() => {
+    if (scope.loading) return;
     const fetchBatches = async () => {
-      let batchQuery = supabase.from("batches").select("*").eq("organization_id", 1).order("name");
+      let batchQuery: any = supabase.from("batches").select("*").eq("organization_id", 1).order("name");
       // If instructor, only show their batches
       if (isInstructor && !isAdminOrManager && staffUser) {
         batchQuery = batchQuery.or(`instructor_id.eq.${staffUser.id},instructor_2_id.eq.${staffUser.id}`);
+      } else if (!scope.unrestricted) {
+        if (scope.batchIds.length === 0) { setBatches([]); setPlanCycles([]); return; }
+        batchQuery = batchQuery.in("id", scope.batchIds);
       }
       const [batchRes, cycleRes] = await Promise.all([
         batchQuery,
@@ -36,7 +42,7 @@ const AttendancePage = () => {
       setPlanCycles(cycleRes.data || []);
     };
     fetchBatches();
-  }, [staffUser, isInstructor, isAdminOrManager]);
+  }, [staffUser, isInstructor, isAdminOrManager, scope.loading, scope.unrestricted, scope.batchIds.join(",")]);
 
   // Helper to get schedule days from batch
   const getBatchDays = (batch: any): string[] => {
