@@ -588,10 +588,13 @@ const Dashboard = () => {
             >
               <BatchTable data={batchData} valueKey="REN" />
             </ExpandableCard>
-            <SimpleCard
+            <ExpandableCard
               title="REN Dreams" value={renDreams}
-              subtitle={`${renewableCount} renewable`} highlight
-            />
+              subtitle={`${renewableCount} renewable`}
+              open={renDreamsOpen} onOpenChange={setRenDreamsOpen} highlight
+            >
+              <BatchTable data={batchData} valueKey="REN" />
+            </ExpandableCard>
           </div>
 
           {/* Row 4: C/F (Carry Forward) */}
