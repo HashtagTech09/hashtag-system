@@ -15,6 +15,8 @@ import { ChevronDown, CalendarIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { useScopedStudents } from "@/hooks/useScopedStudents";
+import BatchDetailsPopup from "@/components/dashboard/BatchDetailsPopup";
+import { useLongPress } from "@/hooks/useLongPress";
 
 interface Studio { id: number; name: string; code: string | null; }
 interface Batch { id: number; name: string; batch_code: string | null; studio_id: number | null; capacity: number | null; }
@@ -77,6 +79,7 @@ const Dashboard = () => {
   const [missedThreshold, setMissedThreshold] = useState(3);
   const [attendanceRecords, setAttendanceRecords] = useState<{ student_id: number; batch_id: number }[]>([]);
   const [studentNames, setStudentNames] = useState<Map<number, { name: string; phone: string | null }>>(new Map());
+  const [selectedBatch, setSelectedBatch] = useState<{ id: number; name: string } | null>(null);
 
   useEffect(() => {
     const init = async () => {
@@ -357,6 +360,23 @@ const Dashboard = () => {
 
   const fmt = (n: number) => n.toLocaleString("en-IN");
 
+  const ClickableBatchRow = ({
+    children, batchId, batchName,
+  }: { children: React.ReactNode; batchId: number; batchName: string }) => {
+    const handlers = useLongPress({
+      onLongPress: () => setSelectedBatch({ id: batchId, name: batchName }),
+      onClick: () => setSelectedBatch({ id: batchId, name: batchName }),
+    });
+    return (
+      <TableRow
+        {...handlers}
+        className="cursor-pointer select-none hover:bg-accent/40 transition-colors"
+      >
+        {children}
+      </TableRow>
+    );
+  };
+
   const BatchTable = ({ data, valueKey }: { data: typeof batchData; valueKey: "total" | "C/F" | "NEW" | "REV" | "REN" }) => (
     <Table>
       <TableHeader>
@@ -371,7 +391,7 @@ const Dashboard = () => {
         {data.filter(b => b[valueKey] > 0).map(b => {
           const pct = Math.min(Math.round((b[valueKey] / b.capacity) * 100), 100);
           return (
-            <TableRow key={b.id}>
+            <ClickableBatchRow key={b.id} batchId={b.id} batchName={b.name}>
               <TableCell className="font-medium text-xs">{b.name}</TableCell>
               <TableCell className="text-right text-xs">{b[valueKey]}</TableCell>
               <TableCell className="text-right text-xs">{b.capacity}</TableCell>
@@ -381,7 +401,7 @@ const Dashboard = () => {
                   <span className="text-[10px] text-muted-foreground w-8 text-right">{pct}%</span>
                 </div>
               </TableCell>
-            </TableRow>
+            </ClickableBatchRow>
           );
         })}
       </TableBody>
@@ -489,10 +509,10 @@ const Dashboard = () => {
                 </TableHeader>
                 <TableBody>
                   {headCountData.map(b => (
-                    <TableRow key={b.id}>
+                    <ClickableBatchRow key={b.id} batchId={b.id} batchName={b.name}>
                       <TableCell className="font-medium text-xs">{b.name}</TableCell>
                       <TableCell className="text-right text-xs">{b.count}</TableCell>
-                    </TableRow>
+                    </ClickableBatchRow>
                   ))}
                 </TableBody>
               </Table>
@@ -710,6 +730,19 @@ const Dashboard = () => {
           </div>
         </div>
       )}
+
+      <BatchDetailsPopup
+        batch={selectedBatch}
+        enrollments={
+          selectedBatch
+            ? classifiedEnrollments
+                .filter(e => e.batch_id === selectedBatch.id)
+                .map(e => ({ student_id: e.student_id, displayStatus: e.displayStatus }))
+            : []
+        }
+        open={!!selectedBatch}
+        onOpenChange={(v) => { if (!v) setSelectedBatch(null); }}
+      />
     </AdminLayout>
   );
 };
