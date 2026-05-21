@@ -360,6 +360,23 @@ const Dashboard = () => {
 
   const fmt = (n: number) => n.toLocaleString("en-IN");
 
+  const ClickableBatchRow = ({
+    children, batchId, batchName,
+  }: { children: React.ReactNode; batchId: number; batchName: string }) => {
+    const handlers = useLongPress({
+      onLongPress: () => setSelectedBatch({ id: batchId, name: batchName }),
+      onClick: () => setSelectedBatch({ id: batchId, name: batchName }),
+    });
+    return (
+      <TableRow
+        {...handlers}
+        className="cursor-pointer select-none hover:bg-accent/40 transition-colors"
+      >
+        {children}
+      </TableRow>
+    );
+  };
+
   const BatchTable = ({ data, valueKey }: { data: typeof batchData; valueKey: "total" | "C/F" | "NEW" | "REV" | "REN" }) => (
     <Table>
       <TableHeader>
@@ -374,7 +391,7 @@ const Dashboard = () => {
         {data.filter(b => b[valueKey] > 0).map(b => {
           const pct = Math.min(Math.round((b[valueKey] / b.capacity) * 100), 100);
           return (
-            <TableRow key={b.id}>
+            <ClickableBatchRow key={b.id} batchId={b.id} batchName={b.name}>
               <TableCell className="font-medium text-xs">{b.name}</TableCell>
               <TableCell className="text-right text-xs">{b[valueKey]}</TableCell>
               <TableCell className="text-right text-xs">{b.capacity}</TableCell>
@@ -384,7 +401,7 @@ const Dashboard = () => {
                   <span className="text-[10px] text-muted-foreground w-8 text-right">{pct}%</span>
                 </div>
               </TableCell>
-            </TableRow>
+            </ClickableBatchRow>
           );
         })}
       </TableBody>
