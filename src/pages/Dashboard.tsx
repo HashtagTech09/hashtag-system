@@ -730,6 +730,19 @@ const Dashboard = () => {
           </div>
         </div>
       )}
+
+      <BatchDetailsPopup
+        batch={selectedBatch}
+        enrollments={
+          selectedBatch
+            ? classifiedEnrollments
+                .filter(e => e.batch_id === selectedBatch.id)
+                .map(e => ({ student_id: e.student_id, displayStatus: e.displayStatus }))
+            : []
+        }
+        open={!!selectedBatch}
+        onOpenChange={(v) => { if (!v) setSelectedBatch(null); }}
+      />
     </AdminLayout>
   );
 };
