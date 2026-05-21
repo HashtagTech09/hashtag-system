@@ -1,61 +1,57 @@
-# Restore Application Case to Enrollment
+# Fix: Dashboard counts students in cycles they don't actually own
 
-Admins can take an approved application case (which previously withdrew a student from a batch) and put that student back into an active enrollment — either into the same batch or a different one they pick.
+## The bug
 
-## Where it appears
+On `/` (Dashboard), when you switch the cycle dropdown to a Grid month, students who bought a Regular-only plan (e.g. Anannya Agarwal's "3 Regular Months: May'26 → Aug'26", batch `HipHop1-NDA`) appear in the count.
 
-On `/application-cases`, in the **Approved** tab, each row gets a new action button **"Restore to Enrollment"** (admin-only, mirrors Approve/Reject permission rules). Not shown on Pending or Rejected tabs.
+Anannya owns 3 **regular** cycles only. She does not own any grid cycle. But because her enrollment's `start_date`/`end_date` window (Apr 27 → Aug end) overlaps the grid month sitting in between, the dashboard pulls her into that cycle's totals.
 
-## Flow
+## Root cause
 
-1. Admin clicks **Restore to Enrollment** on an approved case row.
-2. A modal opens showing:
-   - Student name (read-only)
-   - Original batch (read-only, for reference)
-   - **Batch selector** — dropdown of all batches in the org. Defaults to the original batch.
-   - Validity window (read-only): the original enrollment's `start_date → end_date` and cycle range. This is reused as-is.
-   - Optional note field.
-3. Admin confirms → system restores enrollment:
-   - **Same batch chosen** → flip the original `enrollments.is_active` back to `true`.
-   - **Different batch chosen** → insert a new `enrollments` row cloning the original (same student, dates, cycles, plan, status_type, payment_id, previous_batch_id) with `batch_id` = selected batch and `is_active = true`. Original stays inactive.
-4. The `application_cases` row is updated: `status = 'restored'`, `reviewed_by_user_id = current admin`, `reviewed_at = now`, plus the optional note appended to `review_notes`.
-5. Toast confirmation, list refreshes (already realtime-subscribed).
+`src/pages/Dashboard.tsx` (lines 128–136) selects enrollments using **date-range overlap** against the selected cycle:
 
-## Tab changes
+```text
+enrollments.is_active = true
+  AND end_date   >= selectedCycle.start_date
+  AND start_date <= selectedCycle.end_date
+```
 
-Add a fourth tab **Restored** alongside Pending / Approved / Rejected so restored cases are still visible (and don't clutter Approved). The status filter just adds `"restored"` as a valid value.
+This is wrong for two reasons:
 
-## Technical notes
+1. A Regular-only plan can span calendar months that include a Grid cycle. Date overlap includes that grid month even though the student bought 0 grid cycles.
+2. The source of truth for "which cycles does this enrollment cover" is the `enrollment_cycles` table (with `cycle_adjustments` applied on top), not the enrollment's start/end dates.
 
-- File edited: `src/pages/ApplicationCases.tsx` only. No schema changes — `application_cases.status` is a free `text` column, so `'restored'` is allowed without a migration.
-- New local state: `restoreOpen`, `activeCase` (reused), `selectedBatchId`, `restoreNote`, `batches` list.
-- Fetch batches once on mount: `supabase.from("batches").select("id, name, batch_code, studios(name, code)").eq("organization_id", 1).order("name")`.
-- Restore handler (sketch):
-  ```ts
-  if (selectedBatchId === c.batch_id) {
-    await supabase.from("enrollments").update({ is_active: true }).eq("id", c.enrollment_id);
-  } else {
-    // fetch original enrollment, clone with new batch_id
-    const { data: orig } = await supabase.from("enrollments").select("*").eq("id", c.enrollment_id).single();
-    const { id, created_at, ...rest } = orig;
-    await supabase.from("enrollments").insert({
-      ...rest,
-      batch_id: selectedBatchId,
-      previous_batch_id: orig.batch_id,
-      is_active: true,
-    });
-  }
-  await supabase.from("application_cases").update({
-    status: "restored",
-    reviewed_by_user_id: staffUser.id,
-    reviewed_at: nowIST().toISOString(),
-    review_notes: restoreNote || null,
-  }).eq("id", c.id);
-  ```
-- Permission gate: same `isAdmin` check used for Approve/Reject.
+The downstream metrics — Total Dreams, Head Count, batch-wise, NEW/REN/REV/CF buckets — all flow from this one query, so the over-count propagates everywhere.
+
+## Fix
+
+Change the enrollment fetch in the Dashboard so an enrollment is included for `selectedCycle` only when the student actually owns that cycle for that batch.
+
+Steps:
+
+1. Keep the existing date-window query as a coarse pre-filter (cheap, narrows the set).
+2. Then fetch `enrollment_cycles` rows for those `enrollment_id`s where `cycle_id = selectedCycle.id`.
+3. Also fetch `cycle_adjustments` (status `APPLIED`) for the same `student_id` + `batch_id` set, and apply the same shift-in / shift-out logic already used by `getEffectiveCycles` in `src/lib/cycleUtils.ts`.
+4. Keep only enrollments whose effective cycles for that student+batch include `selectedCycle.id`.
+
+After that filter, every existing metric (`totalDreams`, `headCount`, `batchData`, `headCountData`, `dateWise`, `cfDreams`, `newDreams`, `revDreams`, `renDreams`, popup contents) recomputes correctly with no further changes.
+
+## Scope
+
+- Edit: `src/pages/Dashboard.tsx` only (the `fetchData` effect around lines 102–215, plus a small helper for the cycle-ownership filter).
+- Reuse: `getEffectiveCycles` from `src/lib/cycleUtils.ts`.
+- No schema changes. No changes to renewals, payments, or drop-ins logic.
+- The "renewable" count (line 174–183) is already a separate query keyed on `end_date` in the grace window — it stays as-is.
 
 ## Out of scope
 
-- No payment/cycle recalculation — assumes admin is reversing a mistaken withdrawal within the same validity window.
-- No bulk restore.
-- No new RLS or DB function.
+- Re-deriving status (NEW/REN/REV/CF) — only the membership question changes.
+- Other pages (`Enrollments`, `Analytics`, exports). If the user reports the same symptom elsewhere we can fix those next.
+- Backfilling `enrollment_cycles` for legacy enrollments. If any active enrollment is missing `enrollment_cycles` rows, it will disappear from per-cycle counts — we should spot-check this before shipping (see Verify).
+
+## Verify
+
+- Open Dashboard, pick the grid cycle that sits inside Anannya's May→Aug window. She should no longer appear in Head Count or in the `HipHop1-NDA` row.
+- Pick a regular cycle she does own (e.g. May'26). She should still appear.
+- Spot-check totals against `enrollment_cycles` for one batch in one cycle:
+  `count(distinct student_id) where cycle_id = X and batch_id = Y` should match the Head Count cell.
