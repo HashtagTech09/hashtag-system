@@ -1,52 +1,61 @@
-# Batch Details Popup
+# Restore Application Case to Enrollment
 
-Replace the inline-only batch list with a clickable row that opens a popup with the full alphabetized student list for that batch. Keeps the existing Total Dreams / Head Count / NEW / REV / REN / C/F tables intact — only adds an overlay on row click / long-press.
+Admins can take an approved application case (which previously withdrew a student from a batch) and put that student back into an active enrollment — either into the same batch or a different one they pick.
 
-## Behavior
+## Where it appears
 
-- **Desktop (and tablet tap):** click a batch row → centered modal opens (fade + scale animation, backdrop blur, X button, close on outside click / Esc).
-- **Mobile (<768px):** opens as a bottom sheet/drawer instead. Long-press (~500ms) on the row triggers it; a normal tap also opens it (no other quick action is defined today, so tap stays as the primary open gesture on touch). Tablet supports both tap and long-press.
-- Popup content is only mounted when opened (lazy fetch).
+On `/application-cases`, in the **Approved** tab, each row gets a new action button **"Restore to Enrollment"** (admin-only, mirrors Approve/Reject permission rules). Not shown on Pending or Rejected tabs.
 
-## Popup contents
+## Flow
 
-- Header: batch name + batch_code, total students count, close button.
-- Search bar (filters by name/phone, client-side).
-- Scrollable student list, sorted A–Z by name. Each row:
-  - Name
-  - Status badge (NEW / REN / REV / C/F — derived from the same `classifiedEnrollments` already computed on the Dashboard for the selected cycle, so it stays consistent with the table).
-  - Phone (from `getDisplayPhone` util — falls back to primary user).
-  - Hover/tap highlight.
-- Quick actions per row (icon buttons): Call (`tel:`), WhatsApp (`https://wa.me/...`), Mark Attendance (navigates to `/attendance?batch=…`), Open Profile (navigates to `/students?id=…`).
-- Loading: shadcn `Skeleton` rows while fetching.
-- Empty state when no students match search.
+1. Admin clicks **Restore to Enrollment** on an approved case row.
+2. A modal opens showing:
+   - Student name (read-only)
+   - Original batch (read-only, for reference)
+   - **Batch selector** — dropdown of all batches in the org. Defaults to the original batch.
+   - Validity window (read-only): the original enrollment's `start_date → end_date` and cycle range. This is reused as-is.
+   - Optional note field.
+3. Admin confirms → system restores enrollment:
+   - **Same batch chosen** → flip the original `enrollments.is_active` back to `true`.
+   - **Different batch chosen** → insert a new `enrollments` row cloning the original (same student, dates, cycles, plan, status_type, payment_id, previous_batch_id) with `batch_id` = selected batch and `is_active = true`. Original stays inactive.
+4. The `application_cases` row is updated: `status = 'restored'`, `reviewed_by_user_id = current admin`, `reviewed_at = now`, plus the optional note appended to `review_notes`.
+5. Toast confirmation, list refreshes (already realtime-subscribed).
 
-## Data flow
+## Tab changes
 
-- Selected batch id + cycle range (already known on Dashboard) → React Query key `["batch-students", batchId, cycleStart, cycleEnd]`.
-- Query fetches `enrollments` for that batch within the selected cycle window (mirroring the existing Dashboard filter: `is_active=true`, status filter, date overlap), joins to `students(*, users(name,phone,email))`.
-- Dedupe by student_id, derive each student's status from their enrollment row (NEW/REN/REV; C/F if their enrollment started before cycle start).
-- Sort alphabetically by name (case-insensitive).
-- Scoped-manager access: pass through `useScopedStudents()` — if `unrestricted` is false, intersect with `studentIds` before rendering.
+Add a fourth tab **Restored** alongside Pending / Approved / Rejected so restored cases are still visible (and don't clutter Approved). The status filter just adds `"restored"` as a valid value.
 
-## UI / styling
+## Technical notes
 
-- Reuse existing tokens: `glass-card`, `gradient-primary`, `text-primary` (hot pink accent), `Space Grotesk` for the heading.
-- Desktop: shadcn `Dialog` (already has fade + zoom animations and `bg-black/80` overlay — add `backdrop-blur-sm` to overlay).
-- Mobile: shadcn `Drawer` (vaul) — same content component, different wrapper chosen via `useIsMobile()`.
-- Rounded `rounded-2xl`, soft shadow `shadow-elegant`, list items `rounded-lg hover:bg-accent/50 transition-colors`.
-
-## Files
-
-- New: `src/components/dashboard/BatchDetailsPopup.tsx` — responsive wrapper (Dialog on desktop, Drawer on mobile) + content (header, search, list, actions, skeleton).
-- New: `src/hooks/useLongPress.ts` — tiny helper returning `onTouchStart/End/Move/onMouseDown/Up/Leave` handlers (~500ms threshold, cancel on move).
-- Edit: `src/pages/Dashboard.tsx`
-  - Add `selectedBatch` state.
-  - In `BatchTable`, make `<TableRow>` clickable (`cursor-pointer hover:bg-accent/40`) and wire long-press handlers; `onClick` / long-press → `setSelectedBatch(b)`.
-  - Render `<BatchDetailsPopup batch={selectedBatch} cycle={selectedCycle} open={!!selectedBatch} onOpenChange={...} />` once at page bottom.
+- File edited: `src/pages/ApplicationCases.tsx` only. No schema changes — `application_cases.status` is a free `text` column, so `'restored'` is allowed without a migration.
+- New local state: `restoreOpen`, `activeCase` (reused), `selectedBatchId`, `restoreNote`, `batches` list.
+- Fetch batches once on mount: `supabase.from("batches").select("id, name, batch_code, studios(name, code)").eq("organization_id", 1).order("name")`.
+- Restore handler (sketch):
+  ```ts
+  if (selectedBatchId === c.batch_id) {
+    await supabase.from("enrollments").update({ is_active: true }).eq("id", c.enrollment_id);
+  } else {
+    // fetch original enrollment, clone with new batch_id
+    const { data: orig } = await supabase.from("enrollments").select("*").eq("id", c.enrollment_id).single();
+    const { id, created_at, ...rest } = orig;
+    await supabase.from("enrollments").insert({
+      ...rest,
+      batch_id: selectedBatchId,
+      previous_batch_id: orig.batch_id,
+      is_active: true,
+    });
+  }
+  await supabase.from("application_cases").update({
+    status: "restored",
+    reviewed_by_user_id: staffUser.id,
+    reviewed_at: nowIST().toISOString(),
+    review_notes: restoreNote || null,
+  }).eq("id", c.id);
+  ```
+- Permission gate: same `isAdmin` check used for Approve/Reject.
 
 ## Out of scope
 
-- No DB schema or RLS changes.
-- No changes to the other dashboard cards (Head Count, NEW/REV/REN/CF) beyond the same row-click affordance reusing the new popup.
-- Mark Attendance / Open Profile use existing routes; no new pages.
+- No payment/cycle recalculation — assumes admin is reversing a mistaken withdrawal within the same validity window.
+- No bulk restore.
+- No new RLS or DB function.
