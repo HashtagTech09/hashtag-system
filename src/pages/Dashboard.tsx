@@ -79,6 +79,7 @@ const Dashboard = () => {
   const [missedThreshold, setMissedThreshold] = useState(3);
   const [attendanceRecords, setAttendanceRecords] = useState<{ student_id: number; batch_id: number }[]>([]);
   const [studentNames, setStudentNames] = useState<Map<number, { name: string; phone: string | null }>>(new Map());
+  const [selectedBatch, setSelectedBatch] = useState<{ id: number; name: string } | null>(null);
 
   useEffect(() => {
     const init = async () => {
