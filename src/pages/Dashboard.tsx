@@ -74,6 +74,7 @@ const Dashboard = () => {
   const [revOpen, setRevOpen] = useState(false);
   const [renOpen, setRenOpen] = useState(false);
   const [cfOpen, setCfOpen] = useState(false);
+  const [renDreamsOpen, setRenDreamsOpen] = useState(false);
   const [headCountOpen, setHeadCountOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date>(nowIST());
   const [missedThreshold, setMissedThreshold] = useState(3);
