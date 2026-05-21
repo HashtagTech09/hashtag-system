@@ -509,10 +509,10 @@ const Dashboard = () => {
                 </TableHeader>
                 <TableBody>
                   {headCountData.map(b => (
-                    <TableRow key={b.id}>
+                    <ClickableBatchRow key={b.id} batchId={b.id} batchName={b.name}>
                       <TableCell className="font-medium text-xs">{b.name}</TableCell>
                       <TableCell className="text-right text-xs">{b.count}</TableCell>
-                    </TableRow>
+                    </ClickableBatchRow>
                   ))}
                 </TableBody>
               </Table>
