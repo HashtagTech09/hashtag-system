@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -15,7 +15,14 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Search, AlertTriangle, Check, X } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Search, AlertTriangle, Check, X, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { useScopedStudents } from "@/hooks/useScopedStudents";
@@ -24,15 +31,22 @@ import { format } from "date-fns";
 
 type CaseRow = any;
 
+type TabKey = "pending" | "approved" | "rejected" | "restored";
+
 const ApplicationCasesPage = () => {
   const { staffUser, isAdmin } = useAuth();
   const scope = useScopedStudents();
   const [cases, setCases] = useState<CaseRow[]>([]);
+  const [batches, setBatches] = useState<any[]>([]);
   const [search, setSearch] = useState("");
-  const [tab, setTab] = useState<"pending" | "approved" | "rejected">("pending");
+  const [tab, setTab] = useState<TabKey>("pending");
   const [rejectOpen, setRejectOpen] = useState(false);
+  const [restoreOpen, setRestoreOpen] = useState(false);
   const [activeCase, setActiveCase] = useState<CaseRow | null>(null);
   const [reviewNotes, setReviewNotes] = useState("");
+  const [restoreNote, setRestoreNote] = useState("");
+  const [selectedBatchId, setSelectedBatchId] = useState<string>("");
+  const [submitting, setSubmitting] = useState(false);
 
   const fetchData = async () => {
     let q: any = supabase
@@ -55,9 +69,19 @@ const ApplicationCasesPage = () => {
     setCases(data || []);
   };
 
+  const fetchBatches = async () => {
+    const { data } = await supabase
+      .from("batches")
+      .select("id, name, batch_code, studios(name, code)")
+      .eq("organization_id", 1)
+      .order("name");
+    setBatches(data || []);
+  };
+
   useEffect(() => {
     if (scope.loading) return;
     fetchData();
+    fetchBatches();
     const channel = supabase
       .channel("application_cases_page")
       .on(
@@ -139,6 +163,71 @@ const ApplicationCasesPage = () => {
     fetchData();
   };
 
+  const openRestore = (c: CaseRow) => {
+    setActiveCase(c);
+    setSelectedBatchId(String(c.batch_id));
+    setRestoreNote("");
+    setRestoreOpen(true);
+  };
+
+  const confirmRestore = async () => {
+    if (!activeCase) return;
+    if (!isAdmin) {
+      toast.error("Only admins can restore");
+      return;
+    }
+    if (!selectedBatchId) {
+      toast.error("Please select a batch");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const targetBatchId = Number(selectedBatchId);
+      if (targetBatchId === activeCase.batch_id) {
+        const { error } = await supabase
+          .from("enrollments")
+          .update({ is_active: true })
+          .eq("id", activeCase.enrollment_id);
+        if (error) throw error;
+      } else {
+        const { data: orig, error: fetchErr } = await supabase
+          .from("enrollments")
+          .select("*")
+          .eq("id", activeCase.enrollment_id)
+          .single();
+        if (fetchErr || !orig) throw fetchErr || new Error("Original enrollment not found");
+        const { id, created_at, ...rest } = orig as any;
+        const { error: insErr } = await supabase.from("enrollments").insert({
+          ...rest,
+          batch_id: targetBatchId,
+          previous_batch_id: orig.batch_id,
+          is_active: true,
+        });
+        if (insErr) throw insErr;
+      }
+      const existingNotes = activeCase.review_notes ? `${activeCase.review_notes}\n` : "";
+      const restoreLine = `Restored on ${format(nowIST(), "dd MMM yyyy, HH:mm")}${restoreNote ? `: ${restoreNote}` : ""}`;
+      const { error: caseErr } = await supabase
+        .from("application_cases")
+        .update({
+          status: "restored",
+          reviewed_by_user_id: staffUser?.id ?? null,
+          reviewed_at: nowIST().toISOString(),
+          review_notes: existingNotes + restoreLine,
+        })
+        .eq("id", activeCase.id);
+      if (caseErr) throw caseErr;
+      toast.success("Enrollment restored");
+      setRestoreOpen(false);
+      setActiveCase(null);
+      fetchData();
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to restore enrollment");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const fmtDate = (s?: string | null) =>
     s ? format(new Date(s), "dd MMM yyyy, HH:mm") : "—";
 
@@ -172,13 +261,14 @@ const ApplicationCasesPage = () => {
               className="pl-10"
             />
           </div>
-          <Tabs value={tab} onValueChange={v => setTab(v as any)}>
+          <Tabs value={tab} onValueChange={v => setTab(v as TabKey)}>
             <TabsList>
               <TabsTrigger value="pending">
                 Pending {pendingCount > 0 && <Badge className="ml-2" variant="secondary">{pendingCount}</Badge>}
               </TabsTrigger>
               <TabsTrigger value="approved">Approved</TabsTrigger>
               <TabsTrigger value="rejected">Rejected</TabsTrigger>
+              <TabsTrigger value="restored">Restored</TabsTrigger>
             </TabsList>
           </Tabs>
         </div>
@@ -203,7 +293,9 @@ const ApplicationCasesPage = () => {
                     <TableHead className="hidden md:table-cell">Reviewed At</TableHead>
                   </>
                 )}
-                {tab === "pending" && isAdmin && <TableHead className="text-right">Actions</TableHead>}
+                {(tab === "pending" || tab === "approved") && isAdmin && (
+                  <TableHead className="text-right">Actions</TableHead>
+                )}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -244,7 +336,7 @@ const ApplicationCasesPage = () => {
                       <TableCell className="hidden md:table-cell text-muted-foreground text-xs">
                         {fmtDate(c.reviewed_at)}
                         {c.review_notes && (
-                          <div className="text-xs italic mt-1">"{c.review_notes}"</div>
+                          <div className="text-xs italic mt-1 whitespace-pre-wrap">"{c.review_notes}"</div>
                         )}
                       </TableCell>
                     </>
@@ -259,6 +351,13 @@ const ApplicationCasesPage = () => {
                           <Check className="h-4 w-4 mr-1" /> Approve
                         </Button>
                       </div>
+                    </TableCell>
+                  )}
+                  {tab === "approved" && isAdmin && (
+                    <TableCell className="text-right">
+                      <Button size="sm" variant="outline" onClick={() => openRestore(c)}>
+                        <Undo2 className="h-4 w-4 mr-1" /> Restore to Enrollment
+                      </Button>
                     </TableCell>
                   )}
                 </TableRow>
@@ -297,6 +396,82 @@ const ApplicationCasesPage = () => {
             </Button>
             <Button variant="destructive" onClick={confirmReject}>
               Confirm Reject
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={restoreOpen} onOpenChange={setRestoreOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Restore to Enrollment</DialogTitle>
+          </DialogHeader>
+          {activeCase && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <div className="text-xs text-muted-foreground">Student</div>
+                  <div className="font-medium">{activeCase.students?.name || "—"}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Original Batch</div>
+                  <div className="font-medium">
+                    {activeCase.batches?.name}
+                    {activeCase.batches?.batch_code && (
+                      <span className="text-xs ml-1 opacity-60 font-mono">({activeCase.batches.batch_code})</span>
+                    )}
+                  </div>
+                </div>
+                <div className="col-span-2">
+                  <div className="text-xs text-muted-foreground">Validity</div>
+                  <div className="font-medium">
+                    {activeCase.enrollments?.start_cycle?.name && activeCase.enrollments?.end_cycle?.name
+                      ? `${activeCase.enrollments.start_cycle.name} → ${activeCase.enrollments.end_cycle.name}`
+                      : activeCase.enrollments
+                        ? `${activeCase.enrollments.start_date} → ${activeCase.enrollments.end_date}`
+                        : "—"}
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Batch</label>
+                <Select value={selectedBatchId} onValueChange={setSelectedBatchId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select batch..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {batches.map(b => (
+                      <SelectItem key={b.id} value={String(b.id)}>
+                        {b.name}
+                        {b.batch_code ? ` (${b.batch_code})` : ""}
+                        {b.studios?.name ? ` — ${b.studios.name}` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Defaults to original batch. Choosing a different batch creates a new enrollment with the same validity.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Note (optional)</label>
+                <Textarea
+                  value={restoreNote}
+                  onChange={e => setRestoreNote(e.target.value)}
+                  placeholder="Reason for restoration..."
+                  rows={2}
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRestoreOpen(false)} disabled={submitting}>
+              Cancel
+            </Button>
+            <Button className="gradient-primary" onClick={confirmRestore} disabled={submitting}>
+              {submitting ? "Restoring..." : "Confirm Restore"}
             </Button>
           </DialogFooter>
         </DialogContent>
