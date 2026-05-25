@@ -1,27 +1,39 @@
-## Real bug
+## Goal
 
-`TestDateProvider` is only wrapped around `src/pages/Register.tsx`. The admin app (`Enrollments`, `Settings`, etc.) is **not** inside the provider, so `useTestDate()` returns the default value `{ isTestMode: false }` everywhere except the public Register page. The amber banner and admin "Edit Validity"/"Delete Enrollment" items can never appear regardless of the DB value or the Settings toggle.
+In the Edit Validity dialog, let admin choose a **plan cycle** (e.g. "Apr 2026", "May 2026") instead of (or in addition to) typing a raw date. The enrollment's `end_date` and `end_cycle_id` both get updated to match the selected cycle.
 
-## Fix
+## UI
 
-Wrap the whole app with `TestDateProvider` in `src/App.tsx`, placed just inside `AuthProvider` so all routes (including admin pages) can read the flag.
+The dialog gets a toggle / two-mode picker:
 
+- **By Cycle** (default) — `Select` listing all `plan_cycles` for org 1, sorted by `start_date`. Each option shows `name` + the date range (e.g. *"May 2026 — Apr 5 → May 4"*). Picking one sets `end_date = cycle.end_date` and `end_cycle_id = cycle.id`. The current `end_cycle_id` is preselected.
+- **By Date** — the existing raw date input. Saves with `end_cycle_id = null` (so the cycle linkage is cleared when admin overrides with a custom date).
+
+Header shows "Current end: {date} · {current cycle name if any}".
+
+## Data
+
+`plan_cycles` is already fetched on the page (line 88) into existing `planCycles` state — reuse it. No new query needed.
+
+## Save logic
+
+`handleSaveValidity` becomes:
+
+```ts
+const update = mode === "cycle"
+  ? { end_date: selectedCycle.end_date, end_cycle_id: selectedCycle.id }
+  : { end_date: editValidityDate, end_cycle_id: null };
+await supabase.from("enrollments").update(update).eq("id", editValidityFor.id);
 ```
-<AuthProvider>
-  <TestDateProvider>
-    {/* existing routes */}
-  </TestDateProvider>
-</AuthProvider>
-```
 
-Remove the now-redundant `<TestDateProvider>` wrapping in `src/pages/Register.tsx` (keep its `useTestDate` usage — it will resolve to the app-level provider).
+Then refresh the list as today.
 
 ## Files
 
-- `src/App.tsx` — import `TestDateProvider`, wrap routes.
-- `src/pages/Register.tsx` — drop the local `TestDateProvider` wrapper, keep the import for `useTestDate`.
+- `src/pages/Enrollments.tsx` only — extend dialog UI, add `validityMode` + `editValidityCycleId` state, update `handleSaveValidity`.
 
 ## Non-goals
 
-- No changes to `TestDateContext.tsx` (the reactivity work from the previous turn stays).
-- No changes to `Enrollments.tsx` or `Settings.tsx`.
+- No change to `start_date` / `start_cycle_id`.
+- No edits to `enrollment_cycles` rows (those track per-cycle ownership and are not the "validity" surface).
+- No new DB columns, no migration.
