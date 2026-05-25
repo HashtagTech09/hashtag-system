@@ -1161,6 +1161,52 @@ const EnrollmentsPage = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={!!changeBatchFor} onOpenChange={(o) => { if (!o) { setChangeBatchFor(null); setChangeBatchToId(""); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Change Batch</DialogTitle></DialogHeader>
+          {changeBatchFor && (
+            <div className="space-y-3">
+              <div className="p-3 rounded border border-border text-sm space-y-1">
+                <p><span className="text-muted-foreground">Student:</span> <span className="font-medium">{changeBatchFor.students?.name}</span></p>
+                <p>
+                  <span className="text-muted-foreground">From:</span>{" "}
+                  {changeBatchFor.batches?.name}
+                  {changeBatchFor.batches?.batch_code && <span className="font-mono text-xs ml-1 opacity-60">({changeBatchFor.batches.batch_code})</span>}
+                </p>
+                <p><span className="text-muted-foreground">Validity:</span> {changeBatchFor.start_date} → {changeBatchFor.end_date}</p>
+              </div>
+              <div>
+                <Label>Move to batch</Label>
+                <Select value={changeBatchToId} onValueChange={setChangeBatchToId}>
+                  <SelectTrigger className="mt-1.5"><SelectValue placeholder="Select a batch" /></SelectTrigger>
+                  <SelectContent>
+                    {batches
+                      .filter(b => b.id !== changeBatchFor.batch_id)
+                      .map(b => {
+                        const studio = studios.find(s => s.id === b.studio_id);
+                        return (
+                          <SelectItem key={b.id} value={String(b.id)}>
+                            {b.name}
+                            {b.batch_code && ` · ${b.batch_code}`}
+                            {studio?.name && ` — ${studio.name}`}
+                          </SelectItem>
+                        );
+                      })}
+                  </SelectContent>
+                </Select>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Validity dates, payment, and payment allocations are kept as-is. Only the enrollment's batch and its cycle records are updated.
+              </p>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setChangeBatchFor(null); setChangeBatchToId(""); }}>Cancel</Button>
+            <Button className="gradient-primary" onClick={handleChangeBatch} disabled={!changeBatchToId}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AdminLayout>
   );
 };
