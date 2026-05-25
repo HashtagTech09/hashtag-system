@@ -29,6 +29,8 @@ const EnrollmentsPage = () => {
   const [enrollments, setEnrollments] = useState<any[]>([]);
   const [editValidityFor, setEditValidityFor] = useState<any>(null);
   const [editValidityDate, setEditValidityDate] = useState("");
+  const [validityMode, setValidityMode] = useState<"cycle" | "date">("cycle");
+  const [editValidityCycleId, setEditValidityCycleId] = useState<string>("");
   const [deleteFor, setDeleteFor] = useState<any>(null);
   const [pendingCases, setPendingCases] = useState<Record<number, boolean>>({});
   const [caseDialogOpen, setCaseDialogOpen] = useState(false);
@@ -142,12 +144,23 @@ const EnrollmentsPage = () => {
   };
 
   const handleSaveValidity = async () => {
-    if (!editValidityFor || !editValidityDate) return;
-    const { error } = await supabase.from("enrollments").update({ end_date: editValidityDate }).eq("id", editValidityFor.id);
+    if (!editValidityFor) return;
+    let update: { end_date: string; end_cycle_id: number | null };
+    if (validityMode === "cycle") {
+      const c = planCycles.find(pc => String(pc.id) === editValidityCycleId);
+      if (!c) { toast.error("Pick a cycle"); return; }
+      update = { end_date: c.end_date, end_cycle_id: c.id };
+    } else {
+      if (!editValidityDate) return;
+      update = { end_date: editValidityDate, end_cycle_id: null };
+    }
+    const { error } = await supabase.from("enrollments").update(update).eq("id", editValidityFor.id);
     if (error) { toast.error("Failed to update validity"); return; }
     toast.success("Validity updated");
     setEditValidityFor(null);
     setEditValidityDate("");
+    setEditValidityCycleId("");
+    setValidityMode("cycle");
     fetchData();
   };
 
