@@ -1024,6 +1024,12 @@ const EnrollmentsPage = () => {
                                   Edit Validity
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
+                                  onClick={() => { setChangeBatchFor(e); setChangeBatchToId(""); }}
+                                >
+                                  <ArrowRightLeft className="h-4 w-4 mr-2" />
+                                  Change Batch
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
                                   className="text-destructive focus:text-destructive"
                                   onClick={() => setDeleteFor(e)}
                                 >
