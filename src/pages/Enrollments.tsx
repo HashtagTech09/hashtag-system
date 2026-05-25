@@ -24,8 +24,12 @@ import { Textarea } from "@/components/ui/textarea";
 
 const EnrollmentsPage = () => {
   const { staffUser, isAdminOrManager } = useAuth();
+  const { isTestMode } = useTestDate();
   const scope = useScopedStudents();
   const [enrollments, setEnrollments] = useState<any[]>([]);
+  const [editValidityFor, setEditValidityFor] = useState<any>(null);
+  const [editValidityDate, setEditValidityDate] = useState("");
+  const [deleteFor, setDeleteFor] = useState<any>(null);
   const [pendingCases, setPendingCases] = useState<Record<number, boolean>>({});
   const [caseDialogOpen, setCaseDialogOpen] = useState(false);
   const [caseEnrollment, setCaseEnrollment] = useState<any>(null);
