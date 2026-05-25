@@ -166,6 +166,20 @@ const EnrollmentsPage = () => {
     fetchData();
   };
 
+  const handleChangeBatch = async () => {
+    if (!changeBatchFor || !changeBatchToId) return;
+    const newBatchId = Number(changeBatchToId);
+    if (newBatchId === changeBatchFor.batch_id) { toast.error("Pick a different batch"); return; }
+    const { error: eErr } = await supabase.from("enrollments").update({ batch_id: newBatchId }).eq("id", changeBatchFor.id);
+    if (eErr) { toast.error("Failed to change batch"); return; }
+    const { error: ecErr } = await supabase.from("enrollment_cycles").update({ batch_id: newBatchId }).eq("enrollment_id", changeBatchFor.id);
+    if (ecErr) { toast.error("Batch changed, but cycle records failed to update"); }
+    else { toast.success("Batch changed"); }
+    setChangeBatchFor(null);
+    setChangeBatchToId("");
+    fetchData();
+  };
+
   const handleDeleteEnrollment = async () => {
     if (!deleteFor) return;
     const e = deleteFor;
