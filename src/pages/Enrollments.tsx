@@ -633,6 +633,11 @@ const EnrollmentsPage = () => {
 
   return (
     <AdminLayout title="Enrollments">
+      {isTestMode && isAdminOrManager && (
+        <div className="mb-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-warning/40 bg-warning/10 text-warning text-xs font-medium">
+          Test mode — destructive enrollment actions enabled
+        </div>
+      )}
       <div className="flex flex-col gap-4 mb-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div className="relative w-full sm:w-72">
