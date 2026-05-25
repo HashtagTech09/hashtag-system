@@ -1,28 +1,30 @@
-# Sort Dashboard Batches by Style and Level
+# Merge duplicate Jazz2-RG batches
+
+Two batches exist with the same `batch_code = "Jazz2-RG"` (Rohini Galleria studio, Jazz Level 2):
+
+| Keep | id | name | instructor_id | enrollments | enrollment_cycles |
+|---|---|---|---|---|---|
+| ✅ Keep | **46** | Jazz 2 | 14 | 19 | 39 |
+| ❌ Merge & delete | **90** | Jazz 2 | 31 | 4 | 15 |
 
 ## What changes
 
-In the Dashboard (`/`), the batch breakdown tables in expandable cards (Total Dreams, New Dreams, REV Dreams, REN Dreams, REN Rate) and the Head Count table currently sort batches by enrollment count (descending). Change this to a fixed style-based sort:
+Repoint all data on batch **90** to batch **46**, then delete batch 90. Only these tables hold references to either batch:
 
-1. Kids Jazz (Kids → Kids Level 2)
-2. Kids Ballet (Kids → Kids Level 2)
-3. Jazz (Level 1 → Level 5)
-4. Ballet (Level 1 → Level 5)
-5. Modern (Level 1 → Level 5)
-6. Hip Hop (Level 1 → Level 5)
-7. Heels (Level 1 → Level 5)
+- `enrollments.batch_id`: 4 rows → 46
+- `enrollment_cycles.batch_id`: 15 rows → 46
 
-This consistent order across all cards lets you visually match data across cards.
+(Verified no rows in `attendance`, `batch_sessions`, `payment_allocations`, `cycle_adjustments`, `application_cases`, or `enrollments.previous_batch_id` reference 46 or 90.)
 
-## Technical details
+## Steps
 
-1. Update batch query in `Dashboard.tsx` to also select `style_base, level`.
-2. Add `style_base` / `level` to the `Batch` interface and pass them through into `batchData` and `headCountData`.
-3. Add a sort comparator:
-   - Group rank: `Kids` (level starts with "Kids") = 0, others = 1.
-   - Style rank: Jazz=1, Ballet=2, Modern=3, Hip Hop=4, Heels=5, unknown=99.
-   - Level rank: Kids=0, Level 1=1 … Level 5=5, Kids Level 2=6, unknown=99.
-   - Sort by (group, style, level), tiebreak on batch name.
-4. Replace the existing `.sort((a, b) => b.total - a.total)` and `.sort((a, b) => b.count - a.count)` with the new comparator.
+1. `UPDATE enrollments SET batch_id = 46 WHERE batch_id = 90;`
+2. `UPDATE enrollment_cycles SET batch_id = 46 WHERE batch_id = 90;`
+3. `DELETE FROM batches WHERE id = 90;`
 
-No data, query semantics, or other components change.
+Batch 46 retains its existing instructor (id 14). No UI/code changes required — the dashboard will automatically show a single Jazz2-RG row after the merge.
+
+## Confirm before I run
+
+- Keep id **46** (instructor 14), delete id **90** (instructor 31) — correct?
+- If the instructor on the surviving batch should instead be 31 (or both), say so and I'll add that update.
