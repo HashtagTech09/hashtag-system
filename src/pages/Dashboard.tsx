@@ -19,7 +19,23 @@ import BatchDetailsPopup from "@/components/dashboard/BatchDetailsPopup";
 import { useLongPress } from "@/hooks/useLongPress";
 
 interface Studio { id: number; name: string; code: string | null; }
-interface Batch { id: number; name: string; batch_code: string | null; studio_id: number | null; capacity: number | null; }
+interface Batch { id: number; name: string; batch_code: string | null; studio_id: number | null; capacity: number | null; style_base: string | null; level: string | null; }
+
+const STYLE_RANK: Record<string, number> = { Jazz: 1, Ballet: 2, Modern: 3, "Hip Hop": 4, Heels: 5 };
+const LEVEL_RANK: Record<string, number> = { Kids: 0, "Level 1": 1, "Level 2": 2, "Level 3": 3, "Level 4": 4, "Level 5": 5, "Kids Level 2": 6 };
+function batchSortRank(b: { style_base?: string | null; level?: string | null }) {
+  const lvl = b.level || "";
+  const isKids = lvl.startsWith("Kids");
+  return {
+    group: isKids ? 0 : 1,
+    style: STYLE_RANK[b.style_base || ""] ?? 99,
+    level: LEVEL_RANK[lvl] ?? 99,
+  };
+}
+function compareBatches(a: { style_base?: string | null; level?: string | null; name: string }, b: { style_base?: string | null; level?: string | null; name: string }) {
+  const ra = batchSortRank(a), rb = batchSortRank(b);
+  return ra.group - rb.group || ra.style - rb.style || ra.level - rb.level || a.name.localeCompare(b.name);
+}
 
 async function fetchAll<T>(queryFactory: () => any): Promise<T[]> {
   const PAGE = 1000;
@@ -104,7 +120,7 @@ const Dashboard = () => {
     if (!selectedCycle || scope.loading) return;
     const fetchData = async () => {
       setLoading(true);
-      let batchQuery = supabase.from("batches").select("id, name, batch_code, studio_id, capacity").eq("organization_id", 1);
+      let batchQuery = supabase.from("batches").select("id, name, batch_code, studio_id, capacity, style_base, level").eq("organization_id", 1);
       if (selectedStudio !== "all") {
         batchQuery = batchQuery.eq("studio_id", parseInt(selectedStudio));
       }
@@ -292,6 +308,7 @@ const Dashboard = () => {
     return batches
       .map(b => ({
         id: b.id, name: b.batch_code || b.name, capacity: b.capacity || 35,
+        style_base: b.style_base, level: b.level,
         total: totalMap.get(b.id) || 0,
         "C/F": cfMap.get(b.id) || 0,
         NEW: newMap.get(b.id) || 0,
@@ -299,7 +316,7 @@ const Dashboard = () => {
         REN: renMap.get(b.id) || 0,
       }))
       .filter(b => b.total > 0)
-      .sort((a, b) => b.total - a.total);
+      .sort(compareBatches);
   }, [classifiedEnrollments, batches]);
 
   // Head count: unique students per batch
@@ -313,10 +330,11 @@ const Dashboard = () => {
       .map(b => ({
         id: b.id,
         name: b.batch_code || b.name,
+        style_base: b.style_base, level: b.level,
         count: batchStudents.get(b.id)?.size || 0,
       }))
       .filter(b => b.count > 0)
-      .sort((a, b) => b.count - a.count);
+      .sort(compareBatches);
   }, [classifiedEnrollments, batches]);
 
   const paymentMap = useMemo(() => {

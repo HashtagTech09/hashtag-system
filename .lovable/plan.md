@@ -1,16 +1,28 @@
-# Add expanded view for REN Dreams card
+# Sort Dashboard Batches by Style and Level
 
 ## What changes
 
-On the Dashboard (`/`), the **REN Dreams** card (Row 3, right side) is currently a `SimpleCard` (non-expandable). Convert it to an `ExpandableCard` matching the pattern used by New Dreams, REV Dreams, and REN Rate — so admins can drill into the batch-wise breakdown of renewal enrollments for the selected cycle.
+In the Dashboard (`/`), the batch breakdown tables in expandable cards (Total Dreams, New Dreams, REV Dreams, REN Dreams, REN Rate) and the Head Count table currently sort batches by enrollment count (descending). Change this to a fixed style-based sort:
 
-When expanded, it shows a `BatchTable` with `valueKey="REN"` — same data already powering the REN Rate expansion (batches with REN > 0, count, capacity, fill bar, long-press/click to open `BatchDetailsPopup`).
+1. Kids Jazz (Kids → Kids Level 2)
+2. Kids Ballet (Kids → Kids Level 2)
+3. Jazz (Level 1 → Level 5)
+4. Ballet (Level 1 → Level 5)
+5. Modern (Level 1 → Level 5)
+6. Hip Hop (Level 1 → Level 5)
+7. Heels (Level 1 → Level 5)
 
-## Scope
+This consistent order across all cards lets you visually match data across cards.
 
-- Edit only `src/pages/Dashboard.tsx`.
-- Add one new state: `renDreamsOpen` (separate from existing `renOpen` which belongs to REN Rate).
-- Replace the `SimpleCard` for REN Dreams with `ExpandableCard` + `<BatchTable data={batchData} valueKey="REN" />`.
-- Keep highlight styling, value, and subtitle (`${renewableCount} renewable`) unchanged.
+## Technical details
 
-No data, query, or schema changes. No other cards affected.
+1. Update batch query in `Dashboard.tsx` to also select `style_base, level`.
+2. Add `style_base` / `level` to the `Batch` interface and pass them through into `batchData` and `headCountData`.
+3. Add a sort comparator:
+   - Group rank: `Kids` (level starts with "Kids") = 0, others = 1.
+   - Style rank: Jazz=1, Ballet=2, Modern=3, Hip Hop=4, Heels=5, unknown=99.
+   - Level rank: Kids=0, Level 1=1 … Level 5=5, Kids Level 2=6, unknown=99.
+   - Sort by (group, style, level), tiebreak on batch name.
+4. Replace the existing `.sort((a, b) => b.total - a.total)` and `.sort((a, b) => b.count - a.count)` with the new comparator.
+
+No data, query semantics, or other components change.
