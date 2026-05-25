@@ -980,6 +980,24 @@ const EnrollmentsPage = () => {
                                 Request Application Case
                               </DropdownMenuItem>
                             )}
+                            {isTestMode && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onClick={() => { setEditValidityFor(e); setEditValidityDate(e.end_date || ""); }}
+                                >
+                                  <CalendarCog className="h-4 w-4 mr-2" />
+                                  Edit Validity
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  className="text-destructive focus:text-destructive"
+                                  onClick={() => setDeleteFor(e)}
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Delete Enrollment
+                                </DropdownMenuItem>
+                              </>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       )}
