@@ -32,6 +32,8 @@ const EnrollmentsPage = () => {
   const [validityMode, setValidityMode] = useState<"cycle" | "date">("cycle");
   const [editValidityCycleId, setEditValidityCycleId] = useState<string>("");
   const [deleteFor, setDeleteFor] = useState<any>(null);
+  const [changeBatchFor, setChangeBatchFor] = useState<any>(null);
+  const [changeBatchToId, setChangeBatchToId] = useState<string>("");
   const [pendingCases, setPendingCases] = useState<Record<number, boolean>>({});
   const [caseDialogOpen, setCaseDialogOpen] = useState(false);
   const [caseEnrollment, setCaseEnrollment] = useState<any>(null);
