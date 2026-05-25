@@ -1063,6 +1063,46 @@ const EnrollmentsPage = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={!!editValidityFor} onOpenChange={(o) => { if (!o) { setEditValidityFor(null); setEditValidityDate(""); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Edit Validity</DialogTitle></DialogHeader>
+          {editValidityFor && (
+            <div className="space-y-3">
+              <div className="p-3 rounded border border-border text-sm space-y-1">
+                <p><span className="text-muted-foreground">Student:</span> <span className="font-medium">{editValidityFor.students?.name}</span></p>
+                <p><span className="text-muted-foreground">Batch:</span> {editValidityFor.batches?.name}</p>
+                <p><span className="text-muted-foreground">Current end:</span> {editValidityFor.end_date}</p>
+              </div>
+              <div>
+                <Label>New end date</Label>
+                <Input type="date" value={editValidityDate} onChange={(e) => setEditValidityDate(e.target.value)} className="mt-1.5" />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setEditValidityFor(null); setEditValidityDate(""); }}>Cancel</Button>
+            <Button className="gradient-primary" onClick={handleSaveValidity} disabled={!editValidityDate}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!deleteFor} onOpenChange={(o) => { if (!o) setDeleteFor(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this enrollment?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteFor && (
+                <>This will permanently delete the enrollment for <span className="font-medium">{deleteFor.students?.name}</span> in <span className="font-medium">{deleteFor.batches?.name}</span>, along with its cycle records and payment allocation. The payment record itself is kept. This cannot be undone.</>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={handleDeleteEnrollment}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AdminLayout>
   );
 };
