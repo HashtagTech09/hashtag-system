@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, PackagePlus, Download, FileWarning, MoreVertical, CalendarCog, Trash2 } from "lucide-react";
+import { Plus, Search, PackagePlus, Download, FileWarning, MoreVertical, CalendarCog, Trash2, ArrowRightLeft } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { getDisplayPhone } from "@/lib/studentUtils";
@@ -32,6 +32,8 @@ const EnrollmentsPage = () => {
   const [validityMode, setValidityMode] = useState<"cycle" | "date">("cycle");
   const [editValidityCycleId, setEditValidityCycleId] = useState<string>("");
   const [deleteFor, setDeleteFor] = useState<any>(null);
+  const [changeBatchFor, setChangeBatchFor] = useState<any>(null);
+  const [changeBatchToId, setChangeBatchToId] = useState<string>("");
   const [pendingCases, setPendingCases] = useState<Record<number, boolean>>({});
   const [caseDialogOpen, setCaseDialogOpen] = useState(false);
   const [caseEnrollment, setCaseEnrollment] = useState<any>(null);
@@ -161,6 +163,20 @@ const EnrollmentsPage = () => {
     setEditValidityDate("");
     setEditValidityCycleId("");
     setValidityMode("cycle");
+    fetchData();
+  };
+
+  const handleChangeBatch = async () => {
+    if (!changeBatchFor || !changeBatchToId) return;
+    const newBatchId = Number(changeBatchToId);
+    if (newBatchId === changeBatchFor.batch_id) { toast.error("Pick a different batch"); return; }
+    const { error: eErr } = await supabase.from("enrollments").update({ batch_id: newBatchId }).eq("id", changeBatchFor.id);
+    if (eErr) { toast.error("Failed to change batch"); return; }
+    const { error: ecErr } = await supabase.from("enrollment_cycles").update({ batch_id: newBatchId }).eq("enrollment_id", changeBatchFor.id);
+    if (ecErr) { toast.error("Batch changed, but cycle records failed to update"); }
+    else { toast.success("Batch changed"); }
+    setChangeBatchFor(null);
+    setChangeBatchToId("");
     fetchData();
   };
 
@@ -1008,6 +1024,12 @@ const EnrollmentsPage = () => {
                                   Edit Validity
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
+                                  onClick={() => { setChangeBatchFor(e); setChangeBatchToId(""); }}
+                                >
+                                  <ArrowRightLeft className="h-4 w-4 mr-2" />
+                                  Change Batch
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
                                   className="text-destructive focus:text-destructive"
                                   onClick={() => setDeleteFor(e)}
                                 >
@@ -1139,6 +1161,52 @@ const EnrollmentsPage = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={!!changeBatchFor} onOpenChange={(o) => { if (!o) { setChangeBatchFor(null); setChangeBatchToId(""); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Change Batch</DialogTitle></DialogHeader>
+          {changeBatchFor && (
+            <div className="space-y-3">
+              <div className="p-3 rounded border border-border text-sm space-y-1">
+                <p><span className="text-muted-foreground">Student:</span> <span className="font-medium">{changeBatchFor.students?.name}</span></p>
+                <p>
+                  <span className="text-muted-foreground">From:</span>{" "}
+                  {changeBatchFor.batches?.name}
+                  {changeBatchFor.batches?.batch_code && <span className="font-mono text-xs ml-1 opacity-60">({changeBatchFor.batches.batch_code})</span>}
+                </p>
+                <p><span className="text-muted-foreground">Validity:</span> {changeBatchFor.start_date} → {changeBatchFor.end_date}</p>
+              </div>
+              <div>
+                <Label>Move to batch</Label>
+                <Select value={changeBatchToId} onValueChange={setChangeBatchToId}>
+                  <SelectTrigger className="mt-1.5"><SelectValue placeholder="Select a batch" /></SelectTrigger>
+                  <SelectContent>
+                    {batches
+                      .filter(b => b.id !== changeBatchFor.batch_id)
+                      .map(b => {
+                        const studio = studios.find(s => s.id === b.studio_id);
+                        return (
+                          <SelectItem key={b.id} value={String(b.id)}>
+                            {b.name}
+                            {b.batch_code && ` · ${b.batch_code}`}
+                            {studio?.name && ` — ${studio.name}`}
+                          </SelectItem>
+                        );
+                      })}
+                  </SelectContent>
+                </Select>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Validity dates, payment, and payment allocations are kept as-is. Only the enrollment's batch and its cycle records are updated.
+              </p>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setChangeBatchFor(null); setChangeBatchToId(""); }}>Cancel</Button>
+            <Button className="gradient-primary" onClick={handleChangeBatch} disabled={!changeBatchToId}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AdminLayout>
   );
 };

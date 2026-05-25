@@ -1,39 +1,32 @@
 ## Goal
 
-In the Edit Validity dialog, let admin choose a **plan cycle** (e.g. "Apr 2026", "May 2026") instead of (or in addition to) typing a raw date. The enrollment's `end_date` and `end_cycle_id` both get updated to match the selected cycle.
+In the Enrollments page, let admin change the **batch** of an existing enrollment via a new dropdown action — useful for fixing wrong selections or moving a student between batches mid-validity.
 
 ## UI
 
-The dialog gets a toggle / two-mode picker:
-
-- **By Cycle** (default) — `Select` listing all `plan_cycles` for org 1, sorted by `start_date`. Each option shows `name` + the date range (e.g. *"May 2026 — Apr 5 → May 4"*). Picking one sets `end_date = cycle.end_date` and `end_cycle_id = cycle.id`. The current `end_cycle_id` is preselected.
-- **By Date** — the existing raw date input. Saves with `end_cycle_id = null` (so the cycle linkage is cleared when admin overrides with a custom date).
-
-Header shows "Current end: {date} · {current cycle name if any}".
-
-## Data
-
-`plan_cycles` is already fetched on the page (line 88) into existing `planCycles` state — reuse it. No new query needed.
+- New dropdown item **"Change Batch"** in the row menu (between *Edit Validity* and *Delete Enrollment*), gated on `isAdminOrManager` like the others.
+- Opens a dialog with:
+  - Read-only header: Student name, current batch (`batch_code · name`), validity range.
+  - **From Batch** (read-only) and **To Batch** `Select` listing all `batches` for org 1, grouped/labelled by studio, current batch excluded.
+  - Optional **Reason** textarea (not persisted — just acknowledged in toast for now).
+  - Footer: Cancel / Save.
 
 ## Save logic
 
-`handleSaveValidity` becomes:
-
+On Save:
 ```ts
-const update = mode === "cycle"
-  ? { end_date: selectedCycle.end_date, end_cycle_id: selectedCycle.id }
-  : { end_date: editValidityDate, end_cycle_id: null };
-await supabase.from("enrollments").update(update).eq("id", editValidityFor.id);
+await supabase.from("enrollments").update({ batch_id: newBatchId }).eq("id", e.id);
+await supabase.from("enrollment_cycles").update({ batch_id: newBatchId }).eq("enrollment_id", e.id);
 ```
+Then `fetchData()` to refresh.
 
-Then refresh the list as today.
+## Out of scope (intentionally)
+
+- No re-pricing, no payment refund/rebalance. `payment_allocations` is **not** touched — those reflect what was actually paid for and stay historically accurate.
+- No automatic attendance migration, no session regeneration.
+- No new DB columns, no migration.
+- `previous_batch_id` is **not** rewritten (it tracks renewal lineage, not admin edits).
 
 ## Files
 
-- `src/pages/Enrollments.tsx` only — extend dialog UI, add `validityMode` + `editValidityCycleId` state, update `handleSaveValidity`.
-
-## Non-goals
-
-- No change to `start_date` / `start_cycle_id`.
-- No edits to `enrollment_cycles` rows (those track per-cycle ownership and are not the "validity" surface).
-- No new DB columns, no migration.
+- `src/pages/Enrollments.tsx` only — new state (`changeBatchFor`, `changeBatchToId`), new `handleChangeBatch`, new dropdown item, new dialog.
