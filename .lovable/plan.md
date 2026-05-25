@@ -1,25 +1,27 @@
-## Problem
+## Real bug
 
-`TestDateContext` fetches `system_settings.test_mode` once on mount. When the admin toggles test mode in Settings, the Enrollments page still thinks `isTestMode = false`, so the "Edit Validity" and "Delete Enrollment" dropdown items (and the amber banner) never appear without a hard refresh.
+`TestDateProvider` is only wrapped around `src/pages/Register.tsx`. The admin app (`Enrollments`, `Settings`, etc.) is **not** inside the provider, so `useTestDate()` returns the default value `{ isTestMode: false }` everywhere except the public Register page. The amber banner and admin "Edit Validity"/"Delete Enrollment" items can never appear regardless of the DB value or the Settings toggle.
 
 ## Fix
 
-Make `src/contexts/TestDateContext.tsx` reactive:
+Wrap the whole app with `TestDateProvider` in `src/App.tsx`, placed just inside `AuthProvider` so all routes (including admin pages) can read the flag.
 
-1. **Expose `refresh()`** from the context so any consumer can force a re-read.
-2. **Re-fetch on window focus** (`visibilitychange` + `focus` listeners) — covers the common case of toggling in another tab/panel and coming back.
-3. **Listen to a custom `test-mode-changed` window event** and re-fetch when it fires.
-4. **Dispatch `test-mode-changed`** from the Settings toggle handler right after the DB update succeeds, so same-tab toggles take effect instantly.
-5. **Subscribe to Supabase Realtime** on `system_settings` filtered to `key=test_mode, organization_id=1` as a belt-and-suspenders update channel.
+```
+<AuthProvider>
+  <TestDateProvider>
+    {/* existing routes */}
+  </TestDateProvider>
+</AuthProvider>
+```
 
-No changes to `Enrollments.tsx` itself — it already gates correctly on `isTestMode && isAdminOrManager`.
+Remove the now-redundant `<TestDateProvider>` wrapping in `src/pages/Register.tsx` (keep its `useTestDate` usage — it will resolve to the app-level provider).
 
 ## Files
 
-- `src/contexts/TestDateContext.tsx` — add `refresh`, focus/visibility listeners, custom-event listener, realtime subscription.
-- Settings page that toggles `test_mode` (need to locate — likely `src/pages/Settings.tsx` or a Communications/Testing settings component) — dispatch `window.dispatchEvent(new Event("test-mode-changed"))` after the update.
+- `src/App.tsx` — import `TestDateProvider`, wrap routes.
+- `src/pages/Register.tsx` — drop the local `TestDateProvider` wrapper, keep the import for `useTestDate`.
 
 ## Non-goals
 
-- No schema changes, no new RLS, no changes to the Enrollments dropdown code.
-- Not touching the simulated-date logic — only the `isTestMode` flag flow.
+- No changes to `TestDateContext.tsx` (the reactivity work from the previous turn stays).
+- No changes to `Enrollments.tsx` or `Settings.tsx`.
