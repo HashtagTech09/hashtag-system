@@ -8,22 +8,28 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, PackagePlus, Download, FileWarning, MoreVertical } from "lucide-react";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Plus, Search, PackagePlus, Download, FileWarning, MoreVertical, CalendarCog, Trash2 } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { getDisplayPhone } from "@/lib/studentUtils";
 import { parseISO } from "date-fns";
 import { allocateCyclesForPlan, insertEnrollmentCycles } from "@/lib/cycleUtils";
 import { useAuth } from "@/hooks/useAuth";
 import { useScopedStudents } from "@/hooks/useScopedStudents";
+import { useTestDate } from "@/contexts/TestDateContext";
 import { Textarea } from "@/components/ui/textarea";
 
 const EnrollmentsPage = () => {
   const { staffUser, isAdminOrManager } = useAuth();
+  const { isTestMode } = useTestDate();
   const scope = useScopedStudents();
   const [enrollments, setEnrollments] = useState<any[]>([]);
+  const [editValidityFor, setEditValidityFor] = useState<any>(null);
+  const [editValidityDate, setEditValidityDate] = useState("");
+  const [deleteFor, setDeleteFor] = useState<any>(null);
   const [pendingCases, setPendingCases] = useState<Record<number, boolean>>({});
   const [caseDialogOpen, setCaseDialogOpen] = useState(false);
   const [caseEnrollment, setCaseEnrollment] = useState<any>(null);
@@ -134,6 +140,33 @@ const EnrollmentsPage = () => {
     setCaseReason("");
     fetchData();
   };
+
+  const handleSaveValidity = async () => {
+    if (!editValidityFor || !editValidityDate) return;
+    const { error } = await supabase.from("enrollments").update({ end_date: editValidityDate }).eq("id", editValidityFor.id);
+    if (error) { toast.error("Failed to update validity"); return; }
+    toast.success("Validity updated");
+    setEditValidityFor(null);
+    setEditValidityDate("");
+    fetchData();
+  };
+
+  const handleDeleteEnrollment = async () => {
+    if (!deleteFor) return;
+    const e = deleteFor;
+    const { error: ecErr } = await supabase.from("enrollment_cycles").delete().eq("enrollment_id", e.id);
+    if (ecErr) { toast.error("Failed to delete enrollment cycles"); return; }
+    if (e.payment_id) {
+      await supabase.from("payment_allocations").delete().eq("payment_id", e.payment_id).eq("batch_id", e.batch_id);
+    }
+    const { error: enErr } = await supabase.from("enrollments").delete().eq("id", e.id);
+    if (enErr) { toast.error("Failed to delete enrollment"); return; }
+    toast.success("Enrollment deleted");
+    setDeleteFor(null);
+    fetchData();
+  };
+
+
 
   // Auto-detect student status based on enrollment history
   useEffect(() => {
@@ -600,6 +633,11 @@ const EnrollmentsPage = () => {
 
   return (
     <AdminLayout title="Enrollments">
+      {isTestMode && isAdminOrManager && (
+        <div className="mb-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-warning/40 bg-warning/10 text-warning text-xs font-medium">
+          Test mode — destructive enrollment actions enabled
+        </div>
+      )}
       <div className="flex flex-col gap-4 mb-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div className="relative w-full sm:w-72">
@@ -947,6 +985,24 @@ const EnrollmentsPage = () => {
                                 Request Application Case
                               </DropdownMenuItem>
                             )}
+                            {isTestMode && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onClick={() => { setEditValidityFor(e); setEditValidityDate(e.end_date || ""); }}
+                                >
+                                  <CalendarCog className="h-4 w-4 mr-2" />
+                                  Edit Validity
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  className="text-destructive focus:text-destructive"
+                                  onClick={() => setDeleteFor(e)}
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Delete Enrollment
+                                </DropdownMenuItem>
+                              </>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       )}
@@ -1007,6 +1063,46 @@ const EnrollmentsPage = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={!!editValidityFor} onOpenChange={(o) => { if (!o) { setEditValidityFor(null); setEditValidityDate(""); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Edit Validity</DialogTitle></DialogHeader>
+          {editValidityFor && (
+            <div className="space-y-3">
+              <div className="p-3 rounded border border-border text-sm space-y-1">
+                <p><span className="text-muted-foreground">Student:</span> <span className="font-medium">{editValidityFor.students?.name}</span></p>
+                <p><span className="text-muted-foreground">Batch:</span> {editValidityFor.batches?.name}</p>
+                <p><span className="text-muted-foreground">Current end:</span> {editValidityFor.end_date}</p>
+              </div>
+              <div>
+                <Label>New end date</Label>
+                <Input type="date" value={editValidityDate} onChange={(e) => setEditValidityDate(e.target.value)} className="mt-1.5" />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setEditValidityFor(null); setEditValidityDate(""); }}>Cancel</Button>
+            <Button className="gradient-primary" onClick={handleSaveValidity} disabled={!editValidityDate}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!deleteFor} onOpenChange={(o) => { if (!o) setDeleteFor(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this enrollment?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteFor && (
+                <>This will permanently delete the enrollment for <span className="font-medium">{deleteFor.students?.name}</span> in <span className="font-medium">{deleteFor.batches?.name}</span>, along with its cycle records and payment allocation. The payment record itself is kept. This cannot be undone.</>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={handleDeleteEnrollment}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AdminLayout>
   );
 };

@@ -1,0 +1,1 @@
+CREATE POLICY "Allow delete enrollments" ON public.enrollments FOR DELETE TO authenticated USING (true);
