@@ -141,6 +141,33 @@ const EnrollmentsPage = () => {
     fetchData();
   };
 
+  const handleSaveValidity = async () => {
+    if (!editValidityFor || !editValidityDate) return;
+    const { error } = await supabase.from("enrollments").update({ end_date: editValidityDate }).eq("id", editValidityFor.id);
+    if (error) { toast.error("Failed to update validity"); return; }
+    toast.success("Validity updated");
+    setEditValidityFor(null);
+    setEditValidityDate("");
+    fetchData();
+  };
+
+  const handleDeleteEnrollment = async () => {
+    if (!deleteFor) return;
+    const e = deleteFor;
+    const { error: ecErr } = await supabase.from("enrollment_cycles").delete().eq("enrollment_id", e.id);
+    if (ecErr) { toast.error("Failed to delete enrollment cycles"); return; }
+    if (e.payment_id) {
+      await supabase.from("payment_allocations").delete().eq("payment_id", e.payment_id).eq("batch_id", e.batch_id);
+    }
+    const { error: enErr } = await supabase.from("enrollments").delete().eq("id", e.id);
+    if (enErr) { toast.error("Failed to delete enrollment"); return; }
+    toast.success("Enrollment deleted");
+    setDeleteFor(null);
+    fetchData();
+  };
+
+
+
   // Auto-detect student status based on enrollment history
   useEffect(() => {
     const detectStatus = async () => {
