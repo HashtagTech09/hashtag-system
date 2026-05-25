@@ -52,6 +52,7 @@ const SettingsPage = () => {
       { organization_id: 1, key: "test_mode", value: newValue },
       { onConflict: "organization_id,key" }
     );
+    window.dispatchEvent(new Event("test-mode-changed"));
     toast.success(checked ? "Test mode enabled — no real messages will be sent" : "Test mode disabled — messages will be sent for real");
   };
 
