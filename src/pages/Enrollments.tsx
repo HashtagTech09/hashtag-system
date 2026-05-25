@@ -29,6 +29,8 @@ const EnrollmentsPage = () => {
   const [enrollments, setEnrollments] = useState<any[]>([]);
   const [editValidityFor, setEditValidityFor] = useState<any>(null);
   const [editValidityDate, setEditValidityDate] = useState("");
+  const [validityMode, setValidityMode] = useState<"cycle" | "date">("cycle");
+  const [editValidityCycleId, setEditValidityCycleId] = useState<string>("");
   const [deleteFor, setDeleteFor] = useState<any>(null);
   const [pendingCases, setPendingCases] = useState<Record<number, boolean>>({});
   const [caseDialogOpen, setCaseDialogOpen] = useState(false);
@@ -142,12 +144,23 @@ const EnrollmentsPage = () => {
   };
 
   const handleSaveValidity = async () => {
-    if (!editValidityFor || !editValidityDate) return;
-    const { error } = await supabase.from("enrollments").update({ end_date: editValidityDate }).eq("id", editValidityFor.id);
+    if (!editValidityFor) return;
+    let update: { end_date: string; end_cycle_id: number | null };
+    if (validityMode === "cycle") {
+      const c = planCycles.find(pc => String(pc.id) === editValidityCycleId);
+      if (!c) { toast.error("Pick a cycle"); return; }
+      update = { end_date: c.end_date, end_cycle_id: c.id };
+    } else {
+      if (!editValidityDate) return;
+      update = { end_date: editValidityDate, end_cycle_id: null };
+    }
+    const { error } = await supabase.from("enrollments").update(update).eq("id", editValidityFor.id);
     if (error) { toast.error("Failed to update validity"); return; }
     toast.success("Validity updated");
     setEditValidityFor(null);
     setEditValidityDate("");
+    setEditValidityCycleId("");
+    setValidityMode("cycle");
     fetchData();
   };
 
@@ -989,7 +1002,7 @@ const EnrollmentsPage = () => {
                               <>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem
-                                  onClick={() => { setEditValidityFor(e); setEditValidityDate(e.end_date || ""); }}
+                                  onClick={() => { setEditValidityFor(e); setEditValidityDate(e.end_date || ""); setEditValidityCycleId(e.end_cycle_id ? String(e.end_cycle_id) : ""); setValidityMode(e.end_cycle_id ? "cycle" : "date"); }}
                                 >
                                   <CalendarCog className="h-4 w-4 mr-2" />
                                   Edit Validity
@@ -1064,7 +1077,7 @@ const EnrollmentsPage = () => {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!editValidityFor} onOpenChange={(o) => { if (!o) { setEditValidityFor(null); setEditValidityDate(""); } }}>
+      <Dialog open={!!editValidityFor} onOpenChange={(o) => { if (!o) { setEditValidityFor(null); setEditValidityDate(""); setEditValidityCycleId(""); setValidityMode("cycle"); } }}>
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>Edit Validity</DialogTitle></DialogHeader>
           {editValidityFor && (
@@ -1072,17 +1085,40 @@ const EnrollmentsPage = () => {
               <div className="p-3 rounded border border-border text-sm space-y-1">
                 <p><span className="text-muted-foreground">Student:</span> <span className="font-medium">{editValidityFor.students?.name}</span></p>
                 <p><span className="text-muted-foreground">Batch:</span> {editValidityFor.batches?.name}</p>
-                <p><span className="text-muted-foreground">Current end:</span> {editValidityFor.end_date}</p>
+                <p>
+                  <span className="text-muted-foreground">Current end:</span> {editValidityFor.end_date}
+                  {editValidityFor.end_cycle?.name && <span className="text-muted-foreground"> · {editValidityFor.end_cycle.name}</span>}
+                </p>
               </div>
-              <div>
-                <Label>New end date</Label>
-                <Input type="date" value={editValidityDate} onChange={(e) => setEditValidityDate(e.target.value)} className="mt-1.5" />
+              <div className="flex gap-2">
+                <Button type="button" size="sm" variant={validityMode === "cycle" ? "default" : "outline"} onClick={() => setValidityMode("cycle")}>By Cycle</Button>
+                <Button type="button" size="sm" variant={validityMode === "date" ? "default" : "outline"} onClick={() => setValidityMode("date")}>By Date</Button>
               </div>
+              {validityMode === "cycle" ? (
+                <div>
+                  <Label>End cycle</Label>
+                  <Select value={editValidityCycleId} onValueChange={setEditValidityCycleId}>
+                    <SelectTrigger className="mt-1.5"><SelectValue placeholder="Select a cycle" /></SelectTrigger>
+                    <SelectContent>
+                      {planCycles.map(c => (
+                        <SelectItem key={c.id} value={String(c.id)}>
+                          {c.name} — {c.start_date} → {c.end_date}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : (
+                <div>
+                  <Label>New end date</Label>
+                  <Input type="date" value={editValidityDate} onChange={(e) => setEditValidityDate(e.target.value)} className="mt-1.5" />
+                </div>
+              )}
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setEditValidityFor(null); setEditValidityDate(""); }}>Cancel</Button>
-            <Button className="gradient-primary" onClick={handleSaveValidity} disabled={!editValidityDate}>Save</Button>
+            <Button variant="outline" onClick={() => { setEditValidityFor(null); setEditValidityDate(""); setEditValidityCycleId(""); setValidityMode("cycle"); }}>Cancel</Button>
+            <Button className="gradient-primary" onClick={handleSaveValidity} disabled={validityMode === "cycle" ? !editValidityCycleId : !editValidityDate}>Save</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
