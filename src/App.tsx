@@ -74,6 +74,13 @@ const AppRoutes = () => (
     <Route path="/register" element={<RegisterPage />} />
     <Route path="/confirm-cash" element={<ConfirmCashPage />} />
     <Route path="/reset-password" element={<ResetPasswordPage />} />
+    <Route path="/instructor" element={<ProtectedRoute><InstructorHome /></ProtectedRoute>} />
+    <Route path="/instructor/reports" element={<ProtectedRoute><InstructorMyReports /></ProtectedRoute>} />
+    <Route path="/instructor/report/:sessionId" element={<ProtectedRoute><InstructorReportForm /></ProtectedRoute>} />
+    <Route path="/evaluations" element={<ProtectedRoute><EvaluationsLeaderboard /></ProtectedRoute>} />
+    <Route path="/evaluations/compliance" element={<ProtectedRoute><EvaluationsCompliance /></ProtectedRoute>} />
+    <Route path="/evaluations/analytics" element={<ProtectedRoute><EvaluationsAnalytics /></ProtectedRoute>} />
+    <Route path="/choreography" element={<ProtectedRoute><ChoreographyLibrary /></ProtectedRoute>} />
     <Route path="*" element={<NotFound />} />
   </Routes>
 );
