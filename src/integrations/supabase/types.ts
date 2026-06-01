@@ -361,6 +361,65 @@ export type Database = {
         }
         Relationships: []
       }
+      choreography_uploads: {
+        Row: {
+          batch_id: number | null
+          created_at: string
+          duration_sec: number | null
+          id: number
+          instructor_id: number
+          kind: string
+          mime_type: string | null
+          organization_id: number
+          report_id: number
+          storage_path: string
+          studio_id: number | null
+          style: string | null
+          taught_on: string
+          thumbnail_path: string | null
+        }
+        Insert: {
+          batch_id?: number | null
+          created_at?: string
+          duration_sec?: number | null
+          id?: number
+          instructor_id: number
+          kind: string
+          mime_type?: string | null
+          organization_id?: number
+          report_id: number
+          storage_path: string
+          studio_id?: number | null
+          style?: string | null
+          taught_on: string
+          thumbnail_path?: string | null
+        }
+        Update: {
+          batch_id?: number | null
+          created_at?: string
+          duration_sec?: number | null
+          id?: number
+          instructor_id?: number
+          kind?: string
+          mime_type?: string | null
+          organization_id?: number
+          report_id?: number
+          storage_path?: string
+          studio_id?: number | null
+          style?: string | null
+          taught_on?: string
+          thumbnail_path?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "choreography_uploads_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "instructor_reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cycle_adjustments: {
         Row: {
           adjustment_type: string
@@ -724,6 +783,108 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      instructor_reports: {
+        Row: {
+          absentee_calls: boolean
+          absentee_update: boolean
+          attendance_marked: boolean
+          attire_rating: number
+          batch_id: number
+          batch_session_id: number
+          briefing_done: boolean
+          compliance_pct: number | null
+          created_at: string
+          culture_rating: number
+          form: boolean
+          id: number
+          information_imparted: boolean
+          instructor_id: number
+          notes: string | null
+          organization_id: number
+          playlist_prepared: boolean
+          poa_shared: boolean
+          punctuality: boolean
+          registration_followup: boolean
+          relationship_building: boolean
+          renewal_followup: boolean
+          session_date: string
+          story_posted: boolean
+          students_present: number
+          studio_id: number | null
+          style: string | null
+          submitted_at: string
+          syllabus_followed: boolean
+          total_score: number | null
+          videos_shot: boolean
+        }
+        Insert: {
+          absentee_calls?: boolean
+          absentee_update?: boolean
+          attendance_marked?: boolean
+          attire_rating?: number
+          batch_id: number
+          batch_session_id: number
+          briefing_done?: boolean
+          compliance_pct?: number | null
+          created_at?: string
+          culture_rating?: number
+          form?: boolean
+          id?: number
+          information_imparted?: boolean
+          instructor_id: number
+          notes?: string | null
+          organization_id?: number
+          playlist_prepared?: boolean
+          poa_shared?: boolean
+          punctuality?: boolean
+          registration_followup?: boolean
+          relationship_building?: boolean
+          renewal_followup?: boolean
+          session_date: string
+          story_posted?: boolean
+          students_present?: number
+          studio_id?: number | null
+          style?: string | null
+          submitted_at?: string
+          syllabus_followed?: boolean
+          total_score?: number | null
+          videos_shot?: boolean
+        }
+        Update: {
+          absentee_calls?: boolean
+          absentee_update?: boolean
+          attendance_marked?: boolean
+          attire_rating?: number
+          batch_id?: number
+          batch_session_id?: number
+          briefing_done?: boolean
+          compliance_pct?: number | null
+          created_at?: string
+          culture_rating?: number
+          form?: boolean
+          id?: number
+          information_imparted?: boolean
+          instructor_id?: number
+          notes?: string | null
+          organization_id?: number
+          playlist_prepared?: boolean
+          poa_shared?: boolean
+          punctuality?: boolean
+          registration_followup?: boolean
+          relationship_building?: boolean
+          renewal_followup?: boolean
+          session_date?: string
+          story_posted?: boolean
+          students_present?: number
+          studio_id?: number | null
+          style?: string | null
+          submitted_at?: string
+          syllabus_followed?: boolean
+          total_score?: number | null
+          videos_shot?: boolean
+        }
+        Relationships: []
       }
       manager_student_access: {
         Row: {
