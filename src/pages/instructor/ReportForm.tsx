@@ -12,9 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Send, CheckCircle2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { ChecklistToggles } from "@/components/evaluations/ChecklistToggles";
-import { StarRating } from "@/components/evaluations/StarRating";
 import { VideoUploader } from "@/components/evaluations/VideoUploader";
-import { ScoreBadge } from "@/components/evaluations/ScoreBadge";
 import {
   CHECKLIST_KEYS,
   ChecklistValues,
@@ -31,12 +29,6 @@ interface SessionInfo {
   batches?: { name: string; batch_code: string | null; style: string | null; studio_id: number | null; studios?: { name: string } };
 }
 
-interface PendingUpload {
-  kind: "choreography" | "practice" | "photo";
-  storage_path: string;
-  mime_type: string;
-}
-
 export default function ReportForm() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const navigate = useNavigate();
@@ -45,14 +37,12 @@ export default function ReportForm() {
   const [loading, setLoading] = useState(true);
   const [studentsPresent, setStudentsPresent] = useState<string>("");
   const [notes, setNotes] = useState("");
-  const [attire, setAttire] = useState(0);
-  const [culture, setCulture] = useState(0);
   const initialChecklist = useMemo(
     () => Object.fromEntries(CHECKLIST_KEYS.map((k) => [k, false])) as ChecklistValues,
     [],
   );
   const [checklist, setChecklist] = useState<ChecklistValues>(initialChecklist);
-  const [uploads, setUploads] = useState<PendingUpload[]>([]);
+  const [choreoPath, setChoreoPath] = useState<{ storage_path: string; mime_type: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [existingId, setExistingId] = useState<number | null>(null);
 
@@ -80,18 +70,8 @@ export default function ReportForm() {
     setLoading(false);
   };
 
-  const { total, pct } = computeScore(checklist, attire, culture);
-  const hasChoreography = uploads.some((u) => u.kind === "choreography");
-
+  const { total, pct } = computeScore(checklist);
   const pathPrefix = `${1}/instructor_${staffUser?.id}/${session?.session_date}/session_${session?.id}`;
-
-  const onUploaded = (kind: PendingUpload["kind"]) => (storage_path: string, mime_type: string) => {
-    setUploads((prev) => [...prev.filter((u) => u.kind !== kind || kind === "photo"), { kind, storage_path, mime_type }]);
-  };
-
-  const onCleared = (kind: PendingUpload["kind"]) => () => {
-    setUploads((prev) => prev.filter((u) => u.kind !== kind));
-  };
 
   const handleSubmit = async () => {
     if (!staffUser || !session) return;
@@ -99,7 +79,7 @@ export default function ReportForm() {
       toast({ title: "Already submitted", description: "This class report has already been filed." });
       return;
     }
-    if (!hasChoreography) {
+    if (!choreoPath) {
       toast({ title: "Choreography video required", variant: "destructive" });
       return;
     }
@@ -119,8 +99,6 @@ export default function ReportForm() {
         style: session.batches?.style || null,
         students_present: Number(studentsPresent),
         notes: notes || null,
-        attire_rating: attire,
-        culture_rating: culture,
         ...checklist,
       };
       const { data: report, error } = await supabase
@@ -130,23 +108,19 @@ export default function ReportForm() {
         .single();
       if (error) throw error;
 
-      if (uploads.length > 0) {
-        const { error: uErr } = await supabase.from("choreography_uploads").insert(
-          uploads.map((u) => ({
-            organization_id: 1,
-            report_id: report.id,
-            batch_id: session.batch_id,
-            studio_id: session.batches?.studio_id || null,
-            instructor_id: staffUser.id,
-            style: session.batches?.style || null,
-            taught_on: session.session_date,
-            kind: u.kind,
-            storage_path: u.storage_path,
-            mime_type: u.mime_type,
-          })),
-        );
-        if (uErr) throw uErr;
-      }
+      const { error: uErr } = await supabase.from("choreography_uploads").insert({
+        organization_id: 1,
+        report_id: report.id,
+        batch_id: session.batch_id,
+        studio_id: session.batches?.studio_id || null,
+        instructor_id: staffUser.id,
+        style: session.batches?.style || null,
+        taught_on: session.session_date,
+        kind: "choreography",
+        storage_path: choreoPath.storage_path,
+        mime_type: choreoPath.mime_type,
+      });
+      if (uErr) throw uErr;
 
       toast({ title: "Report submitted", description: `Score ${total}/${MAX_SCORE}` });
       navigate("/instructor");
@@ -225,42 +199,6 @@ export default function ReportForm() {
               disabled={!!existingId}
             />
           </div>
-          <div>
-            <Label htmlFor="notes">Notes / Comments</Label>
-            <Textarea
-              id="notes"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={3}
-              disabled={!!existingId}
-            />
-          </div>
-        </div>
-
-        <div className="space-y-3">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Uploads</h3>
-          <VideoUploader
-            label="Choreography Video Taught"
-            accept="video/*"
-            required
-            pathPrefix={`${pathPrefix}/choreography`}
-            onUploaded={onUploaded("choreography")}
-            onCleared={onCleared("choreography")}
-          />
-          <VideoUploader
-            label="Class Practice Video (optional)"
-            accept="video/*"
-            pathPrefix={`${pathPrefix}/practice`}
-            onUploaded={onUploaded("practice")}
-            onCleared={onCleared("practice")}
-          />
-          <VideoUploader
-            label="Photo (optional)"
-            accept="image/*"
-            pathPrefix={`${pathPrefix}/photos`}
-            onUploaded={onUploaded("photo")}
-            onCleared={onCleared("photo")}
-          />
         </div>
 
         <ChecklistToggles
@@ -269,30 +207,41 @@ export default function ReportForm() {
           disabled={!!existingId}
         />
 
-        <div className="space-y-4">
-          <div>
-            <Label className="mb-2 block">Attire</Label>
-            <StarRating value={attire} onChange={setAttire} readOnly={!!existingId} />
-          </div>
-          <div>
-            <Label className="mb-2 block">Culture</Label>
-            <StarRating value={culture} onChange={setCulture} readOnly={!!existingId} />
-          </div>
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Choreography Video
+          </h3>
+          <VideoUploader
+            label="Upload choreography taught (required)"
+            accept="video/*"
+            required
+            pathPrefix={`${pathPrefix}/choreography`}
+            onUploaded={(storage_path, mime_type) => setChoreoPath({ storage_path, mime_type })}
+            onCleared={() => setChoreoPath(null)}
+          />
+        </div>
+
+        <div>
+          <Label htmlFor="notes">Notes (optional)</Label>
+          <Textarea
+            id="notes"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={3}
+            disabled={!!existingId}
+          />
         </div>
 
         {/* Sticky submit */}
         <div className="fixed bottom-0 left-0 right-0 z-20 border-t bg-background/95 backdrop-blur p-3 md:pl-64">
           <div className="container mx-auto max-w-2xl flex items-center justify-between gap-3">
             <div>
-              <p className="text-xs text-muted-foreground">Live score</p>
-              <div className="flex items-center gap-2">
-                <span className="text-lg font-bold">
-                  {total}/{MAX_SCORE}
-                </span>
-                <ScoreBadge pct={pct} />
-              </div>
+              <p className="text-xs text-muted-foreground">Checklist</p>
+              <span className="text-lg font-bold">
+                {total}/{MAX_SCORE} ({Math.round(pct)}%)
+              </span>
             </div>
-            <Button onClick={handleSubmit} disabled={submitting || !!existingId || !hasChoreography} size="lg">
+            <Button onClick={handleSubmit} disabled={submitting || !!existingId || !choreoPath} size="lg">
               <Send className="h-4 w-4 mr-2" />
               {submitting ? "Submitting…" : "Submit Report"}
             </Button>

@@ -6,9 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { todayIST } from "@/lib/dateUtils";
-import { Clock, FileCheck2, FileWarning, Trophy, Upload, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Clock, FileCheck2, FileWarning, Upload, CheckCircle2, AlertTriangle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { ScoreBadge } from "@/components/evaluations/ScoreBadge";
 
 interface SessionRow {
   id: number;
@@ -128,19 +127,6 @@ export default function InstructorHome() {
           <StatCard icon={Upload} label="Choreos (mo)" value={choreoCount} />
         </div>
 
-        {monthlyPct !== null && (
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Trophy className="h-4 w-4 text-warning" />
-                Monthly Performance
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ScoreBadge pct={monthlyPct} className="text-sm px-3 py-1" />
-            </CardContent>
-          </Card>
-        )}
 
         <div>
           <h2 className="text-lg font-semibold mb-3">Today's Classes</h2>
@@ -185,9 +171,6 @@ export default function InstructorHome() {
         <div className="flex gap-3">
           <Button variant="outline" onClick={() => navigate("/instructor/reports")}>
             View My Reports
-          </Button>
-          <Button variant="outline" onClick={() => navigate("/choreography")}>
-            Choreography Library
           </Button>
         </div>
       </div>
