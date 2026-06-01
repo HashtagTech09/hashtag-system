@@ -14,10 +14,6 @@ import {
   FileUp,
   FileWarning,
   ClipboardCheck,
-  Trophy,
-  Film,
-  BarChart3,
-  AlertOctagon,
 } from "lucide-react";
 import { useApplicationCasesCount } from "@/hooks/useApplicationCasesCount";
 import { NavLink } from "@/components/NavLink";
@@ -53,10 +49,6 @@ const allOperationItems = [
   { title: "Drop-ins", url: "/drop-ins", icon: Zap, roles: ["admin", "manager", "frontdesk"] },
   { title: "Payments", url: "/payments", icon: CreditCard, roles: ["admin", "manager", "frontdesk"] },
   { title: "Attendance", url: "/attendance", icon: UserCheck, roles: ["admin", "manager", "instructor", "frontdesk"] },
-  { title: "Evaluations", url: "/evaluations", icon: Trophy, roles: ["admin", "manager"] },
-  { title: "Compliance", url: "/evaluations/compliance", icon: AlertOctagon, roles: ["admin", "manager"] },
-  { title: "Analytics", url: "/evaluations/analytics", icon: BarChart3, roles: ["admin", "manager"] },
-  { title: "Choreography", url: "/choreography", icon: Film, roles: ["admin", "manager", "instructor"] },
   { title: "Settings", url: "/settings", icon: Settings, roles: ["admin", "manager"] },
   { title: "Import Data", url: "/import", icon: FileUp, roles: ["admin", "manager"] },
 ];
