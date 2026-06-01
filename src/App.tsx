@@ -24,6 +24,13 @@ import RegisterPage from "./pages/Register";
 import ConfirmCashPage from "./pages/ConfirmCash";
 import ResetPasswordPage from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
+import InstructorHome from "./pages/instructor/Home";
+import InstructorReportForm from "./pages/instructor/ReportForm";
+import InstructorMyReports from "./pages/instructor/MyReports";
+import EvaluationsLeaderboard from "./pages/evaluations/Leaderboard";
+import EvaluationsCompliance from "./pages/evaluations/Compliance";
+import EvaluationsAnalytics from "./pages/evaluations/Analytics";
+import ChoreographyLibrary from "./pages/ChoreographyLibrary";
 
 const queryClient = new QueryClient();
 
