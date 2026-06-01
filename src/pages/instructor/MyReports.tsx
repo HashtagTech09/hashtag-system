@@ -50,7 +50,7 @@ export default function MyReports() {
                   </div>
                   <div className="text-right">
                     <p className="text-sm font-bold">{r.total_score ?? 0}/15</p>
-                    <p className="text-xs text-muted-foreground">{Math.round(Number(r.compliance_pct || 0))}%</p>
+                    <p className="text-xs text-muted-foreground">{Math.round(((r.total_score ?? 0) / 15) * 100)}%</p>
                   </div>
                 </CardContent>
               </Card>
