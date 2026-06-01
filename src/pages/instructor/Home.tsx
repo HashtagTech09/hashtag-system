@@ -100,7 +100,7 @@ export default function InstructorHome() {
   };
 
   return (
-    <AdminLayout>
+    <AdminLayout title="My Classes">
       <div className="container mx-auto p-4 md:p-6 max-w-5xl space-y-6">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold font-display">

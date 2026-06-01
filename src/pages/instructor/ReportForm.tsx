@@ -159,7 +159,7 @@ export default function ReportForm() {
 
   if (loading) {
     return (
-      <AdminLayout>
+      <AdminLayout title="Class Report">
         <div className="p-6 text-muted-foreground">Loading…</div>
       </AdminLayout>
     );
@@ -167,14 +167,14 @@ export default function ReportForm() {
 
   if (!session) {
     return (
-      <AdminLayout>
+      <AdminLayout title="Class Report">
         <div className="p-6">Session not found.</div>
       </AdminLayout>
     );
   }
 
   return (
-    <AdminLayout>
+    <AdminLayout title="Class Report">
       <div className="container mx-auto max-w-2xl p-4 md:p-6 pb-24 space-y-6">
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>

@@ -24,7 +24,7 @@ export default function MyReports() {
   }, [staffUser]);
 
   return (
-    <AdminLayout>
+    <AdminLayout title="My Reports">
       <div className="container mx-auto p-4 md:p-6 max-w-4xl space-y-4">
         <h1 className="text-2xl md:text-3xl font-bold font-display">My Reports</h1>
         {reports.length === 0 ? (
