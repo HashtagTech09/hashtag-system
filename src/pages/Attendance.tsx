@@ -17,12 +17,20 @@ import { useScopedStudents } from "@/hooks/useScopedStudents";
 const AttendancePage = () => {
   const { staffUser, isInstructor, isAdminOrManager } = useAuth();
   const scope = useScopedStudents();
+  const [searchParams] = useSearchParams();
   const [batches, setBatches] = useState<any[]>([]);
   const [selectedBatch, setSelectedBatch] = useState<string>("");
   const [students, setStudents] = useState<any[]>([]);
   const [attendance, setAttendance] = useState<Record<number, string>>({});
   const [date] = useState(todayIST());
   const [planCycles, setPlanCycles] = useState<any[]>([]);
+
+  useEffect(() => {
+    const param = searchParams.get("batch");
+    if (param && batches.some((b) => String(b.id) === param)) {
+      setSelectedBatch(param);
+    }
+  }, [searchParams, batches]);
 
   useEffect(() => {
     if (scope.loading) return;
