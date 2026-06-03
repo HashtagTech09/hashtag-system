@@ -232,6 +232,28 @@ export default function ReportForm() {
 
         <div className="space-y-3">
           <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Absentees ({absentees.length})
+          </h3>
+          {absentees.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              No absentees recorded. Mark attendance first to capture absence reasons.
+            </p>
+          ) : (
+            <div className="rounded-lg border divide-y">
+              {absentees.map((a, i) => (
+                <div key={i} className="px-4 py-3 flex items-start justify-between gap-3">
+                  <span className="text-sm font-medium">{a.name}</span>
+                  <span className="text-xs text-muted-foreground text-right">
+                    {a.reason || <em className="opacity-60">No reason given</em>}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
             Ratings
           </h3>
           <div className="rounded-lg border divide-y">
