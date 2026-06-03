@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Send, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Send, CheckCircle2, Phone, MessageCircle } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { ChecklistToggles } from "@/components/evaluations/ChecklistToggles";
 import { VideoUploader } from "@/components/evaluations/VideoUploader";
@@ -48,7 +48,9 @@ export default function ReportForm() {
   const [choreoPath, setChoreoPath] = useState<{ storage_path: string; mime_type: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [existingId, setExistingId] = useState<number | null>(null);
-  const [absentees, setAbsentees] = useState<Array<{ name: string; reason: string | null }>>([]);
+  const [absentees, setAbsentees] = useState<Array<{ student_id: number; name: string; phone: string | null; reason: string | null }>>([]);
+  const [presentCount, setPresentCount] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
 
   useEffect(() => {
     if (!sessionId || !staffUser) return;
@@ -72,18 +74,25 @@ export default function ReportForm() {
       .maybeSingle();
     setExistingId(existing?.id || null);
 
-    // Load absentees for this session's batch+date
+    // Load all attendance for this session's batch+date (present + absent)
     if (data) {
       const sess = data as any;
       const { data: attRows } = await supabase
         .from("attendance")
-        .select("student_id, status, absence_reason, students(name)")
+        .select("student_id, status, absence_reason, students(name, phone, users(phone))")
         .eq("batch_id", sess.batch_id)
-        .eq("date", sess.session_date)
-        .eq("status", "absent");
+        .eq("date", sess.session_date);
+      const rows = attRows || [];
+      const present = rows.filter((r: any) => r.status === "present").length;
+      const absent = rows.filter((r: any) => r.status === "absent");
+      setPresentCount(present);
+      setTotalCount(rows.length);
+      setStudentsPresent(String(present));
       setAbsentees(
-        (attRows || []).map((r: any) => ({
+        absent.map((r: any) => ({
+          student_id: r.student_id,
           name: r.students?.name || `Student #${r.student_id}`,
+          phone: r.students?.phone || r.students?.users?.phone || null,
           reason: r.absence_reason || null,
         })),
       );
@@ -104,8 +113,8 @@ export default function ReportForm() {
       toast({ title: "Choreography video required", variant: "destructive" });
       return;
     }
-    if (!studentsPresent || isNaN(Number(studentsPresent))) {
-      toast({ title: "Enter students present", variant: "destructive" });
+    if (totalCount === 0) {
+      toast({ title: "Mark attendance first", variant: "destructive" });
       return;
     }
     setSubmitting(true);
@@ -210,18 +219,24 @@ export default function ReportForm() {
           </CardContent>
         </Card>
 
-        <div className="space-y-3">
+        <div className="rounded-lg border p-4 flex items-center justify-between">
           <div>
-            <Label htmlFor="present">Students Present</Label>
-            <Input
-              id="present"
-              type="number"
-              min={0}
-              value={studentsPresent}
-              onChange={(e) => setStudentsPresent(e.target.value)}
-              disabled={!!existingId}
-            />
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Students Present</p>
+            {totalCount === 0 ? (
+              <p className="text-sm text-muted-foreground mt-1">No attendance marked yet.</p>
+            ) : (
+              <p className="text-2xl font-bold mt-1">
+                {presentCount} <span className="text-muted-foreground text-base font-normal">/ {totalCount}</span>
+              </p>
+            )}
           </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate(`/attendance?batch=${session.batch_id}`)}
+          >
+            {totalCount === 0 ? "Mark Attendance" : "Edit"}
+          </Button>
         </div>
 
         <ChecklistToggles
@@ -236,18 +251,73 @@ export default function ReportForm() {
           </h3>
           {absentees.length === 0 ? (
             <p className="text-xs text-muted-foreground">
-              No absentees recorded. Mark attendance first to capture absence reasons.
+              {totalCount === 0
+                ? "Mark attendance first to capture absentees."
+                : "No absentees — everyone is present."}
             </p>
           ) : (
             <div className="rounded-lg border divide-y">
-              {absentees.map((a, i) => (
-                <div key={i} className="px-4 py-3 flex items-start justify-between gap-3">
-                  <span className="text-sm font-medium">{a.name}</span>
-                  <span className="text-xs text-muted-foreground text-right">
-                    {a.reason || <em className="opacity-60">No reason given</em>}
-                  </span>
-                </div>
-              ))}
+              {absentees.map((a) => {
+                const waPhone = a.phone ? a.phone.replace(/\D/g, "") : "";
+                return (
+                  <div key={a.student_id} className="px-4 py-3 space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm font-medium">{a.name}</span>
+                      <div className="flex gap-2">
+                        {a.phone && (
+                          <Button asChild size="icon" variant="outline" className="h-8 w-8">
+                            <a href={`tel:${a.phone}`} aria-label="Call">
+                              <Phone className="h-4 w-4" />
+                            </a>
+                          </Button>
+                        )}
+                        {waPhone && (
+                          <Button asChild size="icon" variant="outline" className="h-8 w-8">
+                            <a
+                              href={`https://wa.me/${waPhone}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              aria-label="WhatsApp"
+                            >
+                              <MessageCircle className="h-4 w-4" />
+                            </a>
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                    <Input
+                      placeholder="Reason for absence"
+                      defaultValue={a.reason || ""}
+                      onBlur={async (e) => {
+                        const reason = e.target.value.trim();
+                        const { error } = await supabase
+                          .from("attendance")
+                          .upsert(
+                            {
+                              organization_id: 1,
+                              student_id: a.student_id,
+                              batch_id: session.batch_id,
+                              date: session.session_date,
+                              status: "absent",
+                              absence_reason: reason || null,
+                            },
+                            { onConflict: "student_id,batch_id,date" },
+                          );
+                        if (error) {
+                          toast({ title: "Failed to save reason", variant: "destructive" });
+                        } else {
+                          setAbsentees((prev) =>
+                            prev.map((x) =>
+                              x.student_id === a.student_id ? { ...x, reason: reason || null } : x,
+                            ),
+                          );
+                        }
+                      }}
+                      className="text-sm"
+                    />
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
