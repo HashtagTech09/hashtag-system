@@ -48,6 +48,7 @@ export default function ReportForm() {
   const [choreoPath, setChoreoPath] = useState<{ storage_path: string; mime_type: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [existingId, setExistingId] = useState<number | null>(null);
+  const [absentees, setAbsentees] = useState<Array<{ name: string; reason: string | null }>>([]);
 
   useEffect(() => {
     if (!sessionId || !staffUser) return;
@@ -70,6 +71,23 @@ export default function ReportForm() {
       .eq("instructor_id", staffUser!.id)
       .maybeSingle();
     setExistingId(existing?.id || null);
+
+    // Load absentees for this session's batch+date
+    if (data) {
+      const sess = data as any;
+      const { data: attRows } = await supabase
+        .from("attendance")
+        .select("student_id, status, absence_reason, students(name)")
+        .eq("batch_id", sess.batch_id)
+        .eq("date", sess.session_date)
+        .eq("status", "absent");
+      setAbsentees(
+        (attRows || []).map((r: any) => ({
+          name: r.students?.name || `Student #${r.student_id}`,
+          reason: r.absence_reason || null,
+        })),
+      );
+    }
     setLoading(false);
   };
 
@@ -211,6 +229,28 @@ export default function ReportForm() {
           onChange={(k, v) => setChecklist((p) => ({ ...p, [k]: v }))}
           disabled={!!existingId}
         />
+
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Absentees ({absentees.length})
+          </h3>
+          {absentees.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              No absentees recorded. Mark attendance first to capture absence reasons.
+            </p>
+          ) : (
+            <div className="rounded-lg border divide-y">
+              {absentees.map((a, i) => (
+                <div key={i} className="px-4 py-3 flex items-start justify-between gap-3">
+                  <span className="text-sm font-medium">{a.name}</span>
+                  <span className="text-xs text-muted-foreground text-right">
+                    {a.reason || <em className="opacity-60">No reason given</em>}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         <div className="space-y-3">
           <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
