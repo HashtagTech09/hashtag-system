@@ -152,15 +152,24 @@ export default function InstructorHome() {
                         {s.start_time} – {s.end_time} · {s.batches?.style || "—"}
                       </p>
                     </div>
-                    {s.reportId ? (
-                      <Badge className="bg-success/20 text-success gap-1">
-                        <CheckCircle2 className="h-3 w-3" /> Submitted
-                      </Badge>
-                    ) : (
-                      <Button size="sm" onClick={() => navigate(`/instructor/report/${s.id}`)}>
-                        Submit Report
+                    <div className="flex flex-col items-end gap-2 shrink-0">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => navigate(`/attendance?batch=${s.batch_id}`)}
+                      >
+                        Mark Attendance
                       </Button>
-                    )}
+                      {s.reportId ? (
+                        <Badge className="bg-success/20 text-success gap-1">
+                          <CheckCircle2 className="h-3 w-3" /> Submitted
+                        </Badge>
+                      ) : (
+                        <Button size="sm" onClick={() => navigate(`/instructor/report/${s.id}`)}>
+                          Submit Report
+                        </Button>
+                      )}
+                    </div>
                   </CardContent>
                 </Card>
               ))}
