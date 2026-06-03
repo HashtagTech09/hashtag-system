@@ -74,18 +74,25 @@ export default function ReportForm() {
       .maybeSingle();
     setExistingId(existing?.id || null);
 
-    // Load absentees for this session's batch+date
+    // Load all attendance for this session's batch+date (present + absent)
     if (data) {
       const sess = data as any;
       const { data: attRows } = await supabase
         .from("attendance")
-        .select("student_id, status, absence_reason, students(name)")
+        .select("student_id, status, absence_reason, students(name, phone, users(phone))")
         .eq("batch_id", sess.batch_id)
-        .eq("date", sess.session_date)
-        .eq("status", "absent");
+        .eq("date", sess.session_date);
+      const rows = attRows || [];
+      const present = rows.filter((r: any) => r.status === "present").length;
+      const absent = rows.filter((r: any) => r.status === "absent");
+      setPresentCount(present);
+      setTotalCount(rows.length);
+      setStudentsPresent(String(present));
       setAbsentees(
-        (attRows || []).map((r: any) => ({
+        absent.map((r: any) => ({
+          student_id: r.student_id,
           name: r.students?.name || `Student #${r.student_id}`,
+          phone: r.students?.phone || r.students?.users?.phone || null,
           reason: r.absence_reason || null,
         })),
       );
