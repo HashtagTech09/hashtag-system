@@ -212,6 +212,23 @@ export default function ReportForm() {
           disabled={!!existingId}
         />
 
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Ratings
+          </h3>
+          <div className="rounded-lg border divide-y">
+            <div className="flex items-center justify-between px-4 py-3">
+              <span className="text-sm font-medium">Attire</span>
+              <StarRating value={attireRating} onChange={setAttireRating} disabled={!!existingId} />
+            </div>
+            <div className="flex items-center justify-between px-4 py-3">
+              <span className="text-sm font-medium">Culture</span>
+              <StarRating value={cultureRating} onChange={setCultureRating} disabled={!!existingId} />
+            </div>
+          </div>
+        </div>
+
+
         <div className="space-y-2">
           <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
             Choreography Video
