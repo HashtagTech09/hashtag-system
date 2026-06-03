@@ -71,6 +71,23 @@ export default function ReportForm() {
       .eq("instructor_id", staffUser!.id)
       .maybeSingle();
     setExistingId(existing?.id || null);
+
+    // Load absentees for this session's batch+date
+    if (data) {
+      const sess = data as any;
+      const { data: attRows } = await supabase
+        .from("attendance")
+        .select("student_id, status, absence_reason, students(name)")
+        .eq("batch_id", sess.batch_id)
+        .eq("date", sess.session_date)
+        .eq("status", "absent");
+      setAbsentees(
+        (attRows || []).map((r: any) => ({
+          name: r.students?.name || `Student #${r.student_id}`,
+          reason: r.absence_reason || null,
+        })),
+      );
+    }
     setLoading(false);
   };
 
