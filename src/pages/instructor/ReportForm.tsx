@@ -73,7 +73,7 @@ export default function ReportForm() {
     setLoading(false);
   };
 
-  const { total, pct } = computeScore(checklist);
+  const { total, pct } = computeScore(checklist, attireRating, cultureRating);
   const pathPrefix = `${1}/instructor_${staffUser?.id}/${session?.session_date}/session_${session?.id}`;
 
   const handleSubmit = async () => {
