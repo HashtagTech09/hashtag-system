@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Send, CheckCircle2, Phone, MessageCircle } from "lucide-react";
+import { ArrowLeft, Send, CheckCircle2, Phone, MessageCircle, ClipboardCheck } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { ChecklistToggles } from "@/components/evaluations/ChecklistToggles";
 import { VideoUploader } from "@/components/evaluations/VideoUploader";
