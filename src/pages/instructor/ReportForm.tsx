@@ -13,6 +13,7 @@ import { ArrowLeft, Send, CheckCircle2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { ChecklistToggles } from "@/components/evaluations/ChecklistToggles";
 import { VideoUploader } from "@/components/evaluations/VideoUploader";
+import { StarRating } from "@/components/evaluations/StarRating";
 import {
   CHECKLIST_KEYS,
   ChecklistValues,
@@ -42,6 +43,8 @@ export default function ReportForm() {
     [],
   );
   const [checklist, setChecklist] = useState<ChecklistValues>(initialChecklist);
+  const [attireRating, setAttireRating] = useState(0);
+  const [cultureRating, setCultureRating] = useState(0);
   const [choreoPath, setChoreoPath] = useState<{ storage_path: string; mime_type: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [existingId, setExistingId] = useState<number | null>(null);
@@ -70,7 +73,7 @@ export default function ReportForm() {
     setLoading(false);
   };
 
-  const { total, pct } = computeScore(checklist);
+  const { total, pct } = computeScore(checklist, attireRating, cultureRating);
   const pathPrefix = `${1}/instructor_${staffUser?.id}/${session?.session_date}/session_${session?.id}`;
 
   const handleSubmit = async () => {
@@ -99,6 +102,8 @@ export default function ReportForm() {
         style: session.batches?.style || null,
         students_present: Number(studentsPresent),
         notes: notes || null,
+        attire_rating: attireRating,
+        culture_rating: cultureRating,
         ...checklist,
       };
       const { data: report, error } = await supabase
@@ -206,6 +211,23 @@ export default function ReportForm() {
           onChange={(k, v) => setChecklist((p) => ({ ...p, [k]: v }))}
           disabled={!!existingId}
         />
+
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Ratings
+          </h3>
+          <div className="rounded-lg border divide-y">
+            <div className="flex items-center justify-between px-4 py-3">
+              <span className="text-sm font-medium">Attire</span>
+              <StarRating value={attireRating} onChange={setAttireRating} disabled={!!existingId} />
+            </div>
+            <div className="flex items-center justify-between px-4 py-3">
+              <span className="text-sm font-medium">Culture</span>
+              <StarRating value={cultureRating} onChange={setCultureRating} disabled={!!existingId} />
+            </div>
+          </div>
+        </div>
+
 
         <div className="space-y-2">
           <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">

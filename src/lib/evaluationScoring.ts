@@ -1,4 +1,4 @@
-// Simple checklist scoring: 15 boolean fields, 1 point each.
+// Scoring: 15 checklist booleans (1 pt each) + Attire (0-5) + Culture (0-5) = max 25.
 
 export const CHECKLIST_GROUPS = [
   {
@@ -35,12 +35,20 @@ export const CHECKLIST_GROUPS = [
 
 export const CHECKLIST_KEYS = CHECKLIST_GROUPS.flatMap((g) => g.fields.map((f) => f.key));
 
-export const MAX_SCORE = CHECKLIST_KEYS.length;
+export const CHECKLIST_MAX = CHECKLIST_KEYS.length; // 15
+export const RATING_MAX = 10; // 5 + 5
+export const MAX_SCORE = CHECKLIST_MAX + RATING_MAX; // 25
 
 export type ChecklistValues = Record<string, boolean>;
 
-export function computeScore(checklist: ChecklistValues) {
-  const total = CHECKLIST_KEYS.reduce((acc, k) => acc + (checklist[k] ? 1 : 0), 0);
+export function computeScore(
+  checklist: ChecklistValues,
+  attire = 0,
+  culture = 0,
+) {
+  const checklistTotal = CHECKLIST_KEYS.reduce((acc, k) => acc + (checklist[k] ? 1 : 0), 0);
+  const ratingTotal = (attire || 0) + (culture || 0);
+  const total = checklistTotal + ratingTotal;
   const pct = (total / MAX_SCORE) * 100;
-  return { total, pct };
+  return { checklistTotal, ratingTotal, total, pct };
 }

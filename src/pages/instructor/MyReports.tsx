@@ -49,8 +49,8 @@ export default function MyReports() {
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-bold">{r.total_score ?? 0}/15</p>
-                    <p className="text-xs text-muted-foreground">{Math.round(((r.total_score ?? 0) / 15) * 100)}%</p>
+                    <p className="text-sm font-bold">{r.total_score ?? 0}/25</p>
+                    <p className="text-xs text-muted-foreground">{Math.round(((r.total_score ?? 0) / 25) * 100)}%</p>
                   </div>
                 </CardContent>
               </Card>
