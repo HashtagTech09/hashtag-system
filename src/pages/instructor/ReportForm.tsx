@@ -102,6 +102,8 @@ export default function ReportForm() {
         style: session.batches?.style || null,
         students_present: Number(studentsPresent),
         notes: notes || null,
+        attire_rating: attireRating,
+        culture_rating: cultureRating,
         ...checklist,
       };
       const { data: report, error } = await supabase
