@@ -113,8 +113,8 @@ export default function ReportForm() {
       toast({ title: "Choreography video required", variant: "destructive" });
       return;
     }
-    if (!studentsPresent || isNaN(Number(studentsPresent))) {
-      toast({ title: "Enter students present", variant: "destructive" });
+    if (totalCount === 0) {
+      toast({ title: "Mark attendance first", variant: "destructive" });
       return;
     }
     setSubmitting(true);
