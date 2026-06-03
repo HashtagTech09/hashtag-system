@@ -231,19 +231,14 @@ export default function ReportForm() {
             )}
           </div>
           <Button
-            variant="outline"
             size="sm"
             onClick={() => navigate(`/attendance?batch=${session.batch_id}`)}
+            className="border-2 border-primary bg-transparent text-primary hover:bg-primary hover:text-primary-foreground font-semibold"
           >
+            <ClipboardCheck className="h-4 w-4 mr-2" />
             {totalCount === 0 ? "Mark Attendance" : "Edit"}
           </Button>
         </div>
-
-        <ChecklistToggles
-          values={checklist}
-          onChange={(k, v) => setChecklist((p) => ({ ...p, [k]: v }))}
-          disabled={!!existingId}
-        />
 
         <div className="space-y-3">
           <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
@@ -321,6 +316,13 @@ export default function ReportForm() {
             </div>
           )}
         </div>
+
+        <ChecklistToggles
+          values={checklist}
+          onChange={(k, v) => setChecklist((p) => ({ ...p, [k]: v }))}
+          disabled={!!existingId}
+        />
+
 
         <div className="space-y-3">
           <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
