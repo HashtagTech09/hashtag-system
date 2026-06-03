@@ -13,6 +13,7 @@ import { ArrowLeft, Send, CheckCircle2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { ChecklistToggles } from "@/components/evaluations/ChecklistToggles";
 import { VideoUploader } from "@/components/evaluations/VideoUploader";
+import { StarRating } from "@/components/evaluations/StarRating";
 import {
   CHECKLIST_KEYS,
   ChecklistValues,
