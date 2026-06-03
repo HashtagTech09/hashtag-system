@@ -48,7 +48,9 @@ export default function ReportForm() {
   const [choreoPath, setChoreoPath] = useState<{ storage_path: string; mime_type: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [existingId, setExistingId] = useState<number | null>(null);
-  const [absentees, setAbsentees] = useState<Array<{ name: string; reason: string | null }>>([]);
+  const [absentees, setAbsentees] = useState<Array<{ student_id: number; name: string; phone: string | null; reason: string | null }>>([]);
+  const [presentCount, setPresentCount] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
 
   useEffect(() => {
     if (!sessionId || !staffUser) return;
