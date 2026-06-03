@@ -1,31 +1,17 @@
-## Simplify Instructor Evaluation Module
+## Add Attire & Culture Star Ratings Back to Report
 
-Strip the module down to a single instructor-facing flow: tick the checklist and upload choreography if required. Remove manager dashboards and library.
+Re-introduce the two 5-star ratings on the instructor report form, alongside the 15 checklist toggles.
 
-### Remove
-- `/evaluations` (Leaderboard), `/evaluations/compliance`, `/evaluations/analytics`, `/choreography` routes
-- Sidebar entries: Evaluations, Compliance, Analytics, Choreography
-- Files: `src/pages/evaluations/Leaderboard.tsx`, `Compliance.tsx`, `Analytics.tsx`, `src/pages/ChoreographyLibrary.tsx`
-- Star ratings (attire, culture) — drop from form
-- `StarRating` component (no longer used)
-
-### Keep & simplify
-- `/instructor` — today's classes with "Submit Report" button
-- `/instructor/report/:sessionId` — one screen with:
-  - Class info (read-only)
-  - Students present (number input)
-  - **15 checkbox toggles** (3 grouped sections, as today)
-  - **Choreography upload** (single video field, required to submit)
-  - Optional notes
-  - Submit button
-- `/instructor/reports` — instructor's own history (kept, lightweight)
-- Sidebar: only "My Classes" stays for instructors
+### Changes
+- **`src/components/evaluations/StarRating.tsx`** — recreate the star picker component (1–5).
+- **`src/lib/evaluationScoring.ts`** — extend `computeScore` to include `attire_rating` + `culture_rating`. New max = 15 (checklist) + 10 (5+5) = **25**. Returns `{ checklistTotal, ratingTotal, total, pct }`.
+- **`src/pages/instructor/ReportForm.tsx`**
+  - Add state for `attireRating` and `cultureRating` (default 0).
+  - Render a new "Ratings" section with two `StarRating` rows: Attire, Culture.
+  - Include both in the insert payload (columns already exist in `instructor_reports`).
+  - Sticky footer shows `score/25 (pct%)`.
+- **`src/pages/instructor/MyReports.tsx`** — display `total_score / 25` instead of `/15` (DB generated column already totals all 25).
+- **`src/pages/instructor/Home.tsx`** — no logic change; `compliance_pct` from DB already reflects /25.
 
 ### Data
-- No schema changes. `attire_rating` and `culture_rating` columns stay in DB (default 0) — unused going forward, harmless.
-- Continue writing to `instructor_reports` + `choreography_uploads` + `class-media` bucket as today.
-
-### Score
-- Simplified `computeScore` = sum of 15 booleans / 15 × 100% (drop attire/culture from UI math).
-
-That's it — instructor ticks boxes, uploads the video, submits. No manager surfaces.
+No schema changes — `attire_rating`, `culture_rating`, `total_score` (generated, max 25), and `compliance_pct` columns already exist.
