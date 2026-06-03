@@ -43,6 +43,8 @@ export default function ReportForm() {
     [],
   );
   const [checklist, setChecklist] = useState<ChecklistValues>(initialChecklist);
+  const [attireRating, setAttireRating] = useState(0);
+  const [cultureRating, setCultureRating] = useState(0);
   const [choreoPath, setChoreoPath] = useState<{ storage_path: string; mime_type: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [existingId, setExistingId] = useState<number | null>(null);
