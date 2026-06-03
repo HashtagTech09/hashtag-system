@@ -231,7 +231,7 @@ export default function ReportForm() {
             )}
           </div>
           <Button
-            size="sm"
+            size="lg"
             onClick={() => navigate(`/attendance?batch=${session.batch_id}`)}
             className="border-2 border-primary bg-transparent text-primary hover:bg-primary hover:text-primary-foreground font-semibold"
           >
