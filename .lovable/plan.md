@@ -1,51 +1,53 @@
 ## Goal
 
-Make "Edit validity" on `/enrollments` keep `enrollment_cycles` in sync with the new end date, so the dashboard and the `/enrollments` month filter always agree with what the enrollment row says.
+Fix the `duplicate key value violates unique constraint "enrollment_cycles_student_id_batch_id_cycle_id_key"` error from "Edit validity", and prevent users from creating ambiguous overlapping enrollments going forward.
 
-## Current behavior (bug)
+## Two changes
 
-`handleSaveValidity` in `src/pages/Enrollments.tsx` (L151–170) updates only `enrollments.end_date` and `enrollments.end_cycle_id`. It never touches `enrollment_cycles`. Result:
+### 1. Skip-on-conflict in `handleSaveValidity`
 
-- **Shorten**: leftover `enrollment_cycles` rows past the new end-cycle keep the student visible on the dashboard for months they shouldn't be in.
-- **Extend (date mode)**: no rows added, student missing from dashboard for the new tail months.
-- **Extend (cycle mode)**: same — new cycles in the extended range get no `enrollment_cycles` rows.
+In `src/pages/Enrollments.tsx`, inside the reconciliation block of `handleSaveValidity` (right before the insert step):
 
-## Fix
+- Build `toInsertIds = toInsert.map(pc => pc.id)`.
+- Query existing rows for the same `(student_id, batch_id)` filtered by those cycle ids:
+  ```ts
+  const { data: ownedElsewhere } = await supabase.from("enrollment_cycles")
+    .select("cycle_id")
+    .eq("student_id", e.student_id)
+    .eq("batch_id", e.batch_id)
+    .in("cycle_id", toInsertIds);
+  ```
+- Skip any cycle id present in that result. Only insert the remainder.
+- Toast logic: if some were skipped, surface a soft warning chip in the success toast — `"Validity updated (N cycle(s) already covered by another enrollment, left as-is)"`. Hard failures stay as the existing error toast.
 
-Reconcile `enrollment_cycles` for the edited enrollment to exactly cover `[start_cycle_id, end_cycle_id]` after the update.
+This removes the error. Dashboard visibility is preserved because the cycle is already owned by the other enrollment.
 
-Steps inside `handleSaveValidity`, after the existing `enrollments.update(...)` succeeds:
+### 2. Pre-save overlap warning
 
-1. **Resolve the new end-cycle row.** In `cycle` mode, we already have `c`. In `date` mode, `end_cycle_id` is set to `null`, so derive an effective end cycle by finding the latest `planCycles` row with `start_date <= update.end_date`. If none, skip the sync and toast a warning ("Validity saved, cycle coverage not adjusted"). The enrollment's own `start_cycle_id` defines the lower bound.
+Before submitting the update in `handleSaveValidity`, compute whether the new `[start_cycle_id .. resolvedEndCycle.id]` window overlaps with another **active** enrollment for the same `(student_id, batch_id)`:
 
-2. **Compute the target cycle id set.** Take `planCycles` sorted by `start_date`, slice from the index of `start_cycle_id` to the index of the resolved end cycle inclusive. That's `targetCycleIds`.
+- Query `enrollments` where `student_id = e.student_id AND batch_id = e.batch_id AND id <> e.id AND is_active = true`.
+- For each such row, check if its `[start_cycle_id, end_cycle_id]` window (resolved via `planCycles` ordering) overlaps the new window.
+- If yes, show a confirm dialog before saving: `"This validity overlaps with enrollment #XXX on the same batch (covers <range>). Months already covered by that enrollment will stay attributed to it. Continue?"` with Cancel / Continue buttons.
 
-3. **Read current rows.** `select cycle_id from enrollment_cycles where enrollment_id = e.id`.
+If the user clicks Continue, the save proceeds with the skip-on-conflict path from step 1. If Cancel, abort.
 
-4. **Delete stale rows.** Any current `cycle_id` not in `targetCycleIds` → delete.
-
-5. **Insert missing rows.** Any `cycle_id` in `targetCycleIds` not currently present → insert with `enrollment_id`, `student_id`, `batch_id`, `cycle_id`, `cycle_type` (use `planCycles[i].plan_type`).
-
-6. **Skip-out adjustments.** Do not delete `enrollment_cycles` rows whose `cycle_id` appears as a `cycle_adjustments.new_cycle_id` (status APPLIED) for this `(student_id, batch_id)` — those were shifted in deliberately and aren't part of the contiguous template.
-   Simplest implementation: before step 4, fetch `cycle_adjustments` for the enrollment's `(student_id, batch_id)` with status APPLIED, build a `keepIds` set of `new_cycle_id`s, and treat `targetCycleIds ∪ keepIds` as the protected set in the delete step. The insert step still only inserts the contiguous template.
-
-7. **Error handling.** If either the delete or insert fails, toast `"Validity saved, but cycle coverage failed to update"`. Don't roll back the enrollment update — it's still correct.
-
-8. **No backfill migration needed.** Existing enrollments whose validity was previously edited may already be out of sync; flag this as a follow-up if the user wants a one-shot reconciliation script.
+Implementation note: reuse the existing `AlertDialog` import. Add a small local state `overlapWarning: { ranges: string[]; onConfirm: () => void } | null` and gate the actual save behind it.
 
 ## Files changed
 
-- `src/pages/Enrollments.tsx` — extend `handleSaveValidity` only. No new files, no new helpers needed (logic is local to one handler and uses already-loaded `planCycles`).
+- `src/pages/Enrollments.tsx` — extend `handleSaveValidity` only. No new files, no schema change, no migration.
 
 ## Out of scope
 
-- The retroactive backfill for previously-edited validities.
-- Any change to other handlers (`handleChangeBatch`, `handleDeleteEnrollment`) — they already maintain `enrollment_cycles`.
-- Date-mode UX — we keep it but it stays a soft path; the cycle picker remains the recommended way.
+- Dropping or changing the `enrollment_cycles_student_id_batch_id_cycle_id_key` unique constraint. The constraint is doing useful work — keep it.
+- Transferring ownership on overlap. Stays with the prior enrollment, matching current data.
+- Adding the same overlap guard to the original "create enrollment" flow. The dialog has its own gap-detection (`detectedStatus`, `latestEndDate`) that already nudges users toward REN/REV — separate concern, do it as a follow-up if needed.
+- Backfilling existing overlap conflicts (none reported beyond the one toast).
 
 ## Verification
 
-1. Take an active enrollment ending in May'26. Edit validity → pick Mar'26 cycle. Open dashboard for Apr'26 / May'26 → student no longer appears. Open Feb'26 → still appears.
-2. Take an enrollment ending in Feb'26. Edit validity → pick May'26. Dashboard for Mar/Apr/May'26 now lists the student.
-3. Take an enrollment with an APPLIED `cycle_adjustment` that shifted a cycle IN (e.g., Jul'26). Shorten validity to Apr'26 → Jul'26 access is preserved (its `enrollment_cycles` row is not deleted).
-4. With no month picked, `/enrollments` list still shows the enrollment with its updated end date.
+1. Reproduce the original case: edit validity to extend into months already covered by another enrollment for the same batch → confirm dialog appears, user confirms → save succeeds, no error toast, message says "N already covered". Dashboard for those months still shows the student (attributed to the older enrollment).
+2. Edit validity to extend into a window with no other coverage → no dialog, save succeeds, new `enrollment_cycles` rows created.
+3. Shorten validity → unchanged behavior; stale rows deleted as before.
+4. Edit validity where the new window doesn't overlap any other enrollment → no warning, no skips, clean toast.

@@ -34,6 +34,7 @@ const EnrollmentsPage = () => {
   const [deleteFor, setDeleteFor] = useState<any>(null);
   const [changeBatchFor, setChangeBatchFor] = useState<any>(null);
   const [changeBatchToId, setChangeBatchToId] = useState<string>("");
+  const [overlapWarning, setOverlapWarning] = useState<{ message: string; onConfirm: () => void } | null>(null);
   const [pendingCases, setPendingCases] = useState<Record<number, boolean>>({});
   const [caseDialogOpen, setCaseDialogOpen] = useState(false);
   const [caseEnrollment, setCaseEnrollment] = useState<any>(null);
@@ -160,18 +161,62 @@ const EnrollmentsPage = () => {
     } else {
       if (!editValidityDate) return;
       update = { end_date: editValidityDate, end_cycle_id: null };
-      // Derive an effective end cycle for cycle-coverage sync
       const eligible = planCycles
         .filter(pc => pc.start_date <= editValidityDate)
         .sort((a, b) => a.start_date.localeCompare(b.start_date));
       resolvedEndCycle = eligible[eligible.length - 1] || null;
     }
-    const { error } = await supabase.from("enrollments").update(update).eq("id", editValidityFor.id);
+
+    const e = editValidityFor;
+
+    // Pre-save overlap check: another active enrollment for same (student, batch) covers part of the new window
+    if (resolvedEndCycle && e.start_cycle_id) {
+      const sorted = [...planCycles].sort((a, b) => a.start_date.localeCompare(b.start_date));
+      const newStartIdx = sorted.findIndex(pc => pc.id === e.start_cycle_id);
+      const newEndIdx = sorted.findIndex(pc => pc.id === resolvedEndCycle.id);
+      if (newStartIdx >= 0 && newEndIdx >= newStartIdx) {
+        const { data: others } = await supabase.from("enrollments")
+          .select("id, start_cycle_id, end_cycle_id, start_date, end_date")
+          .eq("student_id", e.student_id)
+          .eq("batch_id", e.batch_id)
+          .eq("is_active", true)
+          .neq("id", e.id);
+        const overlaps: string[] = [];
+        (others || []).forEach((o: any) => {
+          if (!o.start_cycle_id || !o.end_cycle_id) return;
+          const oStart = sorted.findIndex(pc => pc.id === o.start_cycle_id);
+          const oEnd = sorted.findIndex(pc => pc.id === o.end_cycle_id);
+          if (oStart < 0 || oEnd < oStart) return;
+          if (oStart <= newEndIdx && oEnd >= newStartIdx) {
+            const overlapStart = sorted[Math.max(oStart, newStartIdx)];
+            const overlapEnd = sorted[Math.min(oEnd, newEndIdx)];
+            overlaps.push(`#${o.id} (${overlapStart.name} → ${overlapEnd.name})`);
+          }
+        });
+        if (overlaps.length > 0) {
+          setOverlapWarning({
+            message: `This validity overlaps with another active enrollment for the same batch: ${overlaps.join(", ")}. Months already covered by that enrollment will stay attributed to it. Continue?`,
+            onConfirm: () => { setOverlapWarning(null); performSaveValidity(update, resolvedEndCycle); },
+          });
+          return;
+        }
+      }
+    }
+
+    performSaveValidity(update, resolvedEndCycle);
+  };
+
+  const performSaveValidity = async (
+    update: { end_date: string; end_cycle_id: number | null },
+    resolvedEndCycle: any,
+  ) => {
+    if (!editValidityFor) return;
+    const e = editValidityFor;
+    const { error } = await supabase.from("enrollments").update(update).eq("id", e.id);
     if (error) { toast.error("Failed to update validity"); return; }
 
-    // Reconcile enrollment_cycles to match the new window [start_cycle_id .. resolvedEndCycle]
-    const e = editValidityFor;
     const startCycleId: number | null = e.start_cycle_id ?? null;
+    let skipMsg = "";
     if (startCycleId && resolvedEndCycle) {
       const sorted = [...planCycles].sort((a, b) => a.start_date.localeCompare(b.start_date));
       const startIdx = sorted.findIndex(pc => pc.id === startCycleId);
@@ -180,7 +225,6 @@ const EnrollmentsPage = () => {
         const targetCycles = sorted.slice(startIdx, endIdx + 1);
         const targetIds = new Set(targetCycles.map(pc => pc.id));
 
-        // Protect cycles shifted IN via APPLIED cycle_adjustments — those aren't part of the template
         const { data: adjData } = await supabase.from("cycle_adjustments")
           .select("new_cycle_id")
           .eq("student_id", e.student_id)
@@ -194,7 +238,21 @@ const EnrollmentsPage = () => {
         const currentIds = new Set<number>((currentRows || []).map((r: any) => r.cycle_id));
 
         const toDelete = [...currentIds].filter(id => !targetIds.has(id) && !keepShiftedIn.has(id));
-        const toInsert = targetCycles.filter(pc => !currentIds.has(pc.id));
+        let toInsert = targetCycles.filter(pc => !currentIds.has(pc.id));
+
+        // Skip-on-conflict: drop any cycle id already owned by another enrollment for same (student, batch)
+        if (toInsert.length > 0) {
+          const { data: ownedElsewhere } = await supabase.from("enrollment_cycles")
+            .select("cycle_id")
+            .eq("student_id", e.student_id)
+            .eq("batch_id", e.batch_id)
+            .in("cycle_id", toInsert.map(pc => pc.id));
+          const ownedIds = new Set<number>((ownedElsewhere || []).map((r: any) => r.cycle_id));
+          const before = toInsert.length;
+          toInsert = toInsert.filter(pc => !ownedIds.has(pc.id));
+          const skipped = before - toInsert.length;
+          if (skipped > 0) skipMsg = ` (${skipped} cycle${skipped !== 1 ? "s" : ""} already covered by another enrollment, left as-is)`;
+        }
 
         let syncErr = false;
         if (toDelete.length > 0) {
@@ -218,7 +276,7 @@ const EnrollmentsPage = () => {
         if (syncErr) {
           toast.error("Validity saved, but cycle coverage failed to update");
         } else {
-          toast.success("Validity updated");
+          toast.success(`Validity updated${skipMsg}`);
         }
       } else {
         toast.warning("Validity saved, cycle coverage not adjusted");
@@ -233,6 +291,8 @@ const EnrollmentsPage = () => {
     setValidityMode("cycle");
     fetchData();
   };
+
+
 
 
   const handleChangeBatch = async () => {
@@ -1278,6 +1338,20 @@ const EnrollmentsPage = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <AlertDialog open={!!overlapWarning} onOpenChange={(o) => { if (!o) setOverlapWarning(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Overlapping enrollment</AlertDialogTitle>
+            <AlertDialogDescription>{overlapWarning?.message}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => overlapWarning?.onConfirm()}>Continue</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
 
       <Dialog open={!!changeBatchFor} onOpenChange={(o) => { if (!o) { setChangeBatchFor(null); setChangeBatchToId(""); } }}>
         <DialogContent className="max-w-md">
