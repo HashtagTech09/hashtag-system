@@ -10,6 +10,7 @@ import { Music, Check } from "lucide-react";
 import { initiateRazorpayPayment } from "@/lib/razorpayUtils";
 import { isPlanValid, computeCycleAssignment, computeFeeBreakdown, detectStudentStatus, getStartCycleIndex } from "@/lib/enrollmentUtils";
 import type { PlanCycle, SubPlan } from "@/lib/enrollmentUtils";
+import { allocateCyclesForPlan } from "@/lib/cycleUtils";
 import { sortBatchesByHierarchy, computePaymentAllocations } from "@/lib/styleHierarchy";
 import StudioSelection from "./StudioSelection";
 import StyleSelection from "./StyleSelection";
