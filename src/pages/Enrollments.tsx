@@ -1400,6 +1400,43 @@ const EnrollmentsPage = () => {
         </AlertDialogContent>
       </AlertDialog>
 
+      <Dialog open={!!enrollOverlap} onOpenChange={(o) => { if (!o) setEnrollOverlap(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Existing active enrollment</DialogTitle></DialogHeader>
+          {enrollOverlap && (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                <span className="font-medium text-foreground">{enrollOverlap.studentName}</span> already has active enrollment(s) overlapping this period:
+              </p>
+              <ul className="text-sm space-y-1 bg-muted/50 rounded p-3">
+                {enrollOverlap.conflicts.map(c => (
+                  <li key={c.id} className="flex justify-between gap-3">
+                    <span className="font-medium">{c.batch_name}</span>
+                    <span className="text-muted-foreground text-xs">{c.start_date} → {c.end_date}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-xs text-muted-foreground">
+                <span className="font-medium">Keep both</span> adds this as an additional batch. <span className="font-medium">Replace previous</span> deactivates the listed enrollment(s) before creating the new one.
+              </p>
+            </div>
+          )}
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button variant="ghost" onClick={() => setEnrollOverlap(null)}>Cancel</Button>
+            <Button variant="outline" onClick={() => performEnroll([])}>Keep both</Button>
+            <Button className="gradient-primary" onClick={() => performEnroll(enrollOverlap?.conflicts.map(c => c.id) || [])}>
+              Replace previous
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => overlapWarning?.onConfirm()}>Continue</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
 
       <Dialog open={!!changeBatchFor} onOpenChange={(o) => { if (!o) { setChangeBatchFor(null); setChangeBatchToId(""); } }}>
         <DialogContent className="max-w-md">
