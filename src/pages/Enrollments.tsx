@@ -534,9 +534,54 @@ const EnrollmentsPage = () => {
   const handleEnroll = async () => {
     if (!form.student_id || form.batch_ids.length === 0) { toast.error("Select a student and at least one batch"); return; }
 
+    const startDate = form.computed_start || new Date().toISOString().split("T")[0];
+    const endDate = form.computed_end || (() => { const d = new Date(); d.setMonth(d.getMonth() + 1); return d.toISOString().split("T")[0]; })();
+
+    // Pre-flight: check for active overlapping enrollments on OTHER batches
+    const selectedBatchIds = form.batch_ids.map(Number);
+    const { data: existingActive } = await supabase
+      .from("enrollments")
+      .select("id, batch_id, start_date, end_date, batches(name)")
+      .eq("student_id", Number(form.student_id))
+      .eq("organization_id", 1)
+      .eq("is_active", true);
+
+    const conflicts = (existingActive || []).filter((e: any) =>
+      !selectedBatchIds.includes(e.batch_id) &&
+      e.start_date <= endDate &&
+      e.end_date >= startDate
+    );
+
+    if (conflicts.length > 0) {
+      const student = students.find(s => s.id === Number(form.student_id));
+      setEnrollOverlap({
+        studentName: student?.name || "Student",
+        conflicts: conflicts.map((c: any) => ({
+          id: c.id,
+          batch_name: c.batches?.name || `Batch ${c.batch_id}`,
+          start_date: c.start_date,
+          end_date: c.end_date,
+        })),
+      });
+      return;
+    }
+
+    await performEnroll([]);
+  };
+
+  const performEnroll = async (deactivateIds: number[]) => {
     const breakdown = computeFeeBreakdown();
     const todayStr = new Date().toISOString().split("T")[0];
     const totalAmount = breakdown.total;
+
+    // Deactivate prior overlapping enrollments first (if Replace was chosen)
+    if (deactivateIds.length > 0) {
+      const { error: deactErr } = await supabase
+        .from("enrollments")
+        .update({ is_active: false })
+        .in("id", deactivateIds);
+      if (deactErr) { toast.error("Failed to deactivate previous enrollment(s)"); return; }
+    }
 
     const { data: payment, error: payError } = await supabase.from("payments").insert({
       organization_id: 1, student_id: Number(form.student_id), amount: breakdown.subtotal,
@@ -553,7 +598,6 @@ const EnrollmentsPage = () => {
     const enrollmentRecords = form.batch_ids.map((batchId) => {
       let prevBatchId: number | null = null;
       if (detectedStatus === "REN" || detectedStatus === "REV") {
-        // If the same batch exists in previous enrollments, use it; otherwise use the first previous batch
         const numBatchId = Number(batchId);
         prevBatchId = previousBatchIds.includes(numBatchId) ? numBatchId : (previousBatchIds[0] ?? null);
       }
@@ -572,7 +616,6 @@ const EnrollmentsPage = () => {
     const { data: insertedEnrollments, error } = await supabase.from("enrollments").insert(enrollmentRecords).select();
     if (error) { toast.error("Enrollment failed"); return; }
 
-    // Write enrollment_cycles for each inserted enrollment
     if (insertedEnrollments && form.start_cycle_id && form.end_cycle_id) {
       const plan = subPlans.find(p => p.id === Number(form.subscription_plan_id));
       if (plan) {
@@ -583,17 +626,18 @@ const EnrollmentsPage = () => {
       }
     }
 
-    // Mark drop-in as adjusted
     if (eligibleDropIn) {
       await supabase.from("drop_ins").update({ is_adjusted: true, adjusted_at: new Date().toISOString() }).eq("id", eligibleDropIn.id);
     }
 
-    toast.success(`Enrolled successfully! Amount: ₹${totalAmount.toLocaleString()}${breakdown.dropInAdj > 0 ? ` (Drop-in adjusted: -₹${breakdown.dropInAdj})` : ""}`);
+    const deactNote = deactivateIds.length > 0 ? ` (${deactivateIds.length} previous enrollment(s) deactivated)` : "";
+    toast.success(`Enrolled successfully! Amount: ₹${totalAmount.toLocaleString()}${breakdown.dropInAdj > 0 ? ` (Drop-in adjusted: -₹${breakdown.dropInAdj})` : ""}${deactNote}`);
     setEligibleDropIn(null);
     setDetectedStatus("NEW");
     setLatestEndDate(null);
     setForm({ student_id: "", batch_ids: [], payment_mode: "cash", subscription_plan_id: "", computed_start: "", computed_end: "", start_cycle_name: "", end_cycle_name: "", start_cycle_id: null, end_cycle_id: null, regular_cycles: 1, grid_cycles: 0 });
     setDialogOpen(false);
+    setEnrollOverlap(null);
     fetchData();
   };
 
