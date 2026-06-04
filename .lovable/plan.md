@@ -1,81 +1,78 @@
 ## Goal
 
-Every registration made through `/register` (Razorpay or Cash) should populate `enrollment_cycles` so the student appears on the dashboard for every cycle their plan covers. Also backfill the 33 existing enrollments missing these rows.
+Make the **"Valid in month"** filter on `/enrollments` use the same cycle-ownership logic the Dashboard uses, so the two pages can never disagree about which enrollments belong to a given month.
 
-## Root cause recap
+Today they disagree because:
 
-- `src/components/register/JoinBatchFlow.tsx` builds the Razorpay payload with `enrollment_cycles_template: []` and stores the cash request with no template at all.
-- `supabase/functions/razorpay-webhook/index.ts` only inserts cycles when the template is non-empty, so Razorpay registrations create enrollments with zero `enrollment_cycles`.
-- `src/pages/ConfirmCash.tsx` never references `enrollment_cycles`, so cash confirmations have the same gap.
+- **Dashboard** (`src/pages/Dashboard.tsx` ~L145–194): date-window prefilter THEN intersect with `enrollment_cycles` ± `cycle_adjustments` for that specific cycle id. Accurate per Regular/Grid cycle.
+- **/enrollments "Valid in month"** (`src/pages/Enrollments.tsx` L633–640): date-window overlap only. A 6-month Regular plan that spans a Grid month falsely shows up under that Grid month; an enrollment whose cycle was shifted out via `cycle_adjustments` still shows up; and (until the /register fix lands and backfill runs) enrollments missing `enrollment_cycles` look fine here but vanish from the dashboard.
 
-Result: 33 active enrollments (all `status_type='NEW'`, including Jaanvi Goel on Grid'26) are invisible to the dashboard.
+"Valid now" stays as-is (it's about today's date, not a specific plan cycle).
 
-## Fix — three parts
+## Scope
 
-### 1. Compute the cycles template in `JoinBatchFlow.tsx`
+Only the month filter on `/enrollments`. The "active enrollments" default list (no month picked) keeps using `is_active` — that's intentional because it's a records list, not a per-month view.
 
-In `handleEnroll`, before building the Razorpay / cash payloads:
+## Implementation
 
-- Use the already-loaded `plan` (from `selectedPlanId`), `planCycles`, and `assignment.startCycle` to derive `startCycleIndex` (find its index in `planCycles`).
-- Call `allocateCyclesForPlan(plan, planCycles, startCycleIndex)` from `@/lib/cycleUtils` to get `[{ cycleId, cycleType }, ...]`.
-- Map it to the template shape the webhook expects:
-  ```ts
-  const cyclesTemplate = allocated.map(c => ({ cycle_id: c.cycleId, cycle_type: c.cycleType }));
-  ```
-- Pass `enrollment_cycles_template: cyclesTemplate` in BOTH:
-  - the Razorpay `enrollment_data` (replacing the hardcoded `[]`)
-  - the cash `cash_payment_requests.enrollment_data` JSON
-- Guard: if `allocated.length === 0`, surface an error and abort — never create an enrollment without cycles.
+### 1. New helper: `getEnrollmentsValidInCycle`
 
-This mirrors exactly what `StudentDashboard.tsx` already does at line 284 / 323.
+Add to `src/lib/cycleUtils.ts`:
 
-### 2. Insert cycles in `ConfirmCash.tsx`
-
-In `handleConfirm`, after `supabase.from("enrollments").insert(records).select()`:
-
-- Read `enrollmentData.enrollment_cycles_template` (the array we just added in step 1).
-- For each inserted enrollment row, build `enrollment_cycles` rows using `enrollment.id`, `enrollment.student_id`, `enrollment.batch_id`, and the template's `cycle_id` + `cycle_type`. Insert them in one call.
-- Same shape as the webhook does at lines 109–119.
-
-Note: current code uses `.insert(records)` without `.select()` — switch to `.insert(records).select()` so we have ids to attach.
-
-### 3. Backfill the 33 broken enrollments (one-shot migration)
-
-A single SQL statement that, for every `is_active` enrollment with `start_cycle_id`/`end_cycle_id` set but zero `enrollment_cycles` rows, inserts one row per cycle in the `[start_cycle_id, end_cycle_id]` range by joining `plan_cycles`:
-
-```sql
-INSERT INTO public.enrollment_cycles (enrollment_id, student_id, batch_id, cycle_id, cycle_type)
-SELECT e.id, e.student_id, e.batch_id, pc.id, pc.plan_type
-FROM public.enrollments e
-JOIN public.plan_cycles pc
-  ON pc.organization_id = e.organization_id
- AND pc.start_date >= (SELECT start_date FROM public.plan_cycles WHERE id = e.start_cycle_id)
- AND pc.start_date <= (SELECT start_date FROM public.plan_cycles WHERE id = e.end_cycle_id)
-WHERE e.is_active = true
-  AND e.start_cycle_id IS NOT NULL
-  AND e.end_cycle_id IS NOT NULL
-  AND NOT EXISTS (
-    SELECT 1 FROM public.enrollment_cycles ec WHERE ec.enrollment_id = e.id
-  );
+```ts
+export async function filterEnrollmentsByCycle(
+  enrollments: { id: number; student_id: number; batch_id: number }[],
+  cycleId: number
+): Promise<Set<number>>  // returns the set of enrollment ids that own cycleId
 ```
 
-Verification: after running, this should return `0`:
-```sql
-SELECT COUNT(*) FROM public.enrollments e
-WHERE e.is_active AND e.start_cycle_id IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM public.enrollment_cycles ec WHERE ec.enrollment_id = e.id);
-```
+Behavior mirrors Dashboard L155–193:
+- Fetch `enrollment_cycles` for the given enrollment ids (paginated via `fetchAll`).
+- Fetch `cycle_adjustments` (status=APPLIED) for those `(student_id, batch_id)` pairs.
+- Build `owns` / `shiftedOut` / `shiftedIn` sets keyed by `student_id:batch_id`.
+- Return the set of enrollment ids where `(owns && !shiftedOut) || shiftedIn`.
 
-Then re-check Jaanvi Goel: should now show in Grid'26.
+This is the single source of truth — Dashboard will be refactored to use it too (small follow-up inside the same change set, no behavior change).
+
+### 2. Map "month" → cycle id on `/enrollments`
+
+The current `validMonth` state is a `YYYY-MM` string. Convert it to a cycle picker that resolves to a `plan_cycles.id`:
+
+- Keep the existing `<Input type="month" />` UI.
+- When the user picks a month, look up the matching `plan_cycles` row for org 1 where `start_date <= monthEnd AND end_date >= monthStart`. If multiple cycles fall in the same month (Regular + Grid both can), show a small follow-up select so the user picks which cycle — defaulting to the Regular one. Store `validCycleId` in state.
+- Add the picked cycle's name (e.g. "Grid'26") to the active-filters chips so it's obvious which cycle is being filtered.
+
+`planCycles` is already loaded on this page, so no extra fetch is needed for the lookup.
+
+### 3. Apply the filter
+
+Replace the date-window block in `Enrollments.tsx` L633–640 with:
+
+- If `validCycleId` is set, run `filterEnrollmentsByCycle(enrollments, validCycleId)` once per fetch (memoized in a `useEffect` that depends on `enrollments` + `validCycleId`) and store the resulting `Set<number>`.
+- `matchesMonth = validCycleId ? validEnrollmentIds.has(e.id) : true`.
+
+Show a loading state on the table while the cycle filter resolves.
+
+### 4. Refactor Dashboard to call the same helper
+
+Replace the inline block in `Dashboard.tsx` L155–193 with a call to `filterEnrollmentsByCycle(enrollRaw, selectedCycle.id)` and `enrollList = enrollRaw.filter(e => validIds.has(e.id))`. Pure refactor, no behavior change.
 
 ## Files changed
 
-- `src/components/register/JoinBatchFlow.tsx` — compute and pass `enrollment_cycles_template` in both payment paths.
-- `src/pages/ConfirmCash.tsx` — insert `enrollment_cycles` after enrollments on cash confirmation.
-- One migration (data-only insert) to backfill the 33 broken rows.
-
-No webhook change needed — it already handles a non-empty template correctly.
+- `src/lib/cycleUtils.ts` — add `filterEnrollmentsByCycle`.
+- `src/pages/Enrollments.tsx` — replace date-window month filter with cycle-id filter; add cycle resolver on month pick; add cycle chip.
+- `src/pages/Dashboard.tsx` — call the new helper instead of the inline block.
 
 ## Out of scope
 
-Auditing every other code path that creates enrollments. The dashboard import / admin "add batch" flow already calls `insertEnrollmentCycles`, so this fix covers the known leak. Flag if you want a follow-up audit pass.
+- "Valid now" filter (still a date check — fine).
+- Default "active enrollments" listing.
+- Backfilling enrollments missing `enrollment_cycles` — covered by the previous fix and its migration.
+- Server-side filtering. We still pull active enrollments client-side and filter; same as Dashboard.
+
+## Verification
+
+1. Pick **Grid'26** month on `/enrollments` → Jaanvi Goel appears (post-backfill). A pure Regular plan spanning Jan'26 does NOT appear under Grid'26.
+2. Same month on Dashboard shows the same student set for the same studio/batch scope.
+3. An enrollment with an APPLIED `cycle_adjustment` shifting it OUT of the picked cycle is excluded on both pages; one shifted IN is included on both.
+4. With no month picked, `/enrollments` still shows all active enrollments (unchanged).
