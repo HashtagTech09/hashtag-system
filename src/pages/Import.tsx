@@ -439,10 +439,70 @@ export default function ImportPage() {
     ]);
     const codeToBatchId = new Map<string, number>();
     batches.forEach(b => { if (b.batch_code) codeToBatchId.set(b.batch_code.toLowerCase().trim(), b.id); });
-    const planByName = new Map<string, any>();
-    subPlans.forEach(p => planByName.set(p.name.toLowerCase().trim(), p));
+    const batchIdToCode = new Map<number, string>();
+    batches.forEach(b => { if (b.batch_code) batchIdToCode.set(b.id, b.batch_code); });
 
-    for (const row of rows) {
+    // Pre-flight: scan rows for overlap with existing active enrollments on OTHER batches
+    const candidateStudentIds = new Set<number>();
+    const candidates: { rowIndex: number; studentId: number; batchId: number; start: string; end: string; row: Record<string, string> }[] = [];
+    rows.forEach((row, rowIndex) => {
+      const sid = namePhoneToStudentId.get(studentKey(row.student_name || "", row.student_phone || ""));
+      const bid = codeToBatchId.get((row.batch_code || "").toLowerCase().trim());
+      if (!sid || !bid || !row.start_date || !row.end_date) return;
+      candidateStudentIds.add(sid);
+      candidates.push({ rowIndex, studentId: sid, batchId: bid, start: row.start_date, end: row.end_date, row });
+    });
+
+    let existingActive: { id: number; student_id: number; batch_id: number; start_date: string; end_date: string }[] = [];
+    if (candidateStudentIds.size > 0) {
+      const ids = [...candidateStudentIds];
+      for (const idChunk of chunk(ids, 200)) {
+        const { data } = await supabase
+          .from("enrollments")
+          .select("id, student_id, batch_id, start_date, end_date")
+          .eq("organization_id", ORG_ID)
+          .eq("is_active", true)
+          .in("student_id", idChunk);
+        if (data) existingActive = existingActive.concat(data);
+      }
+    }
+
+    const conflicts: OverlapConflict[] = [];
+    const rowConflictMap = new Map<number, number[]>(); // rowIndex -> enrollment ids to deactivate
+    for (const c of candidates) {
+      const overlapping = existingActive.filter(e =>
+        e.student_id === c.studentId &&
+        e.batch_id !== c.batchId &&
+        e.start_date <= c.end &&
+        e.end_date >= c.start
+      );
+      if (overlapping.length > 0) {
+        conflicts.push({
+          rowIndex: c.rowIndex,
+          studentName: c.row.student_name,
+          newBatchCode: c.row.batch_code,
+          newStart: c.start,
+          newEnd: c.end,
+          conflictingEnrollmentIds: overlapping.map(o => o.id),
+          conflictingBatchNames: overlapping.map(o => batchIdToCode.get(o.batch_id) || `Batch ${o.batch_id}`),
+        });
+        rowConflictMap.set(c.rowIndex, overlapping.map(o => o.id));
+      }
+    }
+
+    let overlapAction: OverlapAction = "keep";
+    if (conflicts.length > 0) {
+      overlapAction = await askOverlapResolution(conflicts, rows.length);
+    }
+    if (overlapAction === "cancel") {
+      return { success: 0, errors: 0, errorMessages: ["Import cancelled by operator (overlap conflicts found)"], extra: `Auto-created ${usersCreated} users, ${studentsCreated} students (no enrollments imported)` };
+    }
+
+    let deactivated = 0;
+    let skipped = 0;
+
+    for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+      const row = rows[rowIndex];
       try {
         const studentId = namePhoneToStudentId.get(studentKey(row.student_name, row.student_phone));
         if (!studentId) { errors++; errorMessages.push(`No student for: ${row.student_name} / ${row.student_phone}`); continue; }
@@ -451,6 +511,29 @@ export default function ImportPage() {
         if (!batchId) { errors++; errorMessages.push(`No batch with code: ${row.batch_code}`); continue; }
 
         if (!row.start_date || !row.end_date) { errors++; errorMessages.push(`Missing dates for ${row.student_phone}`); continue; }
+
+        // Apply overlap-resolution choice for this row, if it had conflicts
+        const conflictIds = rowConflictMap.get(rowIndex);
+        if (conflictIds && conflictIds.length > 0) {
+          if (overlapAction === "skip") {
+            skipped++;
+            errorMessages.push(`Skipped (overlap): ${row.student_name} / ${row.student_phone} → ${row.batch_code}`);
+            continue;
+          }
+          if (overlapAction === "replace") {
+            const { error: deactErr } = await supabase
+              .from("enrollments")
+              .update({ is_active: false })
+              .in("id", conflictIds);
+            if (deactErr) {
+              errors++;
+              errorMessages.push(`Failed to deactivate prior enrollment(s) for ${row.student_name}: ${deactErr.message}`);
+              continue;
+            }
+            deactivated += conflictIds.length;
+          }
+          // "keep" falls through to normal insert
+        }
 
         const startCycle = cycles.find(c => c.start_date <= row.start_date && (c.end_date || "2099-12-31") >= row.start_date);
         const endCycle = cycles.find(c => c.start_date <= row.end_date && (c.end_date || "2099-12-31") >= row.end_date);
@@ -489,9 +572,12 @@ export default function ImportPage() {
         errorMessages.push(err.message);
       }
     }
+    const overlapExtra = conflicts.length > 0
+      ? ` · Overlap resolution: ${overlapAction} (${conflicts.length} conflict row(s)${deactivated > 0 ? `, ${deactivated} prior enrollment(s) deactivated` : ""}${skipped > 0 ? `, ${skipped} row(s) skipped` : ""})`
+      : "";
     return {
       success, errors, errorMessages,
-      extra: `Auto-created ${usersCreated} users, ${studentsCreated} students`,
+      extra: `Auto-created ${usersCreated} users, ${studentsCreated} students${overlapExtra}`,
     };
   };
 
