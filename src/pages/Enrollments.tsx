@@ -53,6 +53,9 @@ const EnrollmentsPage = () => {
   const [sortBy, setSortBy] = useState<string>("newest");
   const [validMonth, setValidMonth] = useState<string>("");
   const [validNow, setValidNow] = useState<boolean>(false);
+  const [validCycleId, setValidCycleId] = useState<number | null>(null);
+  const [validEnrollmentIds, setValidEnrollmentIds] = useState<Set<number> | null>(null);
+  const [validLoading, setValidLoading] = useState<boolean>(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [addBatchOpen, setAddBatchOpen] = useState(false);
   const [addBatchForm, setAddBatchForm] = useState({ student_id: "", new_batch_ids: [] as string[], payment_mode: "cash" });
