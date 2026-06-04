@@ -820,6 +820,53 @@ export default function ImportPage() {
           </TabsContent>
         </Tabs>
       </div>
+
+      <Dialog open={!!overlapPrompt} onOpenChange={(o) => { if (!o && overlapPrompt) overlapPrompt.resolver("cancel"); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Existing active enrollments detected</DialogTitle>
+          </DialogHeader>
+          {overlapPrompt && (
+            <div className="space-y-4">
+              <p className="text-sm">
+                <span className="font-medium">{overlapPrompt.conflicts.length}</span> of <span className="font-medium">{overlapPrompt.totalRows}</span> row(s) would create an additional active enrollment for a student who already has an overlapping one on a different batch.
+              </p>
+              <div className="space-y-2 text-xs">
+                <Collapsible open={overlapDetailsOpen} onOpenChange={setOverlapDetailsOpen}>
+                  <CollapsibleTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 px-2">
+                      <ChevronDown className={`h-3 w-3 transition-transform ${overlapDetailsOpen ? "rotate-180" : ""}`} />
+                      {overlapDetailsOpen ? "Hide" : "Show"} details
+                    </Button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="mt-2">
+                    <div className="max-h-56 overflow-auto bg-muted/40 rounded p-2 space-y-1">
+                      {overlapPrompt.conflicts.map(c => (
+                        <div key={c.rowIndex} className="border-b border-border/40 pb-1 last:border-0">
+                          <div className="font-medium">{c.studentName} → {c.newBatchCode} ({c.newStart} → {c.newEnd})</div>
+                          <div className="text-muted-foreground">already in: {c.conflictingBatchNames.join(", ")}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              </div>
+              <div className="text-xs text-muted-foreground space-y-1">
+                <p><span className="font-medium text-foreground">Keep both</span> — import as additional batches (current behaviour).</p>
+                <p><span className="font-medium text-foreground">Replace</span> — deactivate the prior overlapping enrollment(s), then import.</p>
+                <p><span className="font-medium text-foreground">Skip</span> — drop only these rows; non-conflict rows still import.</p>
+                <p><span className="font-medium text-foreground">Cancel</span> — abort the entire enrollment import.</p>
+              </div>
+            </div>
+          )}
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button variant="ghost" onClick={() => overlapPrompt?.resolver("cancel")}>Cancel import</Button>
+            <Button variant="outline" onClick={() => overlapPrompt?.resolver("skip")}>Skip conflicts</Button>
+            <Button variant="outline" onClick={() => overlapPrompt?.resolver("keep")}>Keep both</Button>
+            <Button onClick={() => overlapPrompt?.resolver("replace")}>Replace previous</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AdminLayout>
   );
 }
