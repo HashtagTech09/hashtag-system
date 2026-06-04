@@ -1339,6 +1339,20 @@ const EnrollmentsPage = () => {
         </AlertDialogContent>
       </AlertDialog>
 
+      <AlertDialog open={!!overlapWarning} onOpenChange={(o) => { if (!o) setOverlapWarning(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Overlapping enrollment</AlertDialogTitle>
+            <AlertDialogDescription>{overlapWarning?.message}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => overlapWarning?.onConfirm()}>Continue</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+
       <Dialog open={!!changeBatchFor} onOpenChange={(o) => { if (!o) { setChangeBatchFor(null); setChangeBatchToId(""); } }}>
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>Change Batch</DialogTitle></DialogHeader>
