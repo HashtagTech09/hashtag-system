@@ -628,18 +628,47 @@ const EnrollmentsPage = () => {
   // Filter batches shown in batch dropdown based on selected studio
   const filteredBatchOptions = filterStudioId === "all" ? batches : batches.filter(b => String(b.studio_id) === filterStudioId);
 
+  // Resolve picked month → matching plan_cycles candidates
+  const monthCycleCandidates = (() => {
+    if (!validMonth || planCycles.length === 0) return [] as any[];
+    const monthStart = `${validMonth}-01`;
+    const [y, m] = validMonth.split("-").map(Number);
+    const lastDay = new Date(y, m, 0).getDate();
+    const monthEnd = `${validMonth}-${String(lastDay).padStart(2, "0")}`;
+    return planCycles.filter(c => c.start_date <= monthEnd && (c.end_date || "2099-12-31") >= monthStart);
+  })();
+
+  // When month changes, auto-pick a cycle (regular preferred); clear when month cleared
+  useEffect(() => {
+    if (!validMonth) { setValidCycleId(null); return; }
+    if (monthCycleCandidates.length === 0) { setValidCycleId(null); return; }
+    const exists = validCycleId && monthCycleCandidates.some(c => c.id === validCycleId);
+    if (exists) return;
+    const regular = monthCycleCandidates.find(c => c.plan_type === "regular");
+    setValidCycleId((regular || monthCycleCandidates[0]).id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [validMonth, planCycles]);
+
+  // Recompute valid enrollment-id set when filter changes
+  useEffect(() => {
+    let cancelled = false;
+    if (!validCycleId || enrollments.length === 0) { setValidEnrollmentIds(null); return; }
+    setValidLoading(true);
+    filterEnrollmentsByCycle(enrollments, validCycleId)
+      .then(ids => { if (!cancelled) setValidEnrollmentIds(ids); })
+      .catch(err => { console.error("filterEnrollmentsByCycle failed", err); if (!cancelled) setValidEnrollmentIds(new Set()); })
+      .finally(() => { if (!cancelled) setValidLoading(false); });
+    return () => { cancelled = true; };
+  }, [validCycleId, enrollments]);
+
   const filtered = enrollments.filter((e) => {
     const matchesSearch = e.students?.name?.toLowerCase().includes(search.toLowerCase());
     const matchesStudio = filterStudioId === "all" || String(e.batches?.studio_id) === filterStudioId;
     const matchesBatch = filterBatchId === "all" || String(e.batch_id) === filterBatchId;
     const matchesType = filterType === "all" || e.status_type === filterType;
     let matchesMonth = true;
-    if (validMonth) {
-      const monthStart = `${validMonth}-01`;
-      const [y, m] = validMonth.split("-").map(Number);
-      const lastDay = new Date(y, m, 0).getDate();
-      const monthEnd = `${validMonth}-${String(lastDay).padStart(2, "0")}`;
-      matchesMonth = e.start_date <= monthEnd && e.end_date >= monthStart;
+    if (validCycleId) {
+      matchesMonth = validEnrollmentIds ? validEnrollmentIds.has(e.id) : false;
     }
     let matchesValidNow = true;
     if (validNow) {
@@ -648,6 +677,7 @@ const EnrollmentsPage = () => {
     }
     return matchesSearch && matchesStudio && matchesBatch && matchesType && matchesMonth && matchesValidNow;
   });
+
 
   const displayed = [...filtered].sort((a, b) => {
     switch (sortBy) {
