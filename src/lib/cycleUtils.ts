@@ -191,3 +191,71 @@ export async function hasStudentCycleAccess(
   const effective = getEffectiveCycles(ecData || [], adjData || []);
   return effective.some(ec => ec.cycle_id === cycleId);
 }
+
+/** Paginated fetch to bypass Supabase's 1000-row limit. */
+async function fetchAllPaged<T>(queryFactory: () => any): Promise<T[]> {
+  const PAGE = 1000;
+  let all: T[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await queryFactory().range(from, from + PAGE - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    all = all.concat(data as T[]);
+    if (data.length < PAGE) break;
+    from += PAGE;
+  }
+  return all;
+}
+
+/**
+ * Given a list of enrollments and a target plan_cycle id, return the set of
+ * enrollment ids that actually own that cycle after applying cycle_adjustments.
+ * Mirrors the cycle-ownership logic used by the Dashboard so all per-cycle
+ * filters stay consistent.
+ */
+export async function filterEnrollmentsByCycle(
+  enrollments: { id: number; student_id: number; batch_id: number }[],
+  cycleId: number
+): Promise<Set<number>> {
+  if (enrollments.length === 0) return new Set();
+
+  const enrollIds = enrollments.map(e => e.id);
+  const studentIds = [...new Set(enrollments.map(e => e.student_id))];
+  const batchIds = [...new Set(enrollments.map(e => e.batch_id))];
+
+  const ecRes = await fetchAllPaged<{ enrollment_id: number; student_id: number; batch_id: number; cycle_id: number }>(() =>
+    supabase.from("enrollment_cycles")
+      .select("enrollment_id, student_id, batch_id, cycle_id")
+      .in("enrollment_id", enrollIds)
+  );
+  const adjRes = await fetchAllPaged<{ student_id: number; batch_id: number; original_cycle_id: number; new_cycle_id: number | null; status: string }>(() =>
+    supabase.from("cycle_adjustments")
+      .select("student_id, batch_id, original_cycle_id, new_cycle_id, status")
+      .in("student_id", studentIds)
+      .in("batch_id", batchIds)
+      .eq("status", "APPLIED")
+  );
+
+  const sbKey = (s: number, b: number) => `${s}:${b}`;
+  const owns = new Set<string>();
+  const shiftedOut = new Set<string>();
+  const shiftedIn = new Set<string>();
+
+  ecRes.forEach(ec => {
+    if (ec.cycle_id === cycleId) owns.add(sbKey(ec.student_id, ec.batch_id));
+  });
+  adjRes.forEach(a => {
+    if (a.original_cycle_id === cycleId) shiftedOut.add(sbKey(a.student_id, a.batch_id));
+    if (a.new_cycle_id === cycleId) shiftedIn.add(sbKey(a.student_id, a.batch_id));
+  });
+
+  const validIds = new Set<number>();
+  enrollments.forEach(e => {
+    const k = sbKey(e.student_id, e.batch_id);
+    const baseOwn = owns.has(k) && !shiftedOut.has(k);
+    if (baseOwn || shiftedIn.has(k)) validIds.add(e.id);
+  });
+  return validIds;
+}
+
