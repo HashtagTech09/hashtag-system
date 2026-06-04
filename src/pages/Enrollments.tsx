@@ -952,8 +952,19 @@ const EnrollmentsPage = () => {
           </Button>
           <div className="flex items-center gap-2">
             <Input type="month" value={validMonth} onChange={(e) => { setValidMonth(e.target.value); if (e.target.value) setValidNow(false); }} className="w-[160px]" placeholder="Valid in month" />
+            {validMonth && monthCycleCandidates.length > 1 && (
+              <Select value={validCycleId ? String(validCycleId) : ""} onValueChange={(v) => setValidCycleId(Number(v))}>
+                <SelectTrigger className="w-[140px]"><SelectValue placeholder="Cycle" /></SelectTrigger>
+                <SelectContent>
+                  {monthCycleCandidates.map(c => (
+                    <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             {validMonth && <Button variant="ghost" size="sm" onClick={() => setValidMonth("")}>Clear</Button>}
           </div>
+
           <Button
             variant="outline"
             size="sm"
