@@ -10,6 +10,7 @@ import { Music, Check } from "lucide-react";
 import { initiateRazorpayPayment } from "@/lib/razorpayUtils";
 import { isPlanValid, computeCycleAssignment, computeFeeBreakdown, detectStudentStatus, getStartCycleIndex } from "@/lib/enrollmentUtils";
 import type { PlanCycle, SubPlan } from "@/lib/enrollmentUtils";
+import { allocateCyclesForPlan } from "@/lib/cycleUtils";
 import { sortBatchesByHierarchy, computePaymentAllocations } from "@/lib/styleHierarchy";
 import StudioSelection from "./StudioSelection";
 import StyleSelection from "./StyleSelection";
@@ -174,6 +175,17 @@ export default function JoinBatchFlow() {
     if (!student || selectedBatchIds.length === 0 || !assignment || !breakdown) return;
     setSubmitting(true);
     try {
+      const plan = subPlans.find(p => p.id === Number(selectedPlanId));
+      if (!plan) { toast.error("Plan not found."); setSubmitting(false); return; }
+      const startCycleIndex = planCycles.findIndex(c => c.id === assignment.startCycle.id);
+      const allocated = startCycleIndex >= 0 ? allocateCyclesForPlan(plan, planCycles, startCycleIndex) : [];
+      if (allocated.length === 0) {
+        toast.error("Could not allocate cycles for this plan. Please contact support.");
+        setSubmitting(false);
+        return;
+      }
+      const cyclesTemplate = allocated.map(c => ({ cycle_id: c.cycleId, cycle_type: c.cycleType }));
+
       const enrollmentRecords = sortedSelectedBatches.map(batch => ({
         organization_id: 1, student_id: student.id, batch_id: batch.id,
         status_type: detectedStatus,
@@ -211,7 +223,7 @@ export default function JoinBatchFlow() {
           orderParams: {
             student_id: student.id, organization_id: 1, batch_ids: selectedBatchIds.map(Number),
             amount: breakdown.subtotal, gst: breakdown.gst, final_amount: breakdown.total,
-            enrollment_data: { enrollments: enrollmentRecords, enrollment_cycles_template: [], payment_allocations: allocations },
+            enrollment_data: { enrollments: enrollmentRecords, enrollment_cycles_template: cyclesTemplate, payment_allocations: allocations },
             student_name: student.name, student_phone: student.phone || "", batch_names: batchNames, plan_name: planName,
           },
           onSuccess: () => {
@@ -234,7 +246,7 @@ export default function JoinBatchFlow() {
       const { data: cashReq, error: cashErr } = await supabase.from("cash_payment_requests").insert({
         organization_id: 1, student_id: student.id, staff_user_id: Number(selectedStaffId),
         amount: breakdown.subtotal, gst: breakdown.gst, final_amount: breakdown.total,
-        enrollment_data: { enrollments: enrollmentRecords, payment_allocations: allocations } as any,
+        enrollment_data: { enrollments: enrollmentRecords, enrollment_cycles_template: cyclesTemplate, payment_allocations: allocations } as any,
         batch_ids: selectedBatchIds.map(Number) as any,
       }).select().single();
       if (cashErr) throw cashErr;

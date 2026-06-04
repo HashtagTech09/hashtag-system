@@ -86,13 +86,31 @@ const ConfirmCashPage = () => {
       if (payErr) throw payErr;
 
       // Create enrollments
+      let insertedEnrollments: any[] = [];
       if (enrollmentData.enrollments && enrollmentData.enrollments.length > 0) {
         const records = enrollmentData.enrollments.map((r: any) => ({
           ...r,
           payment_id: payment.id,
         }));
-        const { error: enrErr } = await supabase.from("enrollments").insert(records);
+        const { data: inserted, error: enrErr } = await supabase.from("enrollments").insert(records).select();
         if (enrErr) throw enrErr;
+        insertedEnrollments = inserted || [];
+      }
+
+      // Create enrollment_cycles for each new enrollment
+      const cyclesTemplate = enrollmentData.enrollment_cycles_template || [];
+      if (insertedEnrollments.length > 0 && cyclesTemplate.length > 0) {
+        const cycleRows = insertedEnrollments.flatMap((e: any) =>
+          cyclesTemplate.map((c: any) => ({
+            enrollment_id: e.id,
+            student_id: e.student_id,
+            batch_id: e.batch_id,
+            cycle_id: c.cycle_id,
+            cycle_type: c.cycle_type || "regular",
+          }))
+        );
+        const { error: ecErr } = await supabase.from("enrollment_cycles").insert(cycleRows);
+        if (ecErr) throw ecErr;
       }
 
       // Create payment allocations
