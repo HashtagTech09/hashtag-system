@@ -151,23 +151,89 @@ const EnrollmentsPage = () => {
   const handleSaveValidity = async () => {
     if (!editValidityFor) return;
     let update: { end_date: string; end_cycle_id: number | null };
+    let resolvedEndCycle: any = null;
     if (validityMode === "cycle") {
       const c = planCycles.find(pc => String(pc.id) === editValidityCycleId);
       if (!c) { toast.error("Pick a cycle"); return; }
       update = { end_date: c.end_date, end_cycle_id: c.id };
+      resolvedEndCycle = c;
     } else {
       if (!editValidityDate) return;
       update = { end_date: editValidityDate, end_cycle_id: null };
+      // Derive an effective end cycle for cycle-coverage sync
+      const eligible = planCycles
+        .filter(pc => pc.start_date <= editValidityDate)
+        .sort((a, b) => a.start_date.localeCompare(b.start_date));
+      resolvedEndCycle = eligible[eligible.length - 1] || null;
     }
     const { error } = await supabase.from("enrollments").update(update).eq("id", editValidityFor.id);
     if (error) { toast.error("Failed to update validity"); return; }
-    toast.success("Validity updated");
+
+    // Reconcile enrollment_cycles to match the new window [start_cycle_id .. resolvedEndCycle]
+    const e = editValidityFor;
+    const startCycleId: number | null = e.start_cycle_id ?? null;
+    if (startCycleId && resolvedEndCycle) {
+      const sorted = [...planCycles].sort((a, b) => a.start_date.localeCompare(b.start_date));
+      const startIdx = sorted.findIndex(pc => pc.id === startCycleId);
+      const endIdx = sorted.findIndex(pc => pc.id === resolvedEndCycle.id);
+      if (startIdx >= 0 && endIdx >= startIdx) {
+        const targetCycles = sorted.slice(startIdx, endIdx + 1);
+        const targetIds = new Set(targetCycles.map(pc => pc.id));
+
+        // Protect cycles shifted IN via APPLIED cycle_adjustments — those aren't part of the template
+        const { data: adjData } = await supabase.from("cycle_adjustments")
+          .select("new_cycle_id")
+          .eq("student_id", e.student_id)
+          .eq("batch_id", e.batch_id)
+          .eq("status", "APPLIED");
+        const keepShiftedIn = new Set<number>((adjData || []).map((a: any) => a.new_cycle_id).filter(Boolean));
+
+        const { data: currentRows } = await supabase.from("enrollment_cycles")
+          .select("cycle_id")
+          .eq("enrollment_id", e.id);
+        const currentIds = new Set<number>((currentRows || []).map((r: any) => r.cycle_id));
+
+        const toDelete = [...currentIds].filter(id => !targetIds.has(id) && !keepShiftedIn.has(id));
+        const toInsert = targetCycles.filter(pc => !currentIds.has(pc.id));
+
+        let syncErr = false;
+        if (toDelete.length > 0) {
+          const { error: delErr } = await supabase.from("enrollment_cycles")
+            .delete()
+            .eq("enrollment_id", e.id)
+            .in("cycle_id", toDelete);
+          if (delErr) syncErr = true;
+        }
+        if (toInsert.length > 0) {
+          const rows = toInsert.map(pc => ({
+            enrollment_id: e.id,
+            student_id: e.student_id,
+            batch_id: e.batch_id,
+            cycle_id: pc.id,
+            cycle_type: pc.plan_type,
+          }));
+          const { error: insErr } = await supabase.from("enrollment_cycles").insert(rows);
+          if (insErr) syncErr = true;
+        }
+        if (syncErr) {
+          toast.error("Validity saved, but cycle coverage failed to update");
+        } else {
+          toast.success("Validity updated");
+        }
+      } else {
+        toast.warning("Validity saved, cycle coverage not adjusted");
+      }
+    } else {
+      toast.warning("Validity saved, cycle coverage not adjusted");
+    }
+
     setEditValidityFor(null);
     setEditValidityDate("");
     setEditValidityCycleId("");
     setValidityMode("cycle");
     fetchData();
   };
+
 
   const handleChangeBatch = async () => {
     if (!changeBatchFor || !changeBatchToId) return;
