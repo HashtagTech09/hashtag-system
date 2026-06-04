@@ -16,7 +16,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { toast } from "sonner";
 import { getDisplayPhone } from "@/lib/studentUtils";
 import { parseISO } from "date-fns";
-import { allocateCyclesForPlan, insertEnrollmentCycles } from "@/lib/cycleUtils";
+import { allocateCyclesForPlan, insertEnrollmentCycles, filterEnrollmentsByCycle } from "@/lib/cycleUtils";
 import { useAuth } from "@/hooks/useAuth";
 import { useScopedStudents } from "@/hooks/useScopedStudents";
 import { useTestDate } from "@/contexts/TestDateContext";
