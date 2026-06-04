@@ -35,6 +35,10 @@ const EnrollmentsPage = () => {
   const [changeBatchFor, setChangeBatchFor] = useState<any>(null);
   const [changeBatchToId, setChangeBatchToId] = useState<string>("");
   const [overlapWarning, setOverlapWarning] = useState<{ message: string; onConfirm: () => void } | null>(null);
+  const [enrollOverlap, setEnrollOverlap] = useState<{
+    studentName: string;
+    conflicts: { id: number; batch_name: string; start_date: string; end_date: string }[];
+  } | null>(null);
   const [pendingCases, setPendingCases] = useState<Record<number, boolean>>({});
   const [caseDialogOpen, setCaseDialogOpen] = useState(false);
   const [caseEnrollment, setCaseEnrollment] = useState<any>(null);
