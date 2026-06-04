@@ -22,7 +22,23 @@ import { useScopedStudents } from "@/hooks/useScopedStudents";
 import { useTestDate } from "@/contexts/TestDateContext";
 import { Textarea } from "@/components/ui/textarea";
 
+async function fetchAll<T>(buildQuery: () => any): Promise<T[]> {
+  const pageSize = 1000;
+  let from = 0;
+  const all: T[] = [];
+  while (true) {
+    const { data, error } = await buildQuery().range(from, from + pageSize - 1);
+    if (error) throw error;
+    const rows = (data || []) as T[];
+    all.push(...rows);
+    if (rows.length < pageSize) break;
+    from += pageSize;
+  }
+  return all;
+}
+
 const EnrollmentsPage = () => {
+
   const { staffUser, isAdminOrManager } = useAuth();
   const { isTestMode } = useTestDate();
   const scope = useScopedStudents();
@@ -78,7 +94,6 @@ const EnrollmentsPage = () => {
   });
 
   const fetchData = async () => {
-    let enrollQ: any = supabase.from("enrollments").select("*, students(name, phone, users(phone)), batches(name, batch_code, studio_id, studios(name, code)), subscription_plans(name), start_cycle:plan_cycles!enrollments_start_cycle_id_fkey(name), end_cycle:plan_cycles!enrollments_end_cycle_id_fkey(name)").eq("organization_id", 1).eq("is_active", true).order("created_at", { ascending: false });
     let studentQ: any = supabase.from("students").select("*").eq("organization_id", 1).order("name");
     if (!scope.unrestricted) {
       if (scope.studentIds.length === 0) {
@@ -87,11 +102,16 @@ const EnrollmentsPage = () => {
         setPendingCases({});
         return;
       }
-      enrollQ = enrollQ.in("student_id", scope.studentIds);
       studentQ = studentQ.in("id", scope.studentIds);
     }
-    const [enrollRes, studentRes, batchRes, studioRes, planRes, seqRes, cycleRes, pricingRes] = await Promise.all([
-      enrollQ,
+
+    const buildEnrollQ = () => {
+      let q: any = supabase.from("enrollments").select("*, students(name, phone, users(phone)), batches(name, batch_code, studio_id, studios(name, code)), subscription_plans(name), start_cycle:plan_cycles!enrollments_start_cycle_id_fkey(name), end_cycle:plan_cycles!enrollments_end_cycle_id_fkey(name)").eq("organization_id", 1).eq("is_active", true).order("created_at", { ascending: false });
+      if (!scope.unrestricted) q = q.in("student_id", scope.studentIds);
+      return q;
+    };
+    const [enrollAll, studentRes, batchRes, studioRes, planRes, seqRes, cycleRes, pricingRes] = await Promise.all([
+      fetchAll<any>(buildEnrollQ),
       studentQ,
       supabase.from("batches").select("*").eq("organization_id", 1).order("name"),
       supabase.from("studios").select("id, name, code").eq("organization_id", 1).order("name"),
@@ -100,7 +120,7 @@ const EnrollmentsPage = () => {
       supabase.from("plan_cycles").select("*").eq("organization_id", 1).order("start_date"),
       supabase.from("pricing_plans").select("*").eq("organization_id", 1).order("batch_count"),
     ]);
-    setEnrollments(enrollRes.data || []);
+    setEnrollments(enrollAll || []);
     setStudents(studentRes.data || []);
     setBatches(batchRes.data || []);
     setStudios(studioRes.data || []);
@@ -108,6 +128,7 @@ const EnrollmentsPage = () => {
     setSubPlanCycles(seqRes.data || []);
     setPlanCycles(cycleRes.data || []);
     setPricingPlans(pricingRes.data || []);
+
 
     // Fetch pending application cases keyed by enrollment_id
     const { data: caseData } = await supabase
