@@ -441,6 +441,8 @@ export default function ImportPage() {
     batches.forEach(b => { if (b.batch_code) codeToBatchId.set(b.batch_code.toLowerCase().trim(), b.id); });
     const batchIdToCode = new Map<number, string>();
     batches.forEach(b => { if (b.batch_code) batchIdToCode.set(b.id, b.batch_code); });
+    const planByName = new Map<string, any>();
+    subPlans.forEach(p => planByName.set(p.name.toLowerCase().trim(), p));
 
     // Pre-flight: scan rows for overlap with existing active enrollments on OTHER batches
     const candidateStudentIds = new Set<number>();
