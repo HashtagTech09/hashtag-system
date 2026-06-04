@@ -1,53 +1,88 @@
 ## Goal
 
-Fix the `duplicate key value violates unique constraint "enrollment_cycles_student_id_batch_id_cycle_id_key"` error from "Edit validity", and prevent users from creating ambiguous overlapping enrollments going forward.
+Stop silently creating a second active enrollment for a student when one already overlaps. Make the operator declare intent: **Keep both** (multi-batch), **Replace** (deactivate prior overlapping enrollment), or **Cancel**.
 
-## Two changes
+Applies to two flows only: **CSV Import** and **Admin Enrollments → Add Enrollment**. Add-Batch flow, online signup (Razorpay webhook), and the existing Change-Batch flow are out of scope.
 
-### 1. Skip-on-conflict in `handleSaveValidity`
+## Overlap definition
 
-In `src/pages/Enrollments.tsx`, inside the reconciliation block of `handleSaveValidity` (right before the insert step):
+For a candidate insert `(student_id, new_batch_id, new_start_date, new_end_date)`, fetch all `enrollments` rows where:
+- `student_id = candidate.student_id`
+- `is_active = true`
+- `batch_id <> new_batch_id`
+- date ranges overlap: `existing.start_date <= new_end_date AND existing.end_date >= new_start_date`
 
-- Build `toInsertIds = toInsert.map(pc => pc.id)`.
-- Query existing rows for the same `(student_id, batch_id)` filtered by those cycle ids:
-  ```ts
-  const { data: ownedElsewhere } = await supabase.from("enrollment_cycles")
-    .select("cycle_id")
-    .eq("student_id", e.student_id)
-    .eq("batch_id", e.batch_id)
-    .in("cycle_id", toInsertIds);
-  ```
-- Skip any cycle id present in that result. Only insert the remainder.
-- Toast logic: if some were skipped, surface a soft warning chip in the success toast — `"Validity updated (N cycle(s) already covered by another enrollment, left as-is)"`. Hard failures stay as the existing error toast.
+Any matching row is a "conflicting enrollment."
 
-This removes the error. Dashboard visibility is preserved because the cycle is already owned by the other enrollment.
+## Flow 1 — Admin "Add Enrollment" (`src/pages/Enrollments.tsx`)
 
-### 2. Pre-save overlap warning
+In `handleSave` (around line 568), **before** inserting the new enrollment records:
 
-Before submitting the update in `handleSaveValidity`, compute whether the new `[start_cycle_id .. resolvedEndCycle.id]` window overlaps with another **active** enrollment for the same `(student_id, batch_id)`:
+1. For each `batchId` in `form.batch_ids`, run the overlap query above against the form's `startDate`/`endDate`.
+2. If any conflicts exist, halt the save and open a new `AlertDialog` listing them:
+   ```
+   {Student} already has active enrollment(s) overlapping this period:
+     • Kids Ballet  (2026-03-30 → 2027-05-16)
+     • Hip Hop 1    (2026-04-01 → 2026-09-30)
+   
+   [Keep both]   [Replace previous]   [Cancel]
+   ```
+3. Branches:
+   - **Cancel** → abort, no DB writes.
+   - **Keep both** → proceed with original insert path unchanged.
+   - **Replace previous** → in a sequenced step, update each conflicting enrollment with `{ is_active: false }` (no other fields touched, no cycles/payments deleted), then proceed with the insert.
+4. Per-batch conflicts are aggregated into one dialog (don't open multiple dialogs sequentially).
 
-- Query `enrollments` where `student_id = e.student_id AND batch_id = e.batch_id AND id <> e.id AND is_active = true`.
-- For each such row, check if its `[start_cycle_id, end_cycle_id]` window (resolved via `planCycles` ordering) overlaps the new window.
-- If yes, show a confirm dialog before saving: `"This validity overlaps with enrollment #XXX on the same batch (covers <range>). Months already covered by that enrollment will stay attributed to it. Continue?"` with Cancel / Continue buttons.
+State: add `overlapConflicts: { enrollments: ConflictRow[]; onResolve: (action: 'keep'|'replace'|'cancel') => void } | null`. Renders existing `AlertDialog` pattern (already used for the validity-save warning).
 
-If the user clicks Continue, the save proceeds with the skip-on-conflict path from step 1. If Cancel, abort.
+## Flow 2 — CSV Import (`src/pages/Import.tsx`)
 
-Implementation note: reuse the existing `AlertDialog` import. Add a small local state `overlapWarning: { ranges: string[]; onConfirm: () => void } | null` and gate the actual save behind it.
+Import processes many rows in a loop; per-row modal prompts are not viable. Two-stage approach:
 
-## Files changed
+**Stage A — pre-flight scan (before any inserts):**
+1. After student lookup/creation but before the insert loop (around line 416), compute all candidate `(student_id, batch_id, start_date, end_date)` tuples from rows.
+2. Batch-fetch active enrollments for those student_ids and check overlaps in memory.
+3. Collect conflicts into a list: `{ rowIndex, student, newBatch, conflictingEnrollments[] }`.
 
-- `src/pages/Enrollments.tsx` — extend `handleSaveValidity` only. No new files, no schema change, no migration.
+**Stage B — single resolution dialog (if conflicts found):**
+Open a dialog before any insert runs:
+```
+{N} of {total} rows would create an additional active enrollment for a
+student who already has an overlapping one. How should these be handled?
+
+  ( ) Keep both     — import as-is (current behavior)
+  ( ) Replace       — deactivate the prior overlapping enrollment, then import
+  ( ) Skip          — do not import these rows (others proceed)
+  ( ) Cancel import — abort entirely
+
+[Show details ▾]   lists the {N} rows with student name, old batch, new batch, dates
+```
+- **Keep both** → existing flow.
+- **Replace** → for each conflict row, set `is_active = false` on the listed prior enrollments, then insert the new one.
+- **Skip** → drop those rows from the insert loop; record them in `errorMessages` as "Skipped (overlap)".
+- **Cancel import** → abort, no inserts, no deactivations.
+
+Resolution applies once to all conflicts in the batch (no per-row prompts). The summary at the end of import already shows `success`/`errors`/`errorMessages`; extend it with a `skipped` and `deactivated` count.
 
 ## Out of scope
 
-- Dropping or changing the `enrollment_cycles_student_id_batch_id_cycle_id_key` unique constraint. The constraint is doing useful work — keep it.
-- Transferring ownership on overlap. Stays with the prior enrollment, matching current data.
-- Adding the same overlap guard to the original "create enrollment" flow. The dialog has its own gap-detection (`detectedStatus`, `latestEndDate`) that already nudges users toward REN/REV — separate concern, do it as a follow-up if needed.
-- Backfilling existing overlap conflicts (none reported beyond the one toast).
+- Razorpay webhook / online signup flow.
+- Add-Batch flow (intentional multi-batch).
+- Existing Change-Batch dialog (already mutates in place).
+- Backfilling historical duplicates (Kaira-style records left as-is per user direction).
+- Schema changes — no new columns, no migration.
 
 ## Verification
 
-1. Reproduce the original case: edit validity to extend into months already covered by another enrollment for the same batch → confirm dialog appears, user confirms → save succeeds, no error toast, message says "N already covered". Dashboard for those months still shows the student (attributed to the older enrollment).
-2. Edit validity to extend into a window with no other coverage → no dialog, save succeeds, new `enrollment_cycles` rows created.
-3. Shorten validity → unchanged behavior; stale rows deleted as before.
-4. Edit validity where the new window doesn't overlap any other enrollment → no warning, no skips, clean toast.
+1. Admin: create an enrollment for a student who already has an overlapping active one → dialog appears. Test each of the three branches.
+2. Admin: create an enrollment for a student with no overlap → no dialog, saves as before.
+3. Import: upload a CSV containing one new row that overlaps an existing enrollment → resolution dialog appears with row count = 1. Test all four branches.
+4. Import: upload a CSV with no overlaps → no dialog, imports as before.
+5. After "Replace" in either flow, confirm: prior enrollment row has `is_active = false`, its `enrollment_cycles` rows untouched, new enrollment is the only active row for that student+batch combination.
+
+## Files touched
+
+- `src/pages/Enrollments.tsx` — overlap check + AlertDialog in `handleSave`.
+- `src/pages/Import.tsx` — pre-flight scan + resolution dialog + branching in the enrollments import step.
+
+No new files, no edge-function changes, no migration.
