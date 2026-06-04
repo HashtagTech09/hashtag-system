@@ -270,7 +270,34 @@ function chunk<T>(arr: T[], size: number): T[][] {
   return result;
 }
 
+type OverlapAction = "keep" | "replace" | "skip" | "cancel";
+type OverlapConflict = {
+  rowIndex: number;
+  studentName: string;
+  newBatchCode: string;
+  newStart: string;
+  newEnd: string;
+  conflictingEnrollmentIds: number[];
+  conflictingBatchNames: string[];
+};
+
 export default function ImportPage() {
+  const [overlapPrompt, setOverlapPrompt] = useState<{
+    conflicts: OverlapConflict[];
+    totalRows: number;
+    resolver: (action: OverlapAction) => void;
+  } | null>(null);
+  const [overlapDetailsOpen, setOverlapDetailsOpen] = useState(false);
+
+  const askOverlapResolution = (conflicts: OverlapConflict[], totalRows: number) =>
+    new Promise<OverlapAction>((resolve) => {
+      setOverlapPrompt({
+        conflicts,
+        totalRows,
+        resolver: (action) => { setOverlapPrompt(null); setOverlapDetailsOpen(false); resolve(action); },
+      });
+    });
+
   const importUsers = async (rows: Record<string, string>[]): Promise<ImportResult> => {
     let success = 0, errors = 0;
     const errorMessages: string[] = [];
