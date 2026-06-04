@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { useScopedStudents } from "@/hooks/useScopedStudents";
 import BatchDetailsPopup from "@/components/dashboard/BatchDetailsPopup";
 import { useLongPress } from "@/hooks/useLongPress";
+import { filterEnrollmentsByCycle } from "@/lib/cycleUtils";
 
 interface Studio { id: number; name: string; code: string | null; }
 interface Batch { id: number; name: string; batch_code: string | null; studio_id: number | null; capacity: number | null; style_base: string | null; level: string | null; }
