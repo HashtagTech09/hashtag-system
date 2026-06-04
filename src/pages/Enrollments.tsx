@@ -1009,7 +1009,14 @@ const EnrollmentsPage = () => {
           <p className="text-sm text-muted-foreground">Currently valid — {displayed.length} enrollment{displayed.length !== 1 ? "s" : ""}</p>
         )}
         {validMonth && (
-          <p className="text-sm text-muted-foreground">Valid students for {monthLabel} — {displayed.length} enrollment{displayed.length !== 1 ? "s" : ""}</p>
+          <p className="text-sm text-muted-foreground">
+            Valid students for {monthLabel}
+            {validCycleId && monthCycleCandidates.length > 0 && (
+              <> · {monthCycleCandidates.find(c => c.id === validCycleId)?.name}</>
+            )}
+            {" — "}
+            {validLoading ? "loading…" : `${displayed.length} enrollment${displayed.length !== 1 ? "s" : ""}`}
+          </p>
         )}
       </div>
 
