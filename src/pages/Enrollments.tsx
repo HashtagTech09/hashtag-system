@@ -22,7 +22,23 @@ import { useScopedStudents } from "@/hooks/useScopedStudents";
 import { useTestDate } from "@/contexts/TestDateContext";
 import { Textarea } from "@/components/ui/textarea";
 
+async function fetchAll<T>(buildQuery: () => any): Promise<T[]> {
+  const pageSize = 1000;
+  let from = 0;
+  const all: T[] = [];
+  while (true) {
+    const { data, error } = await buildQuery().range(from, from + pageSize - 1);
+    if (error) throw error;
+    const rows = (data || []) as T[];
+    all.push(...rows);
+    if (rows.length < pageSize) break;
+    from += pageSize;
+  }
+  return all;
+}
+
 const EnrollmentsPage = () => {
+
   const { staffUser, isAdminOrManager } = useAuth();
   const { isTestMode } = useTestDate();
   const scope = useScopedStudents();
