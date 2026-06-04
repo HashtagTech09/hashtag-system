@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { useScopedStudents } from "@/hooks/useScopedStudents";
 import BatchDetailsPopup from "@/components/dashboard/BatchDetailsPopup";
 import { useLongPress } from "@/hooks/useLongPress";
+import { filterEnrollmentsByCycle } from "@/lib/cycleUtils";
 
 interface Studio { id: number; name: string; code: string | null; }
 interface Batch { id: number; name: string; batch_code: string | null; studio_id: number | null; capacity: number | null; style_base: string | null; level: string | null; }
@@ -156,42 +157,10 @@ const Dashboard = () => {
       // Date-window overlap incorrectly includes e.g. Regular-only plans spanning a Grid cycle.
       let enrollList: Enrollment[] = enrollRaw;
       if (enrollRaw.length > 0) {
-        const enrollIds = enrollRaw.map(e => e.id);
-        const ecRes = await fetchAll<{ enrollment_id: number; student_id: number; batch_id: number; cycle_id: number }>(() =>
-          supabase.from("enrollment_cycles")
-            .select("enrollment_id, student_id, batch_id, cycle_id")
-            .in("enrollment_id", enrollIds)
-        );
-        const studentIds = [...new Set(enrollRaw.map(e => e.student_id))];
-        const adjRes = await fetchAll<{ student_id: number; batch_id: number; original_cycle_id: number; new_cycle_id: number | null; status: string }>(() =>
-          supabase.from("cycle_adjustments")
-            .select("student_id, batch_id, original_cycle_id, new_cycle_id, status")
-            .in("student_id", studentIds)
-            .in("batch_id", batchIds)
-            .eq("status", "APPLIED")
-        );
-
-        // Build owned-cycle set per (student_id, batch_id) keyed by selectedCycle.id only
-        const targetCycleId = selectedCycle.id;
-        const sbKey = (s: number, b: number) => `${s}:${b}`;
-        const owns = new Set<string>();          // (student,batch) that own targetCycleId via enrollment_cycles
-        const shiftedOut = new Set<string>();    // (student,batch) where targetCycleId was shifted out
-        const shiftedIn = new Set<string>();     // (student,batch) where targetCycleId was shifted in
-
-        ecRes.forEach(ec => {
-          if (ec.cycle_id === targetCycleId) owns.add(sbKey(ec.student_id, ec.batch_id));
-        });
-        adjRes.forEach(a => {
-          if (a.original_cycle_id === targetCycleId) shiftedOut.add(sbKey(a.student_id, a.batch_id));
-          if (a.new_cycle_id === targetCycleId) shiftedIn.add(sbKey(a.student_id, a.batch_id));
-        });
-
-        enrollList = enrollRaw.filter(e => {
-          const k = sbKey(e.student_id, e.batch_id);
-          const baseOwn = owns.has(k) && !shiftedOut.has(k);
-          return baseOwn || shiftedIn.has(k);
-        });
+        const validIds = await filterEnrollmentsByCycle(enrollRaw, selectedCycle.id);
+        enrollList = enrollRaw.filter(e => validIds.has(e.id));
       }
+
       setEnrollments(enrollList);
 
       const paymentIds = enrollList.map(e => e.payment_id).filter(Boolean) as number[];

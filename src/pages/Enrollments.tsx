@@ -16,7 +16,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { toast } from "sonner";
 import { getDisplayPhone } from "@/lib/studentUtils";
 import { parseISO } from "date-fns";
-import { allocateCyclesForPlan, insertEnrollmentCycles } from "@/lib/cycleUtils";
+import { allocateCyclesForPlan, insertEnrollmentCycles, filterEnrollmentsByCycle } from "@/lib/cycleUtils";
 import { useAuth } from "@/hooks/useAuth";
 import { useScopedStudents } from "@/hooks/useScopedStudents";
 import { useTestDate } from "@/contexts/TestDateContext";
@@ -53,6 +53,9 @@ const EnrollmentsPage = () => {
   const [sortBy, setSortBy] = useState<string>("newest");
   const [validMonth, setValidMonth] = useState<string>("");
   const [validNow, setValidNow] = useState<boolean>(false);
+  const [validCycleId, setValidCycleId] = useState<number | null>(null);
+  const [validEnrollmentIds, setValidEnrollmentIds] = useState<Set<number> | null>(null);
+  const [validLoading, setValidLoading] = useState<boolean>(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [addBatchOpen, setAddBatchOpen] = useState(false);
   const [addBatchForm, setAddBatchForm] = useState({ student_id: "", new_batch_ids: [] as string[], payment_mode: "cash" });
@@ -625,18 +628,47 @@ const EnrollmentsPage = () => {
   // Filter batches shown in batch dropdown based on selected studio
   const filteredBatchOptions = filterStudioId === "all" ? batches : batches.filter(b => String(b.studio_id) === filterStudioId);
 
+  // Resolve picked month → matching plan_cycles candidates
+  const monthCycleCandidates = (() => {
+    if (!validMonth || planCycles.length === 0) return [] as any[];
+    const monthStart = `${validMonth}-01`;
+    const [y, m] = validMonth.split("-").map(Number);
+    const lastDay = new Date(y, m, 0).getDate();
+    const monthEnd = `${validMonth}-${String(lastDay).padStart(2, "0")}`;
+    return planCycles.filter(c => c.start_date <= monthEnd && (c.end_date || "2099-12-31") >= monthStart);
+  })();
+
+  // When month changes, auto-pick a cycle (regular preferred); clear when month cleared
+  useEffect(() => {
+    if (!validMonth) { setValidCycleId(null); return; }
+    if (monthCycleCandidates.length === 0) { setValidCycleId(null); return; }
+    const exists = validCycleId && monthCycleCandidates.some(c => c.id === validCycleId);
+    if (exists) return;
+    const regular = monthCycleCandidates.find(c => c.plan_type === "regular");
+    setValidCycleId((regular || monthCycleCandidates[0]).id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [validMonth, planCycles]);
+
+  // Recompute valid enrollment-id set when filter changes
+  useEffect(() => {
+    let cancelled = false;
+    if (!validCycleId || enrollments.length === 0) { setValidEnrollmentIds(null); return; }
+    setValidLoading(true);
+    filterEnrollmentsByCycle(enrollments, validCycleId)
+      .then(ids => { if (!cancelled) setValidEnrollmentIds(ids); })
+      .catch(err => { console.error("filterEnrollmentsByCycle failed", err); if (!cancelled) setValidEnrollmentIds(new Set()); })
+      .finally(() => { if (!cancelled) setValidLoading(false); });
+    return () => { cancelled = true; };
+  }, [validCycleId, enrollments]);
+
   const filtered = enrollments.filter((e) => {
     const matchesSearch = e.students?.name?.toLowerCase().includes(search.toLowerCase());
     const matchesStudio = filterStudioId === "all" || String(e.batches?.studio_id) === filterStudioId;
     const matchesBatch = filterBatchId === "all" || String(e.batch_id) === filterBatchId;
     const matchesType = filterType === "all" || e.status_type === filterType;
     let matchesMonth = true;
-    if (validMonth) {
-      const monthStart = `${validMonth}-01`;
-      const [y, m] = validMonth.split("-").map(Number);
-      const lastDay = new Date(y, m, 0).getDate();
-      const monthEnd = `${validMonth}-${String(lastDay).padStart(2, "0")}`;
-      matchesMonth = e.start_date <= monthEnd && e.end_date >= monthStart;
+    if (validCycleId) {
+      matchesMonth = validEnrollmentIds ? validEnrollmentIds.has(e.id) : false;
     }
     let matchesValidNow = true;
     if (validNow) {
@@ -645,6 +677,7 @@ const EnrollmentsPage = () => {
     }
     return matchesSearch && matchesStudio && matchesBatch && matchesType && matchesMonth && matchesValidNow;
   });
+
 
   const displayed = [...filtered].sort((a, b) => {
     switch (sortBy) {
@@ -919,8 +952,19 @@ const EnrollmentsPage = () => {
           </Button>
           <div className="flex items-center gap-2">
             <Input type="month" value={validMonth} onChange={(e) => { setValidMonth(e.target.value); if (e.target.value) setValidNow(false); }} className="w-[160px]" placeholder="Valid in month" />
+            {validMonth && monthCycleCandidates.length > 1 && (
+              <Select value={validCycleId ? String(validCycleId) : ""} onValueChange={(v) => setValidCycleId(Number(v))}>
+                <SelectTrigger className="w-[140px]"><SelectValue placeholder="Cycle" /></SelectTrigger>
+                <SelectContent>
+                  {monthCycleCandidates.map(c => (
+                    <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             {validMonth && <Button variant="ghost" size="sm" onClick={() => setValidMonth("")}>Clear</Button>}
           </div>
+
           <Button
             variant="outline"
             size="sm"
@@ -965,7 +1009,14 @@ const EnrollmentsPage = () => {
           <p className="text-sm text-muted-foreground">Currently valid — {displayed.length} enrollment{displayed.length !== 1 ? "s" : ""}</p>
         )}
         {validMonth && (
-          <p className="text-sm text-muted-foreground">Valid students for {monthLabel} — {displayed.length} enrollment{displayed.length !== 1 ? "s" : ""}</p>
+          <p className="text-sm text-muted-foreground">
+            Valid students for {monthLabel}
+            {validCycleId && monthCycleCandidates.length > 0 && (
+              <> · {monthCycleCandidates.find(c => c.id === validCycleId)?.name}</>
+            )}
+            {" — "}
+            {validLoading ? "loading…" : `${displayed.length} enrollment${displayed.length !== 1 ? "s" : ""}`}
+          </p>
         )}
       </div>
 
