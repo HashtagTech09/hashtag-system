@@ -167,8 +167,14 @@ export function computeFeeBreakdown(params: {
   /** Sorted batches by hierarchy (highest priority first) */
   sortedBatches?: { id: number; name: string; style_base?: string | null }[];
   today?: string;
+  /** Registration fee from system_settings. Defaults to REG_FEE constant. */
+  regFee?: number;
+  /** GST rate (0-1). Defaults to GST_RATE constant. */
+  gstRate?: number;
 }): FeeBreakdown {
-  const { batchCount, regularCycles, gridCycles, detectedStatus, latestEndDate, dropInAmount, sortedBatches, today } = params;
+  const { batchCount, regularCycles, gridCycles, detectedStatus, latestEndDate, dropInAmount, sortedBatches, today, regFee: regFeeParam, gstRate: gstRateParam } = params;
+  const effRegFee = regFeeParam ?? REG_FEE;
+  const effGstRate = gstRateParam ?? GST_RATE;
   const planKey = getPlanKey(regularCycles, gridCycles);
   const fixedTotal = PLAN_FIXED_TOTALS[planKey];
   const isFixedPricePlan = fixedTotal !== undefined;
