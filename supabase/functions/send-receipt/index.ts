@@ -28,12 +28,13 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
+    const orgId = await getDefaultOrgId(supabase);
 
     // Check test mode
     const { data: testSetting } = await supabase
       .from("system_settings")
       .select("value")
-      .eq("organization_id", 1)
+      .eq("organization_id", orgId)
       .eq("key", "test_mode")
       .single();
 
@@ -43,7 +44,7 @@ Deno.serve(async (req) => {
 
     if (isTestMode) {
       await supabase.from("notification_log").insert({
-        organization_id: 1,
+        organization_id: orgId,
         channel,
         recipient,
         template_name: template_name || "payment-receipt",
