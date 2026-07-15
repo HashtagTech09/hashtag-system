@@ -108,7 +108,7 @@ Deno.serve(async (req) => {
     }
 
     await supabase.from("notification_log").insert({
-      organization_id: 1,
+      organization_id: orgId,
       channel,
       recipient,
       template_name: template_name || "payment-receipt",
