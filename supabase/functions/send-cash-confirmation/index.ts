@@ -76,8 +76,9 @@ Deno.serve(async (req) => {
     const resBody = await res.text();
     const success = res.ok;
 
+    const orgId = await getDefaultOrgId(supabase);
     await supabase.from("notification_log").insert({
-      organization_id: 1,
+      organization_id: orgId,
       channel: "email",
       recipient: staff_email,
       template_name: "cash-confirmation",
