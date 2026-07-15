@@ -81,7 +81,7 @@ Deno.serve(async (req) => {
 
     // Create pending payment
     const { data: payment, error: payErr } = await supabase.from("payments").insert({
-      organization_id: organization_id || 1,
+      organization_id: organization_id || await getDefaultOrgId(supabase),
       student_id,
       amount: amount || 0,
       gst: gst || 0,
