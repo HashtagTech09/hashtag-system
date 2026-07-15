@@ -182,7 +182,7 @@ export function computeFeeBreakdown(params: {
   const todayStr = today || todayIST();
   let applyRegFee = detectedStatus === "NEW" || detectedStatus === "REV" || (detectedStatus === "REN" && latestEndDate ? todayStr > latestEndDate : false);
   if (isFixedPricePlan) applyRegFee = false;
-  const regFee = applyRegFee ? REG_FEE : 0;
+  const regFee = applyRegFee ? effRegFee : 0;
   const isLateRenewal = detectedStatus === "REN" && latestEndDate ? todayStr > latestEndDate : false;
 
   let perBatchFee: number;
@@ -190,7 +190,7 @@ export function computeFeeBreakdown(params: {
   let totalBatchFee: number;
 
   if (isFixedPricePlan) {
-    perBatchFee = Math.round(fixedTotal / (1 + GST_RATE));
+    perBatchFee = Math.round(fixedTotal / (1 + effGstRate));
   } else {
     perBatchFee = (regularCycles * REGULAR_PRICE) + (gridCycles * GRID_PRICE);
   }
@@ -216,7 +216,7 @@ export function computeFeeBreakdown(params: {
   discountAmount = (perBatchFee * batchCount) - totalBatchFee;
 
   const subtotal = Math.max(0, totalBatchFee + regFee - dropInAmount);
-  const gst = Math.round(subtotal * GST_RATE);
+  const gst = Math.round(subtotal * effGstRate);
   let total = subtotal + gst;
 
   if (!isFixedPricePlan) {
