@@ -150,12 +150,41 @@ function computeFeeBreakdown(params: {
   return { batchCount, perBatchFee, discountAmount, totalBatchFee, regFee, dropInAdj: dropInAmount, subtotal, gst, total, applyRegFee, isFixedPricePlan, planKey, batchAllocations };
 }
 
-function computePaymentAllocations(sortedBatches: { id: number; studio_id: number | null }[], perBatchFee: number, discountPct: number) {
-  if (!sortedBatches.length) return [];
-  const discounted = Math.round(perBatchFee * (1 - discountPct));
-  return sortedBatches.map((b, idx) => ({
-    batch_id: b.id, studio_id: b.studio_id, allocated_amount: idx === 0 ? perBatchFee : discounted, is_primary: idx === 0,
+function allocateCollectedAmount<T extends { allocated_amount: number; is_primary?: boolean }>(allocations: T[], collectedAmount?: number): T[] {
+  if (!allocations.length || collectedAmount === undefined || collectedAmount === null) return allocations;
+  const totalCollected = Math.round(Number(collectedAmount) || 0);
+  if (totalCollected <= 0) return allocations;
+  const baseTotal = allocations.reduce((sum, allocation) => sum + Number(allocation.allocated_amount || 0), 0);
+  if (baseTotal <= 0) {
+    const equalShare = Math.floor(totalCollected / allocations.length);
+    const remainder = totalCollected - (equalShare * allocations.length);
+    return allocations.map((allocation, idx) => ({ ...allocation, allocated_amount: equalShare + (idx === 0 ? remainder : 0) }));
+  }
+  const scaled = allocations.map((allocation) => ({
+    ...allocation,
+    allocated_amount: Math.round((Number(allocation.allocated_amount || 0) / baseTotal) * totalCollected),
   }));
+  const scaledTotal = scaled.reduce((sum, allocation) => sum + allocation.allocated_amount, 0);
+  const roundingDiff = totalCollected - scaledTotal;
+  if (roundingDiff !== 0) {
+    const primaryIndex = Math.max(0, scaled.findIndex((allocation) => allocation.is_primary));
+    scaled[primaryIndex] = { ...scaled[primaryIndex], allocated_amount: scaled[primaryIndex].allocated_amount + roundingDiff };
+  }
+  return scaled;
+}
+
+function computePaymentAllocations(sortedBatches: { id: number; studio_id: number | null }[], perBatchFee: number, discountPct: number, collectedAmount?: number) {
+  if (!sortedBatches.length) return [];
+  const baseAllocations = sortedBatches.map((b, idx) => {
+    const effectiveDiscount = idx === 0 ? 0 : (discountPct > 0 ? discountPct : getBatchDiscount(idx + 1));
+    return {
+      batch_id: b.id,
+      studio_id: b.studio_id,
+      allocated_amount: Math.round(perBatchFee * (1 - effectiveDiscount)),
+      is_primary: idx === 0,
+    };
+  });
+  return allocateCollectedAmount(baseAllocations, collectedAmount);
 }
 
 // ── Main handler ─────────────────────────────────────────────────────
@@ -342,7 +371,7 @@ Deno.serve(async (req) => {
 
       const allocations = computePaymentAllocations(
         sortedBatches.map((b: any) => ({ id: b.id, studio_id: b.studio_id })),
-        breakdown.perBatchFee, 0,
+        breakdown.perBatchFee, 0, breakdown.total,
       );
 
       if (payment_mode === "razorpay") {

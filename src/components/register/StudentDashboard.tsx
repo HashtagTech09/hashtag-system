@@ -11,7 +11,7 @@ import type { PlanCycle, SubPlan, AddBatchBreakdown } from "@/lib/enrollmentUtil
 import { allocateCyclesForPlan, insertEnrollmentCycles } from "@/lib/cycleUtils";
 import FeeBreakdownDisplay from "./FeeBreakdown";
 import { initiateRazorpayPayment } from "@/lib/razorpayUtils";
-import { sortBatchesByHierarchy, computePaymentAllocations } from "@/lib/styleHierarchy";
+import { sortBatchesByHierarchy, computePaymentAllocations, allocateCollectedAmount } from "@/lib/styleHierarchy";
 import { MapPin, ChevronRight, ShoppingCart, X, Check, ArrowLeft, Trash2 } from "lucide-react";
 
 /** Format "2026-07-31" → "31 Jul'26" */
@@ -262,7 +262,7 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
     try {
       const allocations = computePaymentAllocations(
         sortedSelectedBatches.map(b => ({ id: b.id, studio_id: b.studio_id })),
-        breakdown.perBatchFee, breakdown.discountPct
+        breakdown.perBatchFee, breakdown.discountPct, breakdown.total
       );
 
       if (paymentMode === "razorpay") {
@@ -465,13 +465,22 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
       const chargedAllocations = addBatchBreakdown.batchAllocations.filter(a => a.amount > 0);
       if (chargedAllocations.length > 0) {
         const batchStudioMap = batches.reduce((m: Record<number, number | null>, b: any) => { m[b.id] = b.studio_id; return m; }, {});
-        await supabase.from("payment_allocations").insert(
+        const collectedAllocations = allocateCollectedAmount(
           chargedAllocations.map((a, idx) => ({
-            payment_id: payment.id,
             batch_id: a.batch_id,
             studio_id: batchStudioMap[a.batch_id] || null,
             allocated_amount: a.amount,
             is_primary: idx === 0,
+          })),
+          addBatchBreakdown.total,
+        );
+        await supabase.from("payment_allocations").insert(
+          collectedAllocations.map((a) => ({
+            payment_id: payment.id,
+            batch_id: a.batch_id,
+            studio_id: a.studio_id,
+            allocated_amount: a.allocated_amount,
+            is_primary: a.is_primary,
           }))
         );
       }

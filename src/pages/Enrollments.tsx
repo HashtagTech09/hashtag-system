@@ -21,6 +21,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useScopedStudents } from "@/hooks/useScopedStudents";
 import { useTestDate } from "@/contexts/TestDateContext";
 import { Textarea } from "@/components/ui/textarea";
+import { allocateCollectedAmount } from "@/lib/styleHierarchy";
 
 async function fetchAll<T>(buildQuery: () => any): Promise<T[]> {
   const pageSize = 1000;
@@ -637,6 +638,23 @@ const EnrollmentsPage = () => {
     const { data: insertedEnrollments, error } = await supabase.from("enrollments").insert(enrollmentRecords).select();
     if (error) { toast.error("Enrollment failed"); return; }
 
+    const baseAllocations = form.batch_ids.map((batchId, idx) => {
+      const position = idx + 1;
+      const disc = position <= 1 ? 0 : ({ 2: 0.12, 3: 0.13, 4: 0.14 } as Record<number, number>)[position] ?? 0.15;
+      const batch = batches.find(b => b.id === Number(batchId));
+      return {
+        payment_id: payment.id,
+        batch_id: Number(batchId),
+        studio_id: batch?.studio_id || null,
+        allocated_amount: position === 1 ? breakdown.perBatchFee : Math.round(breakdown.perBatchFee * (1 - disc)),
+        is_primary: idx === 0,
+      };
+    });
+    const collectedAllocations = allocateCollectedAmount(baseAllocations, totalAmount);
+    if (collectedAllocations.length > 0) {
+      await supabase.from("payment_allocations").insert(collectedAllocations);
+    }
+
     if (insertedEnrollments && form.start_cycle_id && form.end_cycle_id) {
       const plan = subPlans.find(p => p.id === Number(form.subscription_plan_id));
       if (plan) {
@@ -786,6 +804,23 @@ const EnrollmentsPage = () => {
 
     const { data: insertedAddBatch, error } = await supabase.from("enrollments").insert(enrollmentRecords).select();
     if (error) { toast.error("Enrollment failed"); return; }
+
+    const addBaseAllocations = addBatchForm.new_batch_ids.map((batchId, idx) => {
+      const position = existingBatches.length + 1 + idx;
+      const disc = position <= 1 ? 0 : ({ 2: 0.12, 3: 0.13, 4: 0.14 } as Record<number, number>)[position] ?? 0.15;
+      const batch = batches.find(b => b.id === Number(batchId));
+      return {
+        payment_id: payment.id,
+        batch_id: Number(batchId),
+        studio_id: batch?.studio_id || null,
+        allocated_amount: Math.round(addBatchFee.perBatchFee * (1 - disc)),
+        is_primary: idx === 0,
+      };
+    });
+    const addCollectedAllocations = allocateCollectedAmount(addBaseAllocations, addBatchFee.total);
+    if (addCollectedAllocations.length > 0) {
+      await supabase.from("payment_allocations").insert(addCollectedAllocations);
+    }
 
     // Write enrollment_cycles for add-batch enrollments
     if (insertedAddBatch && existingEnrollment?.start_cycle_id && existingEnrollment?.end_cycle_id) {

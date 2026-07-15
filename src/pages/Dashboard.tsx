@@ -59,7 +59,11 @@ interface Enrollment {
 }
 interface Payment {
   id: number; amount: number; gst: number | null; final_amount: number | null;
-  payment_mode: string | null;
+  payment_mode: string | null; created_at: string;
+}
+interface PaymentAllocation {
+  payment_id: number; batch_id: number; studio_id: number | null;
+  allocated_amount: number; is_primary: boolean;
 }
 interface DropIn {
   id: number; amount: number; is_adjusted: boolean; payment_id: number | null; created_at: string;
@@ -78,6 +82,7 @@ const Dashboard = () => {
   const [batches, setBatches] = useState<Batch[]>([]);
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [paymentAllocations, setPaymentAllocations] = useState<PaymentAllocation[]>([]);
   const [dropIns, setDropIns] = useState<DropIn[]>([]);
   const [dropInPayments, setDropInPayments] = useState<Payment[]>([]);
   const [allCycles, setAllCycles] = useState<PlanCycle[]>([]);
@@ -127,7 +132,7 @@ const Dashboard = () => {
       }
       if (!scope.unrestricted) {
         if (scope.batchIds.length === 0) {
-          setBatches([]); setEnrollments([]); setPayments([]); setDropIns([]); setDropInPayments([]);
+          setBatches([]); setEnrollments([]); setPayments([]); setPaymentAllocations([]); setDropIns([]); setDropInPayments([]);
           setRenewableCount(0); setLoading(false); return;
         }
         batchQuery = batchQuery.in("id", scope.batchIds);
@@ -138,7 +143,7 @@ const Dashboard = () => {
       const batchIds = batchList.map(b => b.id);
 
       if (batchIds.length === 0) {
-        setEnrollments([]); setPayments([]); setDropIns([]); setDropInPayments([]);
+        setEnrollments([]); setPayments([]); setPaymentAllocations([]); setDropIns([]); setDropInPayments([]);
         setRenewableCount(0); setLoading(false);
         return;
       }
@@ -163,12 +168,20 @@ const Dashboard = () => {
 
       setEnrollments(enrollList);
 
-      const paymentIds = enrollList.map(e => e.payment_id).filter(Boolean) as number[];
+      const paymentIds = [...new Set(enrollList.map(e => e.payment_id).filter(Boolean) as number[])];
+      const enrolledBatchIds = [...new Set(enrollList.map(e => e.batch_id))];
       if (paymentIds.length > 0) {
-        const payRes = await supabase.from("payments").select("id, amount, gst, final_amount, payment_mode").in("id", paymentIds);
+        const payRes = await supabase.from("payments").select("id, amount, gst, final_amount, payment_mode, created_at").in("id", paymentIds);
         setPayments((payRes.data || []) as Payment[]);
+        const allocationRes = await supabase
+          .from("payment_allocations")
+          .select("payment_id, batch_id, studio_id, allocated_amount, is_primary")
+          .in("payment_id", paymentIds)
+          .in("batch_id", enrolledBatchIds);
+        setPaymentAllocations((allocationRes.data || []) as PaymentAllocation[]);
       } else {
         setPayments([]);
+        setPaymentAllocations([]);
       }
 
       const sessionRes = await supabase
@@ -186,7 +199,7 @@ const Dashboard = () => {
         setDropIns(diList);
         const diPayIds = diList.map(d => d.payment_id).filter(Boolean) as number[];
         if (diPayIds.length > 0) {
-          const diPayRes = await supabase.from("payments").select("id, amount, gst, final_amount, payment_mode").in("id", diPayIds);
+          const diPayRes = await supabase.from("payments").select("id, amount, gst, final_amount, payment_mode, created_at").in("id", diPayIds);
           setDropInPayments((diPayRes.data || []) as Payment[]);
         } else { setDropInPayments([]); }
       } else {
@@ -330,17 +343,44 @@ const Dashboard = () => {
       if (e.displayStatus === "NEW") row.NEW++;
       else if (e.displayStatus === "REN") row.REN++;
       else if (e.displayStatus === "REV") row.REV++;
-      if (e.payment_id) {
-        const p = paymentMap.get(e.payment_id);
-        if (p) {
-          row.gross += Number(p.amount) || 0;
-          row.gst += Number(p.gst) || 0;
-          row.total += Number(p.final_amount) || 0;
-          const mode = (p.payment_mode || "").toLowerCase();
-          if (mode === "cash") row.cash += Number(p.final_amount) || 0;
-          else if (mode === "razorpay") row.razorpay += Number(p.final_amount) || 0;
-        }
-      }
+    });
+    const countedPaymentIds = new Set(
+      classifiedEnrollments
+        .filter(e => e.displayStatus !== "C/F" && e.payment_id)
+        .map(e => e.payment_id as number)
+    );
+    const allocatedPaymentIds = new Set<number>();
+    paymentAllocations.forEach(allocation => {
+      if (!countedPaymentIds.has(allocation.payment_id)) return;
+      const payment = paymentMap.get(allocation.payment_id);
+      if (!payment) return;
+      const allocatedTotal = Number(allocation.allocated_amount || 0);
+      if (allocatedTotal <= 0) return;
+      const finalAmount = Number(payment.final_amount || payment.amount || 0);
+      const allocatedGst = finalAmount > 0 ? Math.round((Number(payment.gst || 0) / finalAmount) * allocatedTotal) : 0;
+      const date = toISTDateString(payment.created_at);
+      const row = getOrCreate(date);
+      row.gross += allocatedTotal - allocatedGst;
+      row.gst += allocatedGst;
+      row.total += allocatedTotal;
+      const mode = (payment.payment_mode || "").toLowerCase();
+      if (mode === "cash") row.cash += allocatedTotal;
+      else if (mode === "razorpay") row.razorpay += allocatedTotal;
+      allocatedPaymentIds.add(allocation.payment_id);
+    });
+    countedPaymentIds.forEach(paymentId => {
+      if (allocatedPaymentIds.has(paymentId)) return;
+      const payment = paymentMap.get(paymentId);
+      if (!payment) return;
+      const date = toISTDateString(payment.created_at);
+      const row = getOrCreate(date);
+      const total = Number(payment.final_amount || payment.amount || 0);
+      row.gross += Number(payment.amount) || Math.max(0, total - Number(payment.gst || 0));
+      row.gst += Number(payment.gst) || 0;
+      row.total += total;
+      const mode = (payment.payment_mode || "").toLowerCase();
+      if (mode === "cash") row.cash += total;
+      else if (mode === "razorpay") row.razorpay += total;
     });
     dropIns.forEach(d => {
       const date = toISTDateString(d.created_at);
@@ -360,7 +400,7 @@ const Dashboard = () => {
       }
     });
     return Array.from(map.values()).sort((a, b) => b.date.localeCompare(a.date));
-  }, [classifiedEnrollments, dropIns, paymentMap]);
+  }, [classifiedEnrollments, dropIns, paymentAllocations, paymentMap]);
 
   const dateTotals = useMemo(() => {
     return dateWise.reduce((acc, r) => ({

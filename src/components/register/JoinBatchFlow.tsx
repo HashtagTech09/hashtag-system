@@ -199,7 +199,7 @@ export default function JoinBatchFlow() {
 
       const allocations = computePaymentAllocations(
         sortedSelectedBatches.map(b => ({ id: b.id, studio_id: b.studio_id })),
-        breakdown.perBatchFee, breakdown.discountPct
+        breakdown.perBatchFee, breakdown.discountPct, breakdown.total
       );
 
       const planName = subPlans.find(p => p.id === Number(selectedPlanId))?.name || "";
