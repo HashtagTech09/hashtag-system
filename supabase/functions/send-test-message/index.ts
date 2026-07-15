@@ -5,6 +5,14 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+let CACHED_ORG_ID: number | null = null;
+async function getDefaultOrgId(supabase: any): Promise<number> {
+  if (CACHED_ORG_ID !== null) return CACHED_ORG_ID;
+  const { data } = await supabase.from("system_settings").select("value").eq("key", "default_organization_id").limit(1).maybeSingle();
+  CACHED_ORG_ID = Number(data?.value ?? 1);
+  return CACHED_ORG_ID;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
