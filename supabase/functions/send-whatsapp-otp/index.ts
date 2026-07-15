@@ -83,7 +83,7 @@ Deno.serve(async (req) => {
     const resBody = await res.text();
 
     await supabase.from("notification_log").insert({
-      organization_id: 1,
+      organization_id: orgId,
       channel: "whatsapp",
       recipient: phone,
       template_name: "otp",
