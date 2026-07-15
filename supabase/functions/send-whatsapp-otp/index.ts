@@ -33,11 +33,13 @@ Deno.serve(async (req) => {
 
     await supabase.from("whatsapp_otp").insert({ phone, otp, expires_at: expiresAt });
 
+    const orgId = await getDefaultOrgId(supabase);
+
     // Check test mode
     const { data: testSetting } = await supabase
       .from("system_settings")
       .select("value")
-      .eq("organization_id", 1)
+      .eq("organization_id", orgId)
       .eq("key", "test_mode")
       .single();
 
@@ -45,7 +47,7 @@ Deno.serve(async (req) => {
 
     if (isTestMode) {
       await supabase.from("notification_log").insert({
-        organization_id: 1,
+        organization_id: orgId,
         channel: "whatsapp",
         recipient: phone,
         template_name: "otp",
