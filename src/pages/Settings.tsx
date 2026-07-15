@@ -98,6 +98,10 @@ const SettingsPage = () => {
               <Input type="number" value={settings.drop_in_fee || ""} onChange={(e) => setSettings({ ...settings, drop_in_fee: e.target.value })} />
             </div>
             <div>
+              <Label>GST %</Label>
+              <Input type="number" value={settings.gst_percent || ""} onChange={(e) => setSettings({ ...settings, gst_percent: e.target.value })} />
+            </div>
+            <div>
               <Label>Renewal Grace Days</Label>
               <Input type="number" value={settings.renewal_grace_days || ""} onChange={(e) => setSettings({ ...settings, renewal_grace_days: e.target.value })} />
             </div>

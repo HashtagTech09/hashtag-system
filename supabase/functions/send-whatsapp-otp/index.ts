@@ -5,6 +5,14 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+let CACHED_ORG_ID: number | null = null;
+async function getDefaultOrgId(supabase: any): Promise<number> {
+  if (CACHED_ORG_ID !== null) return CACHED_ORG_ID;
+  const { data } = await supabase.from("system_settings").select("value").eq("key", "default_organization_id").limit(1).maybeSingle();
+  CACHED_ORG_ID = Number(data?.value ?? 1);
+  return CACHED_ORG_ID;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -25,11 +33,13 @@ Deno.serve(async (req) => {
 
     await supabase.from("whatsapp_otp").insert({ phone, otp, expires_at: expiresAt });
 
+    const orgId = await getDefaultOrgId(supabase);
+
     // Check test mode
     const { data: testSetting } = await supabase
       .from("system_settings")
       .select("value")
-      .eq("organization_id", 1)
+      .eq("organization_id", orgId)
       .eq("key", "test_mode")
       .single();
 
@@ -37,7 +47,7 @@ Deno.serve(async (req) => {
 
     if (isTestMode) {
       await supabase.from("notification_log").insert({
-        organization_id: 1,
+        organization_id: orgId,
         channel: "whatsapp",
         recipient: phone,
         template_name: "otp",
@@ -73,7 +83,7 @@ Deno.serve(async (req) => {
     const resBody = await res.text();
 
     await supabase.from("notification_log").insert({
-      organization_id: 1,
+      organization_id: orgId,
       channel: "whatsapp",
       recipient: phone,
       template_name: "otp",

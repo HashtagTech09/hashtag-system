@@ -26,9 +26,23 @@ function todayIST(): string {
 // ── Fee / enrollment logic (ported from src/lib) ─────────────────────
 const REGULAR_PRICE = 3200;
 const GRID_PRICE = 7667;
-const REG_FEE = 424;
-const GST_RATE = 0.18;
 const PLAN_FIXED_TOTALS: Record<string, number> = { "5R1G": 26500, "10R2G": 50000 };
+
+// ── Settings loader (cached across warm invocations) ─────────────────
+let CACHED_SETTINGS: { orgId: number; regFee: number; dropInFee: number; gstRate: number } | null = null;
+async function loadSettings(supabase: any) {
+  if (CACHED_SETTINGS) return CACHED_SETTINGS;
+  const { data } = await supabase.from("system_settings").select("key, value");
+  const map: Record<string, string> = {};
+  (data || []).forEach((r: any) => { map[r.key] = r.value; });
+  CACHED_SETTINGS = {
+    orgId: Number(map.default_organization_id ?? 1),
+    regFee: Number(map.registration_fee ?? 424),
+    dropInFee: Number(map.drop_in_fee ?? 500),
+    gstRate: Number(map.gst_percent ?? 18) / 100,
+  };
+  return CACHED_SETTINGS;
+}
 const STYLE_HIERARCHY: Record<string, number> = { Jazz: 1, Ballet: 2, Modern: 3, "Hip Hop": 4, Heels: 5 };
 
 function getStylePriority(s: string) { return STYLE_HIERARCHY[s] ?? 99; }
@@ -109,17 +123,18 @@ function computeFeeBreakdown(params: {
   batchCount: number; regularCycles: number; gridCycles: number;
   detectedStatus: string; latestEndDate: string | null; dropInAmount: number;
   sortedBatches?: { id: number; name: string; style_base?: string | null }[];
+  regFee: number; gstRate: number;
 }) {
-  const { batchCount, regularCycles, gridCycles, detectedStatus, latestEndDate, dropInAmount, sortedBatches } = params;
+  const { batchCount, regularCycles, gridCycles, detectedStatus, latestEndDate, dropInAmount, sortedBatches, regFee: regFeeVal, gstRate } = params;
   const planKey = getPlanKey(regularCycles, gridCycles);
   const fixedTotal = PLAN_FIXED_TOTALS[planKey];
   const isFixedPricePlan = fixedTotal !== undefined;
   const today = todayIST();
   let applyRegFee = detectedStatus === "NEW" || detectedStatus === "REV" || (detectedStatus === "REN" && latestEndDate ? today > latestEndDate : false);
   if (isFixedPricePlan) applyRegFee = false;
-  const regFee = applyRegFee ? REG_FEE : 0;
+  const regFee = applyRegFee ? regFeeVal : 0;
   let perBatchFee: number;
-  if (isFixedPricePlan) { perBatchFee = Math.round(fixedTotal / (1 + GST_RATE)); }
+  if (isFixedPricePlan) { perBatchFee = Math.round(fixedTotal / (1 + gstRate)); }
   else { perBatchFee = (regularCycles * REGULAR_PRICE) + (gridCycles * GRID_PRICE); }
   const batchAllocations = (sortedBatches || []).map((b, idx) => {
     const disc = getBatchDiscount(idx + 1);
@@ -129,7 +144,7 @@ function computeFeeBreakdown(params: {
   const totalBatchFee = batchAllocations.length > 0 ? batchAllocations.reduce((s, a) => s + a.amount, 0) : perBatchFee * batchCount;
   const discountAmount = (perBatchFee * batchCount) - totalBatchFee;
   const subtotal = Math.max(0, totalBatchFee + regFee - dropInAmount);
-  const gst = Math.round(subtotal * GST_RATE);
+  const gst = Math.round(subtotal * gstRate);
   let total = subtotal + gst;
   if (!isFixedPricePlan) total = roundToNearest100(total);
   return { batchCount, perBatchFee, discountAmount, totalBatchFee, regFee, dropInAdj: dropInAmount, subtotal, gst, total, applyRegFee, isFixedPricePlan, planKey, batchAllocations };
@@ -152,22 +167,24 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
+    const settings = await loadSettings(supabase);
+    const orgId = settings.orgId;
 
     // ── GET-CATALOG ──────────────────────────────────────────────
     if (action === "get-catalog") {
-      const [studios, batches, cycles, plans, planCycleLinks, settings] = await Promise.all([
-        supabase.from("studios").select("*").eq("organization_id", 1),
-        supabase.from("batches").select("*").eq("organization_id", 1),
-        supabase.from("plan_cycles").select("*").eq("organization_id", 1).order("start_date"),
-        supabase.from("subscription_plans").select("*").eq("organization_id", 1).eq("is_active", true).order("id"),
+      const [studios, batches, cycles, plans, planCycleLinks, allSettings] = await Promise.all([
+        supabase.from("studios").select("*").eq("organization_id", orgId),
+        supabase.from("batches").select("*").eq("organization_id", orgId),
+        supabase.from("plan_cycles").select("*").eq("organization_id", orgId).order("start_date"),
+        supabase.from("subscription_plans").select("*").eq("organization_id", orgId).eq("is_active", true).order("id"),
         supabase.from("subscription_plan_cycles").select("*"),
-        supabase.from("system_settings").select("key, value").eq("organization_id", 1),
+        supabase.from("system_settings").select("key, value").eq("organization_id", orgId),
       ]);
       return json({
         studios: studios.data, batches: batches.data,
         plan_cycles: cycles.data, subscription_plans: plans.data,
         subscription_plan_cycles: planCycleLinks.data,
-        settings: settings.data,
+        settings: allSettings.data,
       });
     }
 
@@ -180,9 +197,9 @@ Deno.serve(async (req) => {
       const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
       await supabase.from("whatsapp_otp").insert({ phone, otp, expires_at: expiresAt });
 
-      const { data: testSetting } = await supabase.from("system_settings").select("value").eq("organization_id", 1).eq("key", "test_mode").single();
+      const { data: testSetting } = await supabase.from("system_settings").select("value").eq("organization_id", orgId).eq("key", "test_mode").single();
       if (testSetting?.value === "true") {
-        await supabase.from("notification_log").insert({ organization_id: 1, channel: "whatsapp", recipient: phone, template_name: "otp", payload: { otp }, status: "test_logged" });
+        await supabase.from("notification_log").insert({ organization_id: orgId, channel: "whatsapp", recipient: phone, template_name: "otp", payload: { otp }, status: "test_logged" });
         return json({ success: true, test_mode: true, test_otp: otp });
       }
 
@@ -196,7 +213,7 @@ Deno.serve(async (req) => {
         body: JSON.stringify({ countryCode: "+91", phoneNumber: phoneNum, callbackData: "otp", type: "Template", template: { name: "login_otp", languageCode: "en", bodyValues: [otp] } }),
       });
       const resBody = await res.text();
-      await supabase.from("notification_log").insert({ organization_id: 1, channel: "whatsapp", recipient: phone, template_name: "otp", payload: { otp: "***" }, status: res.ok ? "sent" : "failed", error_message: res.ok ? null : resBody });
+      await supabase.from("notification_log").insert({ organization_id: orgId, channel: "whatsapp", recipient: phone, template_name: "otp", payload: { otp: "***" }, status: res.ok ? "sent" : "failed", error_message: res.ok ? null : resBody });
       if (!res.ok) return json({ success: false, error: "Failed to send OTP" });
       return json({ success: true });
     }
@@ -213,7 +230,7 @@ Deno.serve(async (req) => {
       await supabase.from("whatsapp_otp").update({ verified: true }).eq("id", record.id);
 
       // Look up existing student
-      const { data: users } = await supabase.from("users").select("id").eq("organization_id", 1).ilike("phone", `%${phone.slice(-10)}`);
+      const { data: users } = await supabase.from("users").select("id").eq("organization_id", orgId).ilike("phone", `%${phone.slice(-10)}`);
       let student = null;
       let user = null;
       if (users?.length) {
@@ -230,15 +247,15 @@ Deno.serve(async (req) => {
       if (!phone) return json({ error: "Phone required" }, 400);
 
       // Check existing
-      const { data: existing } = await supabase.from("users").select("id").eq("organization_id", 1).ilike("phone", `%${phone.slice(-10)}`);
+      const { data: existing } = await supabase.from("users").select("id").eq("organization_id", orgId).ilike("phone", `%${phone.slice(-10)}`);
       if (existing?.length) {
         const { data: students } = await supabase.from("students").select("*, users(*)").eq("user_id", existing[0].id);
         if (students?.length) return json({ student: students[0], user: students[0].users, existing: true });
       }
 
-      const { data: newUser, error: ue } = await supabase.from("users").insert({ organization_id: 1, name: name.trim(), phone }).select().single();
+      const { data: newUser, error: ue } = await supabase.from("users").insert({ organization_id: orgId, name: name.trim(), phone }).select().single();
       if (ue) return json({ error: ue.message }, 500);
-      const { data: newStudent, error: se } = await supabase.from("students").insert({ organization_id: 1, name: name.trim(), phone, user_id: newUser.id }).select().single();
+      const { data: newStudent, error: se } = await supabase.from("students").insert({ organization_id: orgId, name: name.trim(), phone, user_id: newUser.id }).select().single();
       if (se) return json({ error: se.message }, 500);
       return json({ student: newStudent, user: newUser, existing: false });
     }
@@ -249,9 +266,9 @@ Deno.serve(async (req) => {
       if (!batch_ids?.length || !plan_id) return json({ error: "batch_ids and plan_id required" }, 400);
 
       const [cycleRes, planRes, batchRes] = await Promise.all([
-        supabase.from("plan_cycles").select("*").eq("organization_id", 1).order("start_date"),
+        supabase.from("plan_cycles").select("*").eq("organization_id", orgId).order("start_date"),
         supabase.from("subscription_plans").select("*").eq("id", plan_id).single(),
-        supabase.from("batches").select("*").eq("organization_id", 1).in("id", batch_ids),
+        supabase.from("batches").select("*").eq("organization_id", orgId).in("id", batch_ids),
       ]);
       const cycles = (cycleRes.data || []) as PlanCycle[];
       const plan = planRes.data as SubPlan;
@@ -279,6 +296,7 @@ Deno.serve(async (req) => {
         gridCycles: assignment.gridCount,
         detectedStatus, latestEndDate, dropInAmount: 0,
         sortedBatches: sortedBatches.map(b => ({ id: b.id, name: b.name, style_base: b.style_base })),
+        regFee: settings.regFee, gstRate: settings.gstRate,
       });
 
       return json({ breakdown, assignment: { startCycle: assignment.startCycle, endCycle: assignment.endCycle, regularCount: assignment.regularCount, gridCount: assignment.gridCount }, detectedStatus });
@@ -290,9 +308,9 @@ Deno.serve(async (req) => {
       if (!student_id || !batch_ids?.length || !plan_id) return json({ error: "student_id, batch_ids, plan_id required" }, 400);
 
       const [cycleRes, planRes, batchRes] = await Promise.all([
-        supabase.from("plan_cycles").select("*").eq("organization_id", 1).order("start_date"),
+        supabase.from("plan_cycles").select("*").eq("organization_id", orgId).order("start_date"),
         supabase.from("subscription_plans").select("*").eq("id", plan_id).single(),
-        supabase.from("batches").select("*").eq("organization_id", 1).in("id", batch_ids),
+        supabase.from("batches").select("*").eq("organization_id", orgId).in("id", batch_ids),
       ]);
       const cycles = (cycleRes.data || []) as PlanCycle[];
       const plan = planRes.data as SubPlan;
@@ -311,10 +329,11 @@ Deno.serve(async (req) => {
         batchCount: batch_ids.length, regularCycles: assignment.regularCount, gridCycles: assignment.gridCount,
         detectedStatus, latestEndDate, dropInAmount: 0,
         sortedBatches: sortedBatches.map(b => ({ id: b.id, name: b.name, style_base: b.style_base })),
+        regFee: settings.regFee, gstRate: settings.gstRate,
       });
 
       const enrollmentRecords = sortedBatches.map((batch: any) => ({
-        organization_id: 1, student_id, batch_id: batch.id,
+        organization_id: orgId, student_id, batch_id: batch.id,
         status_type: detectedStatus, registration_fee_applied: breakdown.applyRegFee, late_renewal: false,
         start_date: assignment.startCycle.start_date, end_date: assignment.endCycle.end_date || assignment.startCycle.start_date,
         subscription_plan_id: plan_id, start_cycle_id: assignment.startCycle.id, end_cycle_id: assignment.endCycle.id,
@@ -345,7 +364,7 @@ Deno.serve(async (req) => {
       const { data: staff } = await supabase.from("users").select("name, email").eq("id", staff_id).single();
 
       const { data: cashReq, error: cashErr } = await supabase.from("cash_payment_requests").insert({
-        organization_id: 1, student_id, staff_user_id: staff_id,
+        organization_id: orgId, student_id, staff_user_id: staff_id,
         amount: breakdown.subtotal, gst: breakdown.gst, final_amount: breakdown.total,
         enrollment_data: { enrollments: enrollmentRecords, payment_allocations: allocations },
         batch_ids,

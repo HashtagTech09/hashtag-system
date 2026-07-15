@@ -9,7 +9,9 @@ export function getBatchDiscount(position: number): number {
 
 export const REGULAR_PRICE = 3200;
 export const GRID_PRICE = 7667;
-export const REG_FEE = 424; // Base registration fee (₹500 after 18% GST)
+/** @deprecated Use the value from system_settings.registration_fee (loaded at runtime). Kept as a fallback only. */
+export const REG_FEE = 424;
+/** @deprecated Use system_settings.gst_percent / 100. Kept as a fallback only. */
 export const GST_RATE = 0.18;
 
 /** Fixed after-GST per-batch totals for specific plans (hidden discount) */
@@ -165,8 +167,14 @@ export function computeFeeBreakdown(params: {
   /** Sorted batches by hierarchy (highest priority first) */
   sortedBatches?: { id: number; name: string; style_base?: string | null }[];
   today?: string;
+  /** Registration fee from system_settings. Defaults to REG_FEE constant. */
+  regFee?: number;
+  /** GST rate (0-1). Defaults to GST_RATE constant. */
+  gstRate?: number;
 }): FeeBreakdown {
-  const { batchCount, regularCycles, gridCycles, detectedStatus, latestEndDate, dropInAmount, sortedBatches, today } = params;
+  const { batchCount, regularCycles, gridCycles, detectedStatus, latestEndDate, dropInAmount, sortedBatches, today, regFee: regFeeParam, gstRate: gstRateParam } = params;
+  const effRegFee = regFeeParam ?? REG_FEE;
+  const effGstRate = gstRateParam ?? GST_RATE;
   const planKey = getPlanKey(regularCycles, gridCycles);
   const fixedTotal = PLAN_FIXED_TOTALS[planKey];
   const isFixedPricePlan = fixedTotal !== undefined;
@@ -174,7 +182,7 @@ export function computeFeeBreakdown(params: {
   const todayStr = today || todayIST();
   let applyRegFee = detectedStatus === "NEW" || detectedStatus === "REV" || (detectedStatus === "REN" && latestEndDate ? todayStr > latestEndDate : false);
   if (isFixedPricePlan) applyRegFee = false;
-  const regFee = applyRegFee ? REG_FEE : 0;
+  const regFee = applyRegFee ? effRegFee : 0;
   const isLateRenewal = detectedStatus === "REN" && latestEndDate ? todayStr > latestEndDate : false;
 
   let perBatchFee: number;
@@ -182,7 +190,7 @@ export function computeFeeBreakdown(params: {
   let totalBatchFee: number;
 
   if (isFixedPricePlan) {
-    perBatchFee = Math.round(fixedTotal / (1 + GST_RATE));
+    perBatchFee = Math.round(fixedTotal / (1 + effGstRate));
   } else {
     perBatchFee = (regularCycles * REGULAR_PRICE) + (gridCycles * GRID_PRICE);
   }
@@ -208,7 +216,7 @@ export function computeFeeBreakdown(params: {
   discountAmount = (perBatchFee * batchCount) - totalBatchFee;
 
   const subtotal = Math.max(0, totalBatchFee + regFee - dropInAmount);
-  const gst = Math.round(subtotal * GST_RATE);
+  const gst = Math.round(subtotal * effGstRate);
   let total = subtotal + gst;
 
   if (!isFixedPricePlan) {

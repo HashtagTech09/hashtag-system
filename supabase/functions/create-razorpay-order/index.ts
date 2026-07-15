@@ -8,6 +8,14 @@ const corsHeaders = {
 const PRIDE_STUDIOS = ["NDA", "RMG", "IPM", "SD", "GGN"];
 const PRUDENT_STUDIOS = ["ED", "RG", "PP", "AV", "DWK"];
 
+let CACHED_ORG_ID: number | null = null;
+async function getDefaultOrgId(supabase: any): Promise<number> {
+  if (CACHED_ORG_ID !== null) return CACHED_ORG_ID;
+  const { data } = await supabase.from("system_settings").select("value").eq("key", "default_organization_id").limit(1).maybeSingle();
+  CACHED_ORG_ID = Number(data?.value ?? 1);
+  return CACHED_ORG_ID;
+}
+
 function getAccount(studioCode: string): "pride" | "prudent" | null {
   const code = studioCode?.toUpperCase();
   if (PRIDE_STUDIOS.includes(code)) return "pride";
@@ -73,7 +81,7 @@ Deno.serve(async (req) => {
 
     // Create pending payment
     const { data: payment, error: payErr } = await supabase.from("payments").insert({
-      organization_id: organization_id || 1,
+      organization_id: organization_id || await getDefaultOrgId(supabase),
       student_id,
       amount: amount || 0,
       gst: gst || 0,
