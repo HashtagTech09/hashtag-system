@@ -64,18 +64,26 @@ export function getStartCycleIndex(planCycles: PlanCycle[], today?: string): num
   return futureIdx !== -1 ? futureIdx : 0;
 }
 
-/** Count-based greedy matching: walk calendar consuming cycles by type counts */
-export function isPlanValid(plan: SubPlan, planCycles: PlanCycle[], startCycleIndex: number): boolean {
+/** Count-based greedy matching: walk calendar consuming cycles by type counts. */
+export function matchPlanCycles(
+  plan: Pick<SubPlan, "total_regular_cycles" | "total_grid_cycles">,
+  planCycles: PlanCycle[],
+  startCycleIndex: number
+): PlanCycle[] | null {
   let neededRegular = plan.total_regular_cycles ?? 0;
   let neededGrid = plan.total_grid_cycles ?? 0;
-  if (neededRegular + neededGrid === 0) return false;
+  const totalNeeded = neededRegular + neededGrid;
+  if (totalNeeded === 0) return null;
 
+  const matched: PlanCycle[] = [];
   let calIdx = startCycleIndex;
   while ((neededRegular > 0 || neededGrid > 0) && calIdx < planCycles.length) {
     const cycle = planCycles[calIdx];
     if (cycle.plan_type === "regular" && neededRegular > 0) {
+      matched.push(cycle);
       neededRegular--;
     } else if (cycle.plan_type === "grid" && neededGrid > 0) {
+      matched.push(cycle);
       neededGrid--;
     } else {
       // Skip cycles whose type isn't needed
@@ -84,7 +92,13 @@ export function isPlanValid(plan: SubPlan, planCycles: PlanCycle[], startCycleIn
     }
     calIdx++;
   }
-  return neededRegular === 0 && neededGrid === 0;
+
+  return matched.length === totalNeeded ? matched : null;
+}
+
+/** Count-based greedy matching: walk calendar consuming cycles by type counts */
+export function isPlanValid(plan: SubPlan, planCycles: PlanCycle[], startCycleIndex: number): boolean {
+  return matchPlanCycles(plan, planCycles, startCycleIndex) !== null;
 }
 
 export interface CycleAssignment {
@@ -95,31 +109,39 @@ export interface CycleAssignment {
   matched: PlanCycle[];
 }
 
+function getCycleForDate(planCycles: PlanCycle[], date: string): PlanCycle | null {
+  return planCycles.find(c => c.start_date <= date && (c.end_date || "2099-12-31") >= date) || null;
+}
+
+function addDays(date: string, days: number): string {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d.toISOString().split("T")[0];
+}
+
+function isRenewalAcrossGridGap(latestEndDate: string, planCycles: PlanCycle[], today: string): boolean {
+  const latestCycle = getCycleForDate(planCycles, latestEndDate);
+  const targetCycle = getCycleForDate(planCycles, today) || planCycles[getStartCycleIndex(planCycles, today)];
+  if (!latestCycle || !targetCycle) return false;
+
+  const latestIdx = planCycles.findIndex(c => c.id === latestCycle.id);
+  const targetIdx = planCycles.findIndex(c => c.id === targetCycle.id);
+  if (latestIdx === -1 || targetIdx === -1 || targetIdx <= latestIdx) return false;
+
+  const skippedCycles = planCycles.slice(latestIdx + 1, targetIdx);
+  if (!skippedCycles.every(c => c.plan_type === "grid")) return false;
+
+  if (targetCycle.plan_type === "grid") return true;
+  if (targetCycle.plan_type !== "regular") return false;
+
+  const renewalUntil = targetCycle.registration_deadline || targetCycle.end_date || addDays(targetCycle.start_date, targetCycle.grace_days || 14);
+  return today <= renewalUntil;
+}
+
 /** Compute the cycle assignment for a plan starting from startCycleIndex */
 export function computeCycleAssignment(plan: SubPlan, planCycles: PlanCycle[], startCycleIndex: number): CycleAssignment | null {
-  let neededRegular = plan.total_regular_cycles ?? 0;
-  let neededGrid = plan.total_grid_cycles ?? 0;
-  const totalNeeded = neededRegular + neededGrid;
-  const matched: PlanCycle[] = [];
-  let calIdx = startCycleIndex;
-
-  while ((neededRegular > 0 || neededGrid > 0) && calIdx < planCycles.length) {
-    const cycle = planCycles[calIdx];
-    if (cycle.plan_type === "regular" && neededRegular > 0) {
-      matched.push(cycle);
-      neededRegular--;
-    } else if (cycle.plan_type === "grid" && neededGrid > 0) {
-      matched.push(cycle);
-      neededGrid--;
-    } else {
-      // Skip cycles whose type isn't needed
-      calIdx++;
-      continue;
-    }
-    calIdx++;
-  }
-
-  if (matched.length !== totalNeeded) return null;
+  const matched = matchPlanCycles(plan, planCycles, startCycleIndex);
+  if (!matched) return null;
 
   return {
     startCycle: matched[0],
@@ -238,6 +260,7 @@ export function detectStudentStatus(
   const todayStr = today || todayIST();
   
   if (latest >= todayStr) return { status: "REN", latestEndDate: latest };
+  if (isRenewalAcrossGridGap(latest, planCycles, todayStr)) return { status: "REN", latestEndDate: latest };
   
   const activeCycle = planCycles.find(c => c.is_active);
   const graceDays = activeCycle?.grace_days || 14;

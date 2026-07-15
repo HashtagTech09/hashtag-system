@@ -22,6 +22,7 @@ import { useScopedStudents } from "@/hooks/useScopedStudents";
 import { useTestDate } from "@/contexts/TestDateContext";
 import { Textarea } from "@/components/ui/textarea";
 import { allocateCollectedAmount } from "@/lib/styleHierarchy";
+import { detectStudentStatus } from "@/lib/enrollmentUtils";
 
 async function fetchAll<T>(buildQuery: () => any): Promise<T[]> {
   const pageSize = 1000;
@@ -373,19 +374,8 @@ const EnrollmentsPage = () => {
         .eq("organization_id", 1)
         .eq("end_date", latest);
       setPreviousBatchIds(prevEnrollments?.map(e => e.batch_id) || []);
-      const todayStr = new Date().toISOString().split("T")[0];
-      if (latest >= todayStr) { setDetectedStatus("REN"); }
-      else {
-        // Check grace: if within grace_days of the active cycle, still REN (late)
-        const activeCycle = planCycles.find(c => c.is_active);
-        const graceDays = activeCycle?.grace_days || 14;
-        const latestDate = new Date(latest);
-        const graceEnd = new Date(latestDate);
-        graceEnd.setDate(graceEnd.getDate() + graceDays);
-        const graceEndStr = graceEnd.toISOString().split("T")[0];
-        if (todayStr <= graceEndStr) { setDetectedStatus("REN"); }
-        else { setDetectedStatus("REV"); }
-      }
+      const result = detectStudentStatus(data, planCycles);
+      setDetectedStatus(result.status);
     };
     detectStatus();
   }, [form.student_id, planCycles]);
@@ -442,8 +432,9 @@ const EnrollmentsPage = () => {
     return activeCycle.registration_deadline && todayStr > activeCycle.registration_deadline;
   })();
 
-  // Count-based greedy matching: walk calendar consuming cycles by type counts
-  // Every calendar cycle in the span must be consumed — no skipping allowed
+  // Count-based greedy matching: walk calendar consuming cycles by type counts.
+  // Grid is special: regular-only plans skip Grid cycles, and Grid-only plans
+  // skip regular cycles until the next Grid cycle.
   const isPlanValid = (plan: any): boolean => {
     let neededRegular = plan.total_regular_cycles ?? 0;
     let neededGrid = plan.total_grid_cycles ?? 0;
@@ -457,7 +448,8 @@ const EnrollmentsPage = () => {
       } else if (cycle.plan_type === "grid" && neededGrid > 0) {
         neededGrid--;
       } else {
-        return false; // cycle type not needed — plan can't span past it
+        calIdx++;
+        continue;
       }
       calIdx++;
     }
@@ -483,7 +475,8 @@ const EnrollmentsPage = () => {
     const plan = subPlans.find(p => p.id === Number(planId));
     if (!plan) return;
 
-    // Count-based greedy matching — walk calendar consuming by type counts
+    // Count-based greedy matching — walk calendar consuming by type counts.
+    // Skip cycles whose type is not included in the selected plan.
     let neededRegular = plan.total_regular_cycles ?? 0;
     let neededGrid = plan.total_grid_cycles ?? 0;
     const totalNeeded = neededRegular + neededGrid;
@@ -499,7 +492,8 @@ const EnrollmentsPage = () => {
         matched.push(cycle);
         neededGrid--;
       } else {
-        break; // cycle type not needed — plan can't span past it
+        calIdx++;
+        continue;
       }
       calIdx++;
     }

@@ -56,6 +56,14 @@ function getBatchDiscount(pos: number) {
 }
 function roundToNearest100(n: number) { return Math.round(n / 100) * 100; }
 function getPlanKey(r: number, g: number) { return `${r}R${g}G`; }
+function getCycleForDate(cycles: PlanCycle[], date: string): PlanCycle | null {
+  return cycles.find(c => c.start_date <= date && (c.end_date || "2099-12-31") >= date) || null;
+}
+function addDays(date: string, days: number) {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d.toISOString().split("T")[0];
+}
 
 interface PlanCycle { id: number; name: string; start_date: string; end_date: string | null; plan_type: string; is_active: boolean; grace_days: number; registration_deadline: string | null; }
 interface SubPlan { id: number; name: string; total_cycles: number; total_regular_cycles: number; total_grid_cycles: number; is_active: boolean; }
@@ -106,11 +114,27 @@ function computeCycleAssignment(plan: SubPlan, cycles: PlanCycle[], startIdx: nu
   };
 }
 
+function isRenewalAcrossGridGap(latestEndDate: string, cycles: PlanCycle[], today: string) {
+  const latestCycle = getCycleForDate(cycles, latestEndDate);
+  const targetCycle = getCycleForDate(cycles, today) || cycles[getStartCycleIndex(cycles)];
+  if (!latestCycle || !targetCycle) return false;
+  const latestIdx = cycles.findIndex(c => c.id === latestCycle.id);
+  const targetIdx = cycles.findIndex(c => c.id === targetCycle.id);
+  if (latestIdx === -1 || targetIdx === -1 || targetIdx <= latestIdx) return false;
+  const skippedCycles = cycles.slice(latestIdx + 1, targetIdx);
+  if (!skippedCycles.every(c => c.plan_type === "grid")) return false;
+  if (targetCycle.plan_type === "grid") return true;
+  if (targetCycle.plan_type !== "regular") return false;
+  const renewalUntil = targetCycle.registration_deadline || targetCycle.end_date || addDays(targetCycle.start_date, targetCycle.grace_days || 14);
+  return today <= renewalUntil;
+}
+
 function detectStudentStatus(enrollments: { end_date: string }[], cycles: PlanCycle[]) {
   if (!enrollments?.length) return { status: "NEW", latestEndDate: null };
   const latest = enrollments[0].end_date;
   const today = todayIST();
   if (latest >= today) return { status: "REN", latestEndDate: latest };
+  if (isRenewalAcrossGridGap(latest, cycles, today)) return { status: "REN", latestEndDate: latest };
   const activeCycle = cycles.find(c => c.is_active);
   const graceDays = activeCycle?.grace_days || 14;
   const d = new Date(latest);

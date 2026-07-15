@@ -1,5 +1,5 @@
 import { todayIST } from "@/lib/dateUtils";
-import type { PlanCycle } from "@/lib/enrollmentUtils";
+import { matchPlanCycles, type PlanCycle } from "@/lib/enrollmentUtils";
 import { supabase } from "@/integrations/supabase/client";
 
 export type CycleStatus = "ACTIVE" | "NOT_COVERED_BUT_FUTURE_EXISTS" | "EXPIRED";
@@ -124,26 +124,8 @@ export function allocateCyclesForPlan(
   planCycles: PlanCycle[],
   startCycleIndex: number
 ): { cycleId: number; cycleType: string }[] {
-  let neededRegular = plan.total_regular_cycles ?? 0;
-  let neededGrid = plan.total_grid_cycles ?? 0;
-  const allocated: { cycleId: number; cycleType: string }[] = [];
-  let calIdx = startCycleIndex;
-
-  while ((neededRegular > 0 || neededGrid > 0) && calIdx < planCycles.length) {
-    const cycle = planCycles[calIdx];
-    if (cycle.plan_type === "regular" && neededRegular > 0) {
-      allocated.push({ cycleId: cycle.id, cycleType: cycle.plan_type });
-      neededRegular--;
-    } else if (cycle.plan_type === "grid" && neededGrid > 0) {
-      allocated.push({ cycleId: cycle.id, cycleType: cycle.plan_type });
-      neededGrid--;
-    } else {
-      break;
-    }
-    calIdx++;
-  }
-
-  return allocated;
+  return (matchPlanCycles(plan, planCycles, startCycleIndex) || [])
+    .map(cycle => ({ cycleId: cycle.id, cycleType: cycle.plan_type }));
 }
 
 /** Insert enrollment_cycles rows for a given enrollment */
@@ -258,4 +240,3 @@ export async function filterEnrollmentsByCycle(
   });
   return validIds;
 }
-
