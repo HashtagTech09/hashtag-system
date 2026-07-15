@@ -26,9 +26,23 @@ function todayIST(): string {
 // ── Fee / enrollment logic (ported from src/lib) ─────────────────────
 const REGULAR_PRICE = 3200;
 const GRID_PRICE = 7667;
-const REG_FEE = 424;
-const GST_RATE = 0.18;
 const PLAN_FIXED_TOTALS: Record<string, number> = { "5R1G": 26500, "10R2G": 50000 };
+
+// ── Settings loader (cached across warm invocations) ─────────────────
+let CACHED_SETTINGS: { orgId: number; regFee: number; dropInFee: number; gstRate: number } | null = null;
+async function loadSettings(supabase: any) {
+  if (CACHED_SETTINGS) return CACHED_SETTINGS;
+  const { data } = await supabase.from("system_settings").select("key, value");
+  const map: Record<string, string> = {};
+  (data || []).forEach((r: any) => { map[r.key] = r.value; });
+  CACHED_SETTINGS = {
+    orgId: Number(map.default_organization_id ?? 1),
+    regFee: Number(map.registration_fee ?? 424),
+    dropInFee: Number(map.drop_in_fee ?? 500),
+    gstRate: Number(map.gst_percent ?? 18) / 100,
+  };
+  return CACHED_SETTINGS;
+}
 const STYLE_HIERARCHY: Record<string, number> = { Jazz: 1, Ballet: 2, Modern: 3, "Hip Hop": 4, Heels: 5 };
 
 function getStylePriority(s: string) { return STYLE_HIERARCHY[s] ?? 99; }
