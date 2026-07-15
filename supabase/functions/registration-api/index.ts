@@ -123,17 +123,18 @@ function computeFeeBreakdown(params: {
   batchCount: number; regularCycles: number; gridCycles: number;
   detectedStatus: string; latestEndDate: string | null; dropInAmount: number;
   sortedBatches?: { id: number; name: string; style_base?: string | null }[];
+  regFee: number; gstRate: number;
 }) {
-  const { batchCount, regularCycles, gridCycles, detectedStatus, latestEndDate, dropInAmount, sortedBatches } = params;
+  const { batchCount, regularCycles, gridCycles, detectedStatus, latestEndDate, dropInAmount, sortedBatches, regFee: regFeeVal, gstRate } = params;
   const planKey = getPlanKey(regularCycles, gridCycles);
   const fixedTotal = PLAN_FIXED_TOTALS[planKey];
   const isFixedPricePlan = fixedTotal !== undefined;
   const today = todayIST();
   let applyRegFee = detectedStatus === "NEW" || detectedStatus === "REV" || (detectedStatus === "REN" && latestEndDate ? today > latestEndDate : false);
   if (isFixedPricePlan) applyRegFee = false;
-  const regFee = applyRegFee ? REG_FEE : 0;
+  const regFee = applyRegFee ? regFeeVal : 0;
   let perBatchFee: number;
-  if (isFixedPricePlan) { perBatchFee = Math.round(fixedTotal / (1 + GST_RATE)); }
+  if (isFixedPricePlan) { perBatchFee = Math.round(fixedTotal / (1 + gstRate)); }
   else { perBatchFee = (regularCycles * REGULAR_PRICE) + (gridCycles * GRID_PRICE); }
   const batchAllocations = (sortedBatches || []).map((b, idx) => {
     const disc = getBatchDiscount(idx + 1);
@@ -143,7 +144,7 @@ function computeFeeBreakdown(params: {
   const totalBatchFee = batchAllocations.length > 0 ? batchAllocations.reduce((s, a) => s + a.amount, 0) : perBatchFee * batchCount;
   const discountAmount = (perBatchFee * batchCount) - totalBatchFee;
   const subtotal = Math.max(0, totalBatchFee + regFee - dropInAmount);
-  const gst = Math.round(subtotal * GST_RATE);
+  const gst = Math.round(subtotal * gstRate);
   let total = subtotal + gst;
   if (!isFixedPricePlan) total = roundToNearest100(total);
   return { batchCount, perBatchFee, discountAmount, totalBatchFee, regFee, dropInAdj: dropInAmount, subtotal, gst, total, applyRegFee, isFixedPricePlan, planKey, batchAllocations };
