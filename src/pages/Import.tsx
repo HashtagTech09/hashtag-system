@@ -15,10 +15,23 @@ import { Upload, CheckCircle2, XCircle, AlertCircle, Download, ChevronDown } fro
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { allocateCyclesForPlan, insertEnrollmentCycles } from "@/lib/cycleUtils";
+import type { PlanCycle, SubPlan } from "@/lib/enrollmentUtils";
+import {
+  buildBatchCodeFromInput,
+  cleanImportValue,
+  findBatchForSmartEnrollment,
+  matchSmartEnrollmentCycles,
+  normalizePhone,
+  type SmartBatch,
+} from "@/lib/smartEnrollmentImport";
 
 /** Paginated fetch to bypass Supabase 1000-row default limit.
  *  Accepts a factory function so each page gets a fresh query builder. */
-async function fetchAll<T>(buildQuery: () => any): Promise<T[]> {
+type PagedQuery<T> = {
+  range: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>;
+};
+
+async function fetchAll<T>(buildQuery: () => PagedQuery<T>): Promise<T[]> {
   const all: T[] = [];
   let from = 0;
   const PAGE = 1000;
@@ -30,6 +43,10 @@ async function fetchAll<T>(buildQuery: () => any): Promise<T[]> {
     from += PAGE;
   }
   return all;
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 const ORG_ID = 1;
@@ -152,7 +169,7 @@ function CSVImportTab({
       complete: (res) => {
         const rows = res.data as string[][];
         if (rows.length < 2) { toast.error("CSV has no data rows"); return; }
-        const headers = rows[0].map(h => h.trim());
+        const headers = rows[0].map(h => cleanImportValue(h));
         setCsvHeaders(headers);
         setCsvData(rows.slice(1).filter(r => r.some(c => c.trim())));
         const autoMap: Record<string, string> = {};
@@ -173,7 +190,7 @@ function CSVImportTab({
       const obj: Record<string, string> = {};
       for (const [dbCol, csvCol] of Object.entries(mapping)) {
         const idx = csvHeaders.indexOf(csvCol);
-        if (idx !== -1) obj[dbCol] = row[idx]?.trim() || "";
+        if (idx !== -1) obj[dbCol] = cleanImportValue(row[idx]) || "";
       }
       return obj;
     });
@@ -184,9 +201,10 @@ function CSVImportTab({
       setProgress(100);
       if (res.success > 0) toast.success(`Imported ${res.success} ${label} records`);
       if (res.errors > 0) toast.error(`${res.errors} rows failed`);
-    } catch (err: any) {
-      toast.error(err.message || "Import failed");
-      setResult({ success: 0, errors: csvData.length, errorMessages: [err.message] });
+    } catch (err: unknown) {
+      const message = getErrorMessage(err);
+      toast.error(message || "Import failed");
+      setResult({ success: 0, errors: csvData.length, errorMessages: [message] });
     }
     setImporting(false);
   };
@@ -434,14 +452,14 @@ export default function ImportPage() {
     // Step 3: Create Enrollments
     const [batches, cycles, subPlans] = await Promise.all([
       fetchAll<{ id: number; batch_code: string | null }>(() => supabase.from("batches").select("id, batch_code").eq("organization_id", ORG_ID)),
-      fetchAll<any>(() => supabase.from("plan_cycles").select("*").eq("organization_id", ORG_ID).order("start_date")),
-      fetchAll<any>(() => supabase.from("subscription_plans").select("*").eq("organization_id", ORG_ID)),
+      fetchAll<PlanCycle>(() => supabase.from("plan_cycles").select("*").eq("organization_id", ORG_ID).order("start_date")),
+      fetchAll<SubPlan>(() => supabase.from("subscription_plans").select("*").eq("organization_id", ORG_ID)),
     ]);
     const codeToBatchId = new Map<string, number>();
     batches.forEach(b => { if (b.batch_code) codeToBatchId.set(b.batch_code.toLowerCase().trim(), b.id); });
     const batchIdToCode = new Map<number, string>();
     batches.forEach(b => { if (b.batch_code) batchIdToCode.set(b.id, b.batch_code); });
-    const planByName = new Map<string, any>();
+    const planByName = new Map<string, SubPlan>();
     subPlans.forEach(p => planByName.set(p.name.toLowerCase().trim(), p));
 
     // Pre-flight: scan rows for overlap with existing active enrollments on OTHER batches
@@ -561,7 +579,7 @@ export default function ImportPage() {
           if (startIdx !== -1) {
             const allocated = allocateCyclesForPlan(
               { total_regular_cycles: subPlan.total_regular_cycles, total_grid_cycles: subPlan.total_grid_cycles },
-              cycles as any,
+              cycles,
               startIdx
             );
             await insertEnrollmentCycles(enrollment.id, studentId, batchId, allocated);
@@ -569,9 +587,9 @@ export default function ImportPage() {
         }
 
         success++;
-      } catch (err: any) {
+      } catch (err: unknown) {
         errors++;
-        errorMessages.push(err.message);
+        errorMessages.push(getErrorMessage(err));
       }
     }
     const overlapExtra = conflicts.length > 0
@@ -583,70 +601,6 @@ export default function ImportPage() {
     };
   };
 
-  /** Build batch_code from style_level + studio_code: "Jazz 3" + "NDA" → "Jazz3-NDA" */
-  function buildBatchCodeFromInput(styleLevel: string, studioCode: string): string {
-    return `${styleLevel.replace(/\s+/g, '')}-${studioCode.trim()}`;
-  }
-
-  /** Match a cycle token like "April", "Grid", "January'27" to a plan_cycle row */
-  const usedCycleIds = new Set<number>();
-
-  function matchCycleToken(token: string, allCycles: any[]): any | null {
-    // Sanitize: remove zero-width chars, normalize smart quotes to ASCII apostrophe
-    let t = token.trim().replace(/[\u200B-\u200D\uFEFF]/g, "");
-    t = t.replace(/[\u2018\u2019\u2032\u02BC]/g, "'");
-    const tLower = t.toLowerCase();
-
-    // 1. Direct match (exact, case-insensitive) — skip already-used
-    let match = allCycles.find(c => c.name.toLowerCase() === tLower && !usedCycleIds.has(c.id));
-    if (match) { usedCycleIds.add(match.id); return match; }
-
-    // 2. Year suffix: "January'27" → try "January'27", "January 27"
-    const yearMatch = t.match(/^(.+?)['']\s*(\d{2,4})$/);
-    if (yearMatch) {
-      const base = yearMatch[1].trim();
-      const year = yearMatch[2];
-      match = allCycles.find(c => c.name.toLowerCase() === `${base}'${year}`.toLowerCase() && !usedCycleIds.has(c.id));
-      if (match) { usedCycleIds.add(match.id); return match; }
-      match = allCycles.find(c => c.name.toLowerCase() === `${base} ${year}`.toLowerCase() && !usedCycleIds.has(c.id));
-      if (match) { usedCycleIds.add(match.id); return match; }
-    }
-
-    // 3. Normalize: "Grid 2.0" → also try "Grid'2.0"
-    const spaceNormalized = t.replace(/\s+/g, "'");
-    if (spaceNormalized !== t) {
-      match = allCycles.find(c => c.name.toLowerCase() === spaceNormalized.toLowerCase() && !usedCycleIds.has(c.id));
-      if (match) { usedCycleIds.add(match.id); return match; }
-    }
-
-    // 3b. Insert apostrophe at letter-digit boundary: "Grid2.0" → "Grid'2.0"
-    const apostropheInserted = t.replace(/([a-zA-Z])(\d)/, "$1'$2");
-    if (apostropheInserted !== t) {
-      match = allCycles.find(c => c.name.toLowerCase() === apostropheInserted.toLowerCase() && !usedCycleIds.has(c.id));
-      if (match) { usedCycleIds.add(match.id); return match; }
-    }
-
-    // 3c. Bare-name fallback on normalized variants (e.g. "Grid'2.0" matches "Grid'2.0'26")
-    for (const variant of [spaceNormalized, apostropheInserted]) {
-      if (variant === t) continue;
-      const vLower = variant.toLowerCase();
-      match = allCycles.find(c => {
-        const cLower = c.name.toLowerCase();
-        return (cLower.startsWith(vLower + "'") || cLower.startsWith(vLower + " ") || cLower === vLower) && !usedCycleIds.has(c.id);
-      });
-      if (match) { usedCycleIds.add(match.id); return match; }
-    }
-
-    // 4. Bare-name fallback: "April" → match cycle whose name starts with "April" (e.g. "April'26")
-    match = allCycles.find(c => {
-      const cLower = c.name.toLowerCase();
-      return (cLower.startsWith(tLower + "'") || cLower.startsWith(tLower + " ")) && !usedCycleIds.has(c.id);
-    });
-    if (match) { usedCycleIds.add(match.id); return match; }
-
-    return null;
-  }
-
   const importSmartEnrollments = async (rows: Record<string, string>[]): Promise<ImportResult> => {
     let success = 0, errors = 0;
     const errorMessages: string[] = [];
@@ -654,28 +608,29 @@ export default function ImportPage() {
 
     // Fetch reference data (paginated)
     const [allBatches, allCycles, allPlans, allUsers, allStudentsRef] = await Promise.all([
-      fetchAll<any>(() => supabase.from("batches").select("id, batch_code, style_base, level").eq("organization_id", ORG_ID)),
-      fetchAll<any>(() => supabase.from("plan_cycles").select("*").eq("organization_id", ORG_ID).order("start_date")),
-      fetchAll<any>(() => supabase.from("subscription_plans").select("*").eq("organization_id", ORG_ID)),
+      fetchAll<SmartBatch>(() => supabase.from("batches").select("id, batch_code, style_base, level").eq("organization_id", ORG_ID)),
+      fetchAll<PlanCycle>(() => supabase.from("plan_cycles").select("*").eq("organization_id", ORG_ID).order("start_date")),
+      fetchAll<SubPlan>(() => supabase.from("subscription_plans").select("*").eq("organization_id", ORG_ID)),
       fetchAll<{ id: number; phone: string | null }>(() => supabase.from("users").select("id, phone").eq("organization_id", ORG_ID)),
       fetchAll<{ id: number; phone: string | null; name: string }>(() => supabase.from("students").select("id, phone, name").eq("organization_id", ORG_ID)),
     ]);
 
-    const codeToBatch = new Map<string, any>();
-    allBatches.forEach(b => { if (b.batch_code) codeToBatch.set(b.batch_code.toLowerCase(), b); });
-
     const phoneToUserId = new Map<string, number>();
-    allUsers.forEach(u => { if (u.phone) phoneToUserId.set(u.phone, u.id); });
+    allUsers.forEach(u => { const phone = normalizePhone(u.phone); if (phone) phoneToUserId.set(phone, u.id); });
 
     const studentKey = (name: string, phone: string) => `${name.toLowerCase().trim()}|${phone}`;
     const namePhoneToStudentId = new Map<string, number>();
-    allStudentsRef.forEach(s => { if (s.phone) namePhoneToStudentId.set(studentKey(s.name, s.phone), s.id); });
+    allStudentsRef.forEach(s => {
+      const phone = normalizePhone(s.phone);
+      if (phone) namePhoneToStudentId.set(studentKey(s.name, phone), s.id);
+    });
 
     // Auto-create users (one per unique phone, first occurrence name)
     const uniquePhones = new Map<string, { name: string; email: string }>();
     for (const r of rows) {
-      if (r.student_phone && r.student_name && !uniquePhones.has(r.student_phone) && !phoneToUserId.has(r.student_phone)) {
-        uniquePhones.set(r.student_phone, { name: r.student_name, email: r.student_email || "" });
+      const phone = normalizePhone(r.student_phone);
+      if (phone && r.student_name && !uniquePhones.has(phone) && !phoneToUserId.has(phone)) {
+        uniquePhones.set(phone, { name: r.student_name, email: r.student_email || "" });
       }
     }
     for (const batch of chunk([...uniquePhones.entries()], 50)) {
@@ -691,13 +646,19 @@ export default function ImportPage() {
     }
 
     // Auto-create students (one per unique name+phone)
-    const existingStudentKeys = new Set(allStudentsRef.map(s => s.phone ? studentKey(s.name, s.phone) : ""));
+    const existingStudentKeys = new Set(
+      allStudentsRef.map(s => {
+        const phone = normalizePhone(s.phone);
+        return phone ? studentKey(s.name, phone) : "";
+      })
+    );
     const uniqueStudents = new Map<string, { name: string; phone: string; email: string }>();
     for (const r of rows) {
-      if (r.student_name && r.student_phone) {
-        const key = studentKey(r.student_name, r.student_phone);
+      const phone = normalizePhone(r.student_phone);
+      if (r.student_name && phone) {
+        const key = studentKey(r.student_name, phone);
         if (!uniqueStudents.has(key) && !existingStudentKeys.has(key)) {
-          uniqueStudents.set(key, { name: r.student_name, phone: r.student_phone, email: r.student_email || "" });
+          uniqueStudents.set(key, { name: r.student_name, phone, email: r.student_email || "" });
         }
       }
     }
@@ -710,39 +671,41 @@ export default function ImportPage() {
       if (error) { errorMessages.push(`Student create error: ${error.message}`); }
       else {
         studentsCreated += data.length;
-        data.forEach(s => { if (s.phone) namePhoneToStudentId.set(studentKey(s.name, s.phone), s.id); });
+        data.forEach(s => {
+          const phone = normalizePhone(s.phone);
+          if (phone) namePhoneToStudentId.set(studentKey(s.name, phone), s.id);
+        });
       }
     }
 
     // Refresh student lookup
     if (studentsCreated > 0) {
       const refreshedStudents = await fetchAll<{ id: number; phone: string | null; name: string }>(() => supabase.from("students").select("id, phone, name").eq("organization_id", ORG_ID));
-      refreshedStudents.forEach(s => { if (s.phone) namePhoneToStudentId.set(studentKey(s.name, s.phone), s.id); });
+      refreshedStudents.forEach(s => {
+        const phone = normalizePhone(s.phone);
+        if (phone) namePhoneToStudentId.set(studentKey(s.name, phone), s.id);
+      });
     }
 
     // Process each row
     for (const row of rows) {
       try {
-        const studentId = namePhoneToStudentId.get(studentKey(row.student_name, row.student_phone));
+        const phone = normalizePhone(row.student_phone);
+        const studentId = namePhoneToStudentId.get(studentKey(row.student_name, phone));
         if (!studentId) { errors++; errorMessages.push(`No student for: ${row.student_name} / ${row.student_phone}`); continue; }
 
         // Resolve batch_code
+        const { batch, triedCodes } = findBatchForSmartEnrollment(allBatches, row.style_level || "", row.studio_code || "");
         const batchCode = buildBatchCodeFromInput(row.style_level || "", row.studio_code || "");
-        const batch = codeToBatch.get(batchCode.toLowerCase());
-        if (!batch) { errors++; errorMessages.push(`No batch with code: ${batchCode} (from "${row.style_level}" + "${row.studio_code}")`); continue; }
-
-        // Parse cycles — reset used tracker per row
-        usedCycleIds.clear();
-        const cycleTokens = (row.cycles || "").split(",").map(t => t.trim()).filter(Boolean);
-        if (cycleTokens.length === 0) { errors++; errorMessages.push(`No cycles for ${row.student_name}`); continue; }
-
-        const matchedCycles: any[] = [];
-        const unmatchedTokens: string[] = [];
-        for (const token of cycleTokens) {
-          const matched = matchCycleToken(token, allCycles);
-          if (matched) matchedCycles.push(matched);
-          else unmatchedTokens.push(`${token} [raw: ${JSON.stringify(token)}]`);
+        if (!batch) {
+          errors++;
+          errorMessages.push(`No batch with code: ${triedCodes.join(" / ") || batchCode} (from "${row.style_level}" + "${row.studio_code}")`);
+          continue;
         }
+
+        // Parse cycles
+        const { matchedCycles, unmatchedTokens } = matchSmartEnrollmentCycles(row.cycles, allCycles);
+        if (matchedCycles.length === 0 && unmatchedTokens.length === 0) { errors++; errorMessages.push(`No cycles for ${row.student_name}`); continue; }
 
         if (unmatchedTokens.length > 0) {
           errors++;
@@ -762,6 +725,22 @@ export default function ImportPage() {
           p.total_regular_cycles === regularCount && p.total_grid_cycles === gridCount
         );
 
+        const cycleIds = matchedCycles.map(c => c.id);
+        const { data: existingCycleRows, error: existingCycleErr } = await supabase
+          .from("enrollment_cycles")
+          .select("cycle_id")
+          .eq("student_id", studentId)
+          .eq("batch_id", batch.id)
+          .in("cycle_id", cycleIds);
+        if (existingCycleErr) throw existingCycleErr;
+        if ((existingCycleRows || []).length > 0) {
+          errors++;
+          const owned = new Set((existingCycleRows || []).map(r => r.cycle_id));
+          const names = matchedCycles.filter(c => owned.has(c.id)).map(c => c.name).join(", ");
+          errorMessages.push(`Already enrolled for ${row.student_name} in ${batch.batch_code || batchCode}: ${names}`);
+          continue;
+        }
+
         const { data: enrollment, error } = await supabase.from("enrollments").insert({
           student_id: studentId,
           batch_id: batch.id,
@@ -778,12 +757,12 @@ export default function ImportPage() {
 
         // Insert enrollment_cycles
         const allocatedCycles = matchedCycles.map(c => ({ cycleId: c.id, cycleType: c.plan_type }));
-        await insertEnrollmentCycles(enrollment.id, studentId, batch.id, allocatedCycles);
+        await insertEnrollmentCycles(enrollment.id, studentId, batch.id, allocatedCycles, { throwOnError: true });
 
         success++;
-      } catch (err: any) {
+      } catch (err: unknown) {
         errors++;
-        errorMessages.push(err.message);
+        errorMessages.push(getErrorMessage(err));
       }
     }
 

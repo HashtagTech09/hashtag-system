@@ -133,7 +133,8 @@ export async function insertEnrollmentCycles(
   enrollmentId: number,
   studentId: number,
   batchId: number,
-  allocatedCycles: { cycleId: number; cycleType: string }[]
+  allocatedCycles: { cycleId: number; cycleType: string }[],
+  options: { throwOnError?: boolean } = {}
 ): Promise<void> {
   if (allocatedCycles.length === 0) return;
 
@@ -148,6 +149,7 @@ export async function insertEnrollmentCycles(
   const { error } = await supabase.from("enrollment_cycles").insert(rows);
   if (error) {
     console.error("Failed to insert enrollment_cycles:", error);
+    if (options.throwOnError) throw error;
   }
 }
 
@@ -175,7 +177,11 @@ export async function hasStudentCycleAccess(
 }
 
 /** Paginated fetch to bypass Supabase's 1000-row limit. */
-async function fetchAllPaged<T>(queryFactory: () => any): Promise<T[]> {
+type PagedQuery<T> = {
+  range: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>;
+};
+
+async function fetchAllPaged<T>(queryFactory: () => PagedQuery<T>): Promise<T[]> {
   const PAGE = 1000;
   let all: T[] = [];
   let from = 0;
