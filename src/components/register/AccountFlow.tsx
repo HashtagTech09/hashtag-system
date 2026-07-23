@@ -5,17 +5,23 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
 import PhoneEntry from "./PhoneEntry";
 import UserHub from "./UserHub";
 import StudentDashboard from "./StudentDashboard";
+import AccountSetup from "./AccountSetup";
 
-type Step = "phone" | "signup" | "hub" | "dashboard";
+type Step = "phone" | "signup" | "setup" | "hub" | "dashboard";
+type UserRow = Database["public"]["Tables"]["users"]["Row"];
+type StudentRow = Database["public"]["Tables"]["students"]["Row"] & {
+  users?: UserRow | null;
+};
 
 export default function AccountFlow() {
   const [step, setStep] = useState<Step>("phone");
-  const [user, setUser] = useState<any>(null);
-  const [students, setStudents] = useState<any[]>([]);
-  const [activeStudent, setActiveStudent] = useState<any>(null);
+  const [user, setUser] = useState<UserRow | null>(null);
+  const [students, setStudents] = useState<StudentRow[]>([]);
+  const [activeStudent, setActiveStudent] = useState<StudentRow | null>(null);
 
   // First-time signup state
   const [newPhone, setNewPhone] = useState("");
@@ -24,9 +30,7 @@ export default function AccountFlow() {
   const [studentSameAsOwner, setStudentSameAsOwner] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
-  const handleUserResolved = (u: any, list: any[]) => {
-    setUser(u);
-    setStudents(list);
+  const continueAfterSetup = (list: StudentRow[]) => {
     if (list.length === 0) {
       // Verified user with no students yet — go straight to hub so they can add one
       setStep("hub");
@@ -38,6 +42,16 @@ export default function AccountFlow() {
     }
   };
 
+  const handleUserResolved = (u: UserRow, list: StudentRow[]) => {
+    setUser(u);
+    setStudents(list);
+    if (u.account_setup_completed === false) {
+      setStep("setup");
+      return;
+    }
+    continueAfterSetup(list);
+  };
+
   const handleSignup = async () => {
     if (!ownerName.trim()) { toast.error("Enter the account owner's name"); return; }
     const sName = studentSameAsOwner ? ownerName.trim() : studentName.trim();
@@ -46,7 +60,14 @@ export default function AccountFlow() {
     try {
       const { data: newUser, error: userErr } = await supabase
         .from("users")
-        .insert({ organization_id: 1, name: ownerName.trim(), phone: newPhone })
+        .insert({
+          organization_id: 1,
+          name: ownerName.trim(),
+          phone: newPhone,
+          account_owner_type: studentSameAsOwner ? "self" : "parent_guardian",
+          account_setup_completed: true,
+          account_setup_completed_at: new Date().toISOString(),
+        })
         .select()
         .single();
       if (userErr) throw userErr;
@@ -60,8 +81,9 @@ export default function AccountFlow() {
       setStudents([newStudent]);
       setActiveStudent(newStudent);
       setStep("dashboard");
-    } catch (e: any) {
-      toast.error("Failed to create account: " + e.message);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error("Failed to create account: " + message);
     } finally {
       setSubmitting(false);
     }
@@ -127,6 +149,20 @@ export default function AccountFlow() {
           </div>
         </CardContent>
       </Card>
+    );
+  }
+
+  if (step === "setup" && user) {
+    return (
+      <AccountSetup
+        user={user}
+        students={students}
+        onComplete={(updatedUser, updatedStudents) => {
+          setUser(updatedUser);
+          setStudents(updatedStudents);
+          continueAfterSetup(updatedStudents);
+        }}
+      />
     );
   }
 

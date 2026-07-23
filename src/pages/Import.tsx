@@ -322,18 +322,20 @@ export default function ImportPage() {
     const errorMessages: string[] = [];
 
     const existingUsers = await fetchAll<{ phone: string | null }>(() => supabase.from("users").select("phone").eq("organization_id", ORG_ID));
-    const existingPhones = new Set(existingUsers.map(u => u.phone).filter(Boolean));
+    const existingPhones = new Set(existingUsers.map(u => normalizePhone(u.phone)).filter(Boolean));
 
     const toInsert = rows.filter(r => {
-      if (!r.name || !r.phone) { errors++; errorMessages.push(`Missing name or phone`); return false; }
-      if (existingPhones.has(r.phone)) { errors++; errorMessages.push(`Duplicate phone: ${r.phone}`); return false; }
+      const phone = normalizePhone(r.phone);
+      if (!r.name || !phone) { errors++; errorMessages.push(`Missing name or phone`); return false; }
+      if (existingPhones.has(phone)) { errors++; errorMessages.push(`Duplicate phone: ${r.phone}`); return false; }
+      existingPhones.add(phone);
       return true;
     });
 
     for (const batch of chunk(toInsert, 50)) {
       const insertRows = batch.map(r => ({
         name: r.name,
-        phone: r.phone || null,
+        phone: normalizePhone(r.phone) || null,
         email: r.email || null,
         source: r.source || "import",
         organization_id: ORG_ID,
@@ -351,25 +353,27 @@ export default function ImportPage() {
 
     const allUsers = await fetchAll<{ id: number; phone: string | null }>(() => supabase.from("users").select("id, phone").eq("organization_id", ORG_ID));
     const phoneToUserId = new Map<string, number>();
-    allUsers.forEach(u => { if (u.phone) phoneToUserId.set(u.phone, u.id); });
+    allUsers.forEach(u => { const phone = normalizePhone(u.phone); if (phone) phoneToUserId.set(phone, u.id); });
 
     const existingStudents = await fetchAll<{ phone: string | null }>(() => supabase.from("students").select("phone").eq("organization_id", ORG_ID));
-    const existingPhones = new Set(existingStudents.map(s => s.phone).filter(Boolean));
+    const existingPhones = new Set(existingStudents.map(s => normalizePhone(s.phone)).filter(Boolean));
 
     const toInsert = rows.filter(r => {
-      const phone = r.user_phone || r.phone;
+      const phone = normalizePhone(r.user_phone || r.phone);
       if (!r.name || !phone) { errors++; errorMessages.push(`Missing name or phone`); return false; }
       if (!phoneToUserId.has(phone)) { errors++; errorMessages.push(`No user found for phone: ${phone}`); return false; }
-      if (existingPhones.has(r.phone || phone)) { errors++; errorMessages.push(`Student already exists: ${r.phone || phone}`); return false; }
+      const studentPhone = normalizePhone(r.phone || phone);
+      if (existingPhones.has(studentPhone)) { errors++; errorMessages.push(`Student already exists: ${r.phone || phone}`); return false; }
+      existingPhones.add(studentPhone);
       return true;
     });
 
     for (const batch of chunk(toInsert, 50)) {
       const insertRows = batch.map(r => {
-        const phone = r.user_phone || r.phone;
+        const phone = normalizePhone(r.user_phone || r.phone);
         return {
           name: r.name,
-          phone: r.phone || phone,
+          phone: normalizePhone(r.phone) || phone,
           email: r.email || null,
           dob: r.dob || null,
           gender: r.gender || null,
@@ -390,43 +394,53 @@ export default function ImportPage() {
     let usersCreated = 0, studentsCreated = 0;
 
     // Step 1: Auto-create Users from unique phones
-    const uniquePhones = new Map<string, string>(); // phone -> name
+    const uniquePhones = new Map<string, string>(); // phone -> first student name
     for (const r of rows) {
-      if (r.student_phone && r.student_name && !uniquePhones.has(r.student_phone)) {
-        uniquePhones.set(r.student_phone, r.student_name);
+      const phone = normalizePhone(r.student_phone);
+      if (phone && r.student_name && !uniquePhones.has(phone)) {
+        uniquePhones.set(phone, r.student_name);
       }
     }
 
     const existingUsers = await fetchAll<{ id: number; phone: string | null }>(() => supabase.from("users").select("id, phone").eq("organization_id", ORG_ID));
     const phoneToUserId = new Map<string, number>();
-    existingUsers.forEach(u => { if (u.phone) phoneToUserId.set(u.phone, u.id); });
+    existingUsers.forEach(u => { const phone = normalizePhone(u.phone); if (phone) phoneToUserId.set(phone, u.id); });
 
     const newUserPhones = [...uniquePhones.entries()].filter(([phone]) => !phoneToUserId.has(phone));
     for (const batch of chunk(newUserPhones, 50)) {
       const insertRows = batch.map(([phone, name]) => ({
-        name, phone, source: "import", organization_id: ORG_ID,
+        name,
+        phone,
+        source: "import",
+        organization_id: ORG_ID,
+        account_setup_completed: false,
+        account_owner_type: null,
       }));
       const { data, error } = await supabase.from("users").insert(insertRows).select();
       if (error) { errorMessages.push(`User create error: ${error.message}`); }
       else {
         usersCreated += data.length;
-        data.forEach(u => { if (u.phone) phoneToUserId.set(u.phone, u.id); });
+        data.forEach(u => { const phone = normalizePhone(u.phone); if (phone) phoneToUserId.set(phone, u.id); });
       }
     }
 
     // Step 2: Auto-create Students from unique name+phone combos
     const existingStudents = await fetchAll<{ id: number; phone: string | null; name: string }>(() => supabase.from("students").select("id, phone, name").eq("organization_id", ORG_ID));
     const studentKey = (name: string, phone: string) => `${name.toLowerCase().trim()}|${phone}`;
-    const existingStudentKeys = new Set(existingStudents.map(s => s.phone ? studentKey(s.name, s.phone) : ""));
+    const existingStudentKeys = new Set(existingStudents.map(s => {
+      const phone = normalizePhone(s.phone);
+      return phone ? studentKey(s.name, phone) : "";
+    }));
     const namePhoneToStudentId = new Map<string, number>();
-    existingStudents.forEach(s => { if (s.phone) namePhoneToStudentId.set(studentKey(s.name, s.phone), s.id); });
+    existingStudents.forEach(s => { const phone = normalizePhone(s.phone); if (phone) namePhoneToStudentId.set(studentKey(s.name, phone), s.id); });
 
     const uniqueStudents = new Map<string, { name: string; phone: string }>();
     for (const r of rows) {
-      if (r.student_name && r.student_phone) {
-        const key = studentKey(r.student_name, r.student_phone);
+      const phone = normalizePhone(r.student_phone);
+      if (r.student_name && phone) {
+        const key = studentKey(r.student_name, phone);
         if (!uniqueStudents.has(key) && !existingStudentKeys.has(key)) {
-          uniqueStudents.set(key, { name: r.student_name, phone: r.student_phone });
+          uniqueStudents.set(key, { name: r.student_name, phone });
         }
       }
     }
@@ -440,14 +454,17 @@ export default function ImportPage() {
       if (error) { errorMessages.push(`Student create error: ${error.message}`); }
       else {
         studentsCreated += data.length;
-        data.forEach(s => { if (s.phone) namePhoneToStudentId.set(studentKey(s.name, s.phone), s.id); });
+        data.forEach(s => {
+          const phone = normalizePhone(s.phone);
+          if (phone) namePhoneToStudentId.set(studentKey(s.name, phone), s.id);
+        });
       }
     }
 
     // Refresh student lookup after inserts
     if (studentsCreated > 0) {
       const allStudents = await fetchAll<{ id: number; phone: string | null; name: string }>(() => supabase.from("students").select("id, phone, name").eq("organization_id", ORG_ID));
-      allStudents.forEach(s => { if (s.phone) namePhoneToStudentId.set(studentKey(s.name, s.phone), s.id); });
+      allStudents.forEach(s => { const phone = normalizePhone(s.phone); if (phone) namePhoneToStudentId.set(studentKey(s.name, phone), s.id); });
     }
 
     // Step 3: Create Enrollments
@@ -467,7 +484,7 @@ export default function ImportPage() {
     const candidateStudentIds = new Set<number>();
     const candidates: { rowIndex: number; studentId: number; batchId: number; start: string; end: string; row: Record<string, string> }[] = [];
     rows.forEach((row, rowIndex) => {
-      const sid = namePhoneToStudentId.get(studentKey(row.student_name || "", row.student_phone || ""));
+      const sid = namePhoneToStudentId.get(studentKey(row.student_name || "", normalizePhone(row.student_phone)));
       const bid = codeToBatchId.get((row.batch_code || "").toLowerCase().trim());
       if (!sid || !bid || !row.start_date || !row.end_date) return;
       candidateStudentIds.add(sid);
@@ -525,7 +542,7 @@ export default function ImportPage() {
     for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
       const row = rows[rowIndex];
       try {
-        const studentId = namePhoneToStudentId.get(studentKey(row.student_name, row.student_phone));
+        const studentId = namePhoneToStudentId.get(studentKey(row.student_name, normalizePhone(row.student_phone)));
         if (!studentId) { errors++; errorMessages.push(`No student for: ${row.student_name} / ${row.student_phone}`); continue; }
 
         const batchId = codeToBatchId.get((row.batch_code || "").toLowerCase().trim());
@@ -636,13 +653,19 @@ export default function ImportPage() {
     }
     for (const batch of chunk([...uniquePhones.entries()], 50)) {
       const insertRows = batch.map(([phone, { name, email }]) => ({
-        name, phone, email: email || null, source: "import", organization_id: ORG_ID,
+        name,
+        phone,
+        email: email || null,
+        source: "import",
+        organization_id: ORG_ID,
+        account_setup_completed: false,
+        account_owner_type: null,
       }));
       const { data, error } = await supabase.from("users").insert(insertRows).select();
       if (error) { errorMessages.push(`User create error: ${error.message}`); }
       else {
         usersCreated += data.length;
-        data.forEach(u => { if (u.phone) phoneToUserId.set(u.phone, u.id); });
+        data.forEach(u => { const phone = normalizePhone(u.phone); if (phone) phoneToUserId.set(phone, u.id); });
       }
     }
 

@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import type { Database, Json } from "@/integrations/supabase/types";
 import { Music, Check } from "lucide-react";
 import { initiateRazorpayPayment } from "@/lib/razorpayUtils";
 import { isPlanValid, computeCycleAssignment, computeFeeBreakdown, detectStudentStatus, getStartCycleIndex } from "@/lib/enrollmentUtils";
@@ -18,11 +19,23 @@ import LevelSelection from "./LevelSelection";
 import BatchSelection from "./BatchSelection";
 import PhoneEntry from "./PhoneEntry";
 import UserHub from "./UserHub";
+import AccountSetup from "./AccountSetup";
 import FeeBreakdownDisplay from "./FeeBreakdown";
 import ReceiptPreviewDialog from "./ReceiptPreviewDialog";
 import { useSimulatedToday } from "@/contexts/TestDateContext";
+import type { ReceiptData } from "@/lib/receiptTemplate";
 
-type Step = "studio" | "style" | "level" | "batch" | "phone" | "hub" | "details" | "pay" | "waiting";
+type Step = "studio" | "style" | "level" | "batch" | "phone" | "setup" | "hub" | "details" | "pay" | "waiting";
+type UserRow = Database["public"]["Tables"]["users"]["Row"];
+type StudentRow = Database["public"]["Tables"]["students"]["Row"] & {
+  users?: UserRow | null;
+};
+type BatchRow = Database["public"]["Tables"]["batches"]["Row"];
+type StaffUser = Pick<UserRow, "id" | "name" | "email">;
+type RoleLookupRow = {
+  user_id: number;
+  roles: { type: string | null } | null;
+};
 
 export default function JoinBatchFlow() {
   const [step, setStep] = useState<Step>("studio");
@@ -30,9 +43,9 @@ export default function JoinBatchFlow() {
   const [selectedStyle, setSelectedStyle] = useState("");
   const [selectedLevel, setSelectedLevel] = useState("");
   const [selectedBatchIds, setSelectedBatchIds] = useState<string[]>([]);
-  const [student, setStudent] = useState<any>(null);
-  const [user, setUser] = useState<any>(null);
-  const [students, setStudents] = useState<any[]>([]);
+  const [student, setStudent] = useState<StudentRow | null>(null);
+  const [user, setUser] = useState<UserRow | null>(null);
+  const [students, setStudents] = useState<StudentRow[]>([]);
   const [newPhone, setNewPhone] = useState("");
   const [ownerName, setOwnerName] = useState("");
   const [studentName, setStudentName] = useState("");
@@ -42,13 +55,13 @@ export default function JoinBatchFlow() {
   const [selectedPlanId, setSelectedPlanId] = useState("");
   const [paymentMode, setPaymentMode] = useState("cash");
   const [submitting, setSubmitting] = useState(false);
-  const [allBatches, setAllBatches] = useState<any[]>([]);
+  const [allBatches, setAllBatches] = useState<BatchRow[]>([]);
   const [detectedStatus, setDetectedStatus] = useState<string>("NEW");
   const [latestEndDate, setLatestEndDate] = useState<string | null>(null);
-  const [staffList, setStaffList] = useState<any[]>([]);
+  const [staffList, setStaffList] = useState<StaffUser[]>([]);
   const [selectedStaffId, setSelectedStaffId] = useState("");
   const [receiptOpen, setReceiptOpen] = useState(false);
-  const [receiptData, setReceiptData] = useState<any>(null);
+  const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
   const simulatedToday = useSimulatedToday();
 
   useEffect(() => {
@@ -59,7 +72,7 @@ export default function JoinBatchFlow() {
         .select("user_id, roles(name, type)")
         .eq("organization_id", 1);
       if (!roleData) return;
-      const staffUserIds = [...new Set(roleData.filter((r: any) => r.roles?.type === "organization").map((r: any) => r.user_id))];
+      const staffUserIds = [...new Set((roleData as RoleLookupRow[]).filter((r) => r.roles?.type === "organization").map((r) => r.user_id))];
       if (staffUserIds.length === 0) return;
       const { data: users } = await supabase.from("users").select("id, name, email").in("id", staffUserIds);
       setStaffList(users || []);
@@ -103,7 +116,7 @@ export default function JoinBatchFlow() {
       setLatestEndDate(result.latestEndDate);
     };
     detectStatus();
-  }, [student, planCycles]);
+  }, [student, planCycles, simulatedToday]);
 
   const breakdown = selectedBatchIds.length > 0 && assignment ? computeFeeBreakdown({
     batchCount: selectedBatchIds.length,
@@ -120,9 +133,7 @@ export default function JoinBatchFlow() {
     setSelectedBatchIds(prev => prev.includes(id) ? prev.filter(b => b !== id) : [...prev, id]);
   };
 
-  const handleUserResolved = (u: any, list: any[]) => {
-    setUser(u);
-    setStudents(list);
+  const continueAfterAccountSetup = (list: StudentRow[]) => {
     if (list.length === 0) {
       // Verified user with no students yet — go to hub so they can add one
       setStep("hub");
@@ -132,6 +143,16 @@ export default function JoinBatchFlow() {
     } else {
       setStep("hub");
     }
+  };
+
+  const handleUserResolved = (u: UserRow, list: StudentRow[]) => {
+    setUser(u);
+    setStudents(list);
+    if (u.account_setup_completed === false) {
+      setStep("setup");
+      return;
+    }
+    continueAfterAccountSetup(list);
   };
 
   const handleSignup = async () => {
@@ -145,18 +166,18 @@ export default function JoinBatchFlow() {
       if (existingUsers && existingUsers.length > 0) {
         const ownerUser = existingUsers[0];
         const { data: existingStudents } = await supabase.from("students").select("*, users(*)").eq("user_id", ownerUser.id);
-        setUser(ownerUser);
-        setStudents(existingStudents || []);
         toast.info("Account already exists! Continuing with your profile.");
-        if ((existingStudents || []).length === 1) {
-          setStudent(existingStudents![0]);
-          setStep("pay");
-        } else {
-          setStep("hub");
-        }
+        handleUserResolved(ownerUser, existingStudents || []);
         return;
       }
-      const { data: newUser, error: userErr } = await supabase.from("users").insert({ organization_id: 1, name: ownerName.trim(), phone: newPhone }).select().single();
+      const { data: newUser, error: userErr } = await supabase.from("users").insert({
+        organization_id: 1,
+        name: ownerName.trim(),
+        phone: newPhone,
+        account_owner_type: studentSameAsOwner ? "self" : "parent_guardian",
+        account_setup_completed: true,
+        account_setup_completed_at: new Date().toISOString(),
+      }).select().single();
       if (userErr) throw userErr;
       const { data: newStudent, error: studErr } = await supabase.from("students").insert({ organization_id: 1, name: sName, user_id: newUser.id }).select("*, users(*)").single();
       if (studErr) throw studErr;
@@ -164,8 +185,9 @@ export default function JoinBatchFlow() {
       setStudents([newStudent]);
       setStudent(newStudent);
       setStep("pay");
-    } catch (e: any) {
-      toast.error("Failed to create account: " + e.message);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error("Failed to create account: " + message);
     } finally {
       setSubmitting(false);
     }
@@ -246,8 +268,8 @@ export default function JoinBatchFlow() {
       const { data: cashReq, error: cashErr } = await supabase.from("cash_payment_requests").insert({
         organization_id: 1, student_id: student.id, staff_user_id: Number(selectedStaffId),
         amount: breakdown.subtotal, gst: breakdown.gst, final_amount: breakdown.total,
-        enrollment_data: { enrollments: enrollmentRecords, enrollment_cycles_template: cyclesTemplate, payment_allocations: allocations } as any,
-        batch_ids: selectedBatchIds.map(Number) as any,
+        enrollment_data: { enrollments: enrollmentRecords, enrollment_cycles_template: cyclesTemplate, payment_allocations: allocations } as unknown as Json,
+        batch_ids: selectedBatchIds.map(Number) as unknown as Json,
       }).select().single();
       if (cashErr) throw cashErr;
 
@@ -286,7 +308,7 @@ export default function JoinBatchFlow() {
   };
 
   const stepLabels = ["Studio", "Style", "Level", "Batch", "Verify", "Pay"];
-  const stepIdx = { studio: 0, style: 1, level: 2, batch: 3, phone: 4, hub: 4, details: 4, pay: 5, waiting: 5 }[step];
+  const stepIdx = { studio: 0, style: 1, level: 2, batch: 3, phone: 4, setup: 4, hub: 4, details: 4, pay: 5, waiting: 5 }[step];
 
 
   const getPlanPerBatchFee = (p: SubPlan) => (p.total_regular_cycles || 0) * 3767 + (p.total_grid_cycles || 0) * 5300;
@@ -360,6 +382,18 @@ export default function JoinBatchFlow() {
             setStudent(s);
             setStudents(prev => prev.some(x => x.id === s.id) ? prev : [...prev, s]);
             setStep("pay");
+          }}
+        />
+      )}
+
+      {step === "setup" && user && (
+        <AccountSetup
+          user={user}
+          students={students}
+          onComplete={(updatedUser, updatedStudents) => {
+            setUser(updatedUser);
+            setStudents(updatedStudents);
+            continueAfterAccountSetup(updatedStudents);
           }}
         />
       )}

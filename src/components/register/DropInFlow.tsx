@@ -6,21 +6,29 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
 import { Sparkles } from "lucide-react";
 import SessionBrowser from "./SessionBrowser";
 import PhoneEntry from "./PhoneEntry";
 import UserHub from "./UserHub";
+import AccountSetup from "./AccountSetup";
 import ReceiptPreviewDialog from "./ReceiptPreviewDialog";
 import { useSimulatedToday } from "@/contexts/TestDateContext";
+import type { ReceiptData } from "@/lib/receiptTemplate";
 
-type Step = "browse" | "phone" | "hub" | "details" | "confirm";
+type Step = "browse" | "phone" | "setup" | "hub" | "details" | "confirm";
+type UserRow = Database["public"]["Tables"]["users"]["Row"];
+type StudentRow = Database["public"]["Tables"]["students"]["Row"] & {
+  users?: UserRow | null;
+};
+type BatchSessionRow = Database["public"]["Tables"]["batch_sessions"]["Row"];
 
 export default function DropInFlow() {
   const [step, setStep] = useState<Step>("browse");
-  const [selectedSession, setSelectedSession] = useState<any>(null);
-  const [student, setStudent] = useState<any>(null);
-  const [user, setUser] = useState<any>(null);
-  const [students, setStudents] = useState<any[]>([]);
+  const [selectedSession, setSelectedSession] = useState<BatchSessionRow | null>(null);
+  const [student, setStudent] = useState<StudentRow | null>(null);
+  const [user, setUser] = useState<UserRow | null>(null);
+  const [students, setStudents] = useState<StudentRow[]>([]);
   const [newPhone, setNewPhone] = useState("");
   const [ownerName, setOwnerName] = useState("");
   const [studentName, setStudentName] = useState("");
@@ -29,7 +37,7 @@ export default function DropInFlow() {
   const [paymentMode, setPaymentMode] = useState("cash");
   const [submitting, setSubmitting] = useState(false);
   const [receiptOpen, setReceiptOpen] = useState(false);
-  const [receiptData, setReceiptData] = useState<any>(null);
+  const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
   const simulatedToday = useSimulatedToday();
 
   useEffect(() => {
@@ -38,9 +46,7 @@ export default function DropInFlow() {
     });
   }, []);
 
-  const handleUserResolved = (u: any, list: any[]) => {
-    setUser(u);
-    setStudents(list);
+  const continueAfterAccountSetup = (list: StudentRow[]) => {
     if (list.length === 0) {
       setStep("hub");
     } else if (list.length === 1) {
@@ -49,6 +55,16 @@ export default function DropInFlow() {
     } else {
       setStep("hub");
     }
+  };
+
+  const handleUserResolved = (u: UserRow, list: StudentRow[]) => {
+    setUser(u);
+    setStudents(list);
+    if (u.account_setup_completed === false) {
+      setStep("setup");
+      return;
+    }
+    continueAfterAccountSetup(list);
   };
 
   const handleSignup = async () => {
@@ -61,18 +77,18 @@ export default function DropInFlow() {
       if (existingUsers && existingUsers.length > 0) {
         const ownerUser = existingUsers[0];
         const { data: existingStudents } = await supabase.from("students").select("*, users(*)").eq("user_id", ownerUser.id);
-        setUser(ownerUser);
-        setStudents(existingStudents || []);
         toast.info("Account already exists! Continuing with your profile.");
-        if ((existingStudents || []).length === 1) {
-          setStudent(existingStudents![0]);
-          setStep("confirm");
-        } else {
-          setStep("hub");
-        }
+        handleUserResolved(ownerUser, existingStudents || []);
         return;
       }
-      const { data: newUser, error: userErr } = await supabase.from("users").insert({ organization_id: 1, name: ownerName.trim(), phone: newPhone }).select().single();
+      const { data: newUser, error: userErr } = await supabase.from("users").insert({
+        organization_id: 1,
+        name: ownerName.trim(),
+        phone: newPhone,
+        account_owner_type: studentSameAsOwner ? "self" : "parent_guardian",
+        account_setup_completed: true,
+        account_setup_completed_at: new Date().toISOString(),
+      }).select().single();
       if (userErr) throw userErr;
       const { data: newStudent, error: studErr } = await supabase.from("students").insert({ organization_id: 1, name: sName, user_id: newUser.id }).select("*, users(*)").single();
       if (studErr) throw studErr;
@@ -80,8 +96,9 @@ export default function DropInFlow() {
       setStudents([newStudent]);
       setStudent(newStudent);
       setStep("confirm");
-    } catch (e: any) {
-      toast.error("Failed to create account: " + e.message);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error("Failed to create account: " + message);
     } finally {
       setSubmitting(false);
     }
@@ -169,6 +186,18 @@ export default function DropInFlow() {
             setStudent(s);
             setStudents(prev => prev.some(x => x.id === s.id) ? prev : [...prev, s]);
             setStep("confirm");
+          }}
+        />
+      )}
+
+      {step === "setup" && user && (
+        <AccountSetup
+          user={user}
+          students={students}
+          onComplete={(updatedUser, updatedStudents) => {
+            setUser(updatedUser);
+            setStudents(updatedStudents);
+            continueAfterAccountSetup(updatedStudents);
           }}
         />
       )}

@@ -1479,6 +1479,9 @@ export type Database = {
       }
       users: {
         Row: {
+          account_owner_type: string | null
+          account_setup_completed: boolean
+          account_setup_completed_at: string | null
           auth_id: string | null
           created_at: string
           email: string | null
@@ -1491,6 +1494,9 @@ export type Database = {
           source: string | null
         }
         Insert: {
+          account_owner_type?: string | null
+          account_setup_completed?: boolean
+          account_setup_completed_at?: string | null
           auth_id?: string | null
           created_at?: string
           email?: string | null
@@ -1503,6 +1509,9 @@ export type Database = {
           source?: string | null
         }
         Update: {
+          account_owner_type?: string | null
+          account_setup_completed?: boolean
+          account_setup_completed_at?: string | null
           auth_id?: string | null
           created_at?: string
           email?: string | null
