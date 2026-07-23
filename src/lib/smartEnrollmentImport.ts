@@ -19,6 +19,17 @@ export function cleanImportValue(value: string | null | undefined): string {
     .trim();
 }
 
+export function buildSafeCsvHeaders(rawHeaders: string[]): string[] {
+  const seen = new Map<string, number>();
+
+  return rawHeaders.map((header, index) => {
+    const cleaned = cleanImportValue(header) || `Column ${index + 1}`;
+    const count = seen.get(cleaned) || 0;
+    seen.set(cleaned, count + 1);
+    return count === 0 ? cleaned : `${cleaned} (${count + 1})`;
+  });
+}
+
 export function normalizePhone(value: string | null | undefined): string {
   const cleaned = cleanImportValue(value).replace(/[^\d+]/g, "");
   const digits = cleaned.replace(/\D/g, "");

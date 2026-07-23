@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { allocateCyclesForPlan, insertEnrollmentCycles } from "@/lib/cycleUtils";
 import type { PlanCycle, SubPlan } from "@/lib/enrollmentUtils";
 import {
+  buildSafeCsvHeaders,
   buildBatchCodeFromInput,
   cleanImportValue,
   findBatchForSmartEnrollment,
@@ -169,7 +170,7 @@ function CSVImportTab({
       complete: (res) => {
         const rows = res.data as string[][];
         if (rows.length < 2) { toast.error("CSV has no data rows"); return; }
-        const headers = rows[0].map(h => cleanImportValue(h));
+        const headers = buildSafeCsvHeaders(rows[0]);
         setCsvHeaders(headers);
         setCsvData(rows.slice(1).filter(r => r.some(c => c.trim())));
         const autoMap: Record<string, string> = {};

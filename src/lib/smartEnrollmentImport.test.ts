@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildSafeCsvHeaders,
   buildBatchCodeCandidates,
   cleanImportValue,
   findBatchForSmartEnrollment,
@@ -19,6 +20,15 @@ const cycles: SmartCycle[] = [
 describe("smart enrollment import helpers", () => {
   it("cleans CSV BOMs and invisible characters", () => {
     expect(cleanImportValue("\uFEFFstudent_name\u200B ")).toBe("student_name");
+  });
+
+  it("turns blank and duplicate CSV headers into safe Select values", () => {
+    expect(buildSafeCsvHeaders(["\uFEFFstudent_name", "", "cycles", "cycles"])).toEqual([
+      "student_name",
+      "Column 2",
+      "cycles",
+      "cycles (2)",
+    ]);
   });
 
   it("normalizes common Indian phone number formats", () => {
