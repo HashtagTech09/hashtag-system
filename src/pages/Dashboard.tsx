@@ -236,9 +236,8 @@ const Dashboard = () => {
         renewableMap.set(`${r.student_id}-${r.batch_id}`, { student_id: r.student_id, batch_id: r.batch_id });
       });
       const dedupedRenewables = Array.from(renewableMap.values());
-      const uniqueRenewable = new Set(dedupedRenewables.map(r => r.student_id));
       setRenewableRows(dedupedRenewables);
-      setRenewableCount(uniqueRenewable.size);
+      setRenewableCount(dedupedRenewables.length);
 
       // Fetch attendance absences within selected cycle
       const absences = await fetchAll<{ student_id: number; batch_id: number }>(() =>
