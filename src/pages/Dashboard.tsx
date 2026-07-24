@@ -38,7 +38,11 @@ function compareBatches(a: { style_base?: string | null; level?: string | null; 
   return ra.group - rb.group || ra.style - rb.style || ra.level - rb.level || a.name.localeCompare(b.name);
 }
 
-async function fetchAll<T>(queryFactory: () => any): Promise<T[]> {
+type PagedQuery<T> = {
+  range: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: Error | { message: string } | null }>;
+};
+
+async function fetchAll<T>(queryFactory: () => PagedQuery<T>): Promise<T[]> {
   const PAGE = 1000;
   let all: T[] = [];
   let from = 0;
@@ -72,11 +76,17 @@ interface PlanCycle {
   id: number; name: string; start_date: string; end_date: string | null;
   is_active: boolean; grace_days: number; plan_type: string;
 }
+interface RenewableEnrollment {
+  student_id: number;
+  batch_id: number;
+}
+type BatchDetailFilter = "total" | "C/F" | "NEW" | "REV" | "REN" | "RENEWABLE";
 
 const ACCENT = "#ff007f";
 
 const Dashboard = () => {
   const scope = useScopedStudents();
+  const { loading: scopeLoading, unrestricted: scopeUnrestricted, batchIds: scopeBatchIds } = scope;
   const [studios, setStudios] = useState<Studio[]>([]);
   const [selectedStudio, setSelectedStudio] = useState<string>("all");
   const [batches, setBatches] = useState<Batch[]>([]);
@@ -88,6 +98,7 @@ const Dashboard = () => {
   const [allCycles, setAllCycles] = useState<PlanCycle[]>([]);
   const [selectedCycleId, setSelectedCycleId] = useState<string>("");
   const [renewableCount, setRenewableCount] = useState(0);
+  const [renewableRows, setRenewableRows] = useState<RenewableEnrollment[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Expandable states
@@ -102,7 +113,7 @@ const Dashboard = () => {
   const [missedThreshold, setMissedThreshold] = useState(3);
   const [attendanceRecords, setAttendanceRecords] = useState<{ student_id: number; batch_id: number }[]>([]);
   const [studentNames, setStudentNames] = useState<Map<number, { name: string; phone: string | null }>>(new Map());
-  const [selectedBatch, setSelectedBatch] = useState<{ id: number; name: string } | null>(null);
+  const [selectedBatch, setSelectedBatch] = useState<{ id: number; name: string; filter: BatchDetailFilter } | null>(null);
 
   useEffect(() => {
     const init = async () => {
@@ -123,19 +134,19 @@ const Dashboard = () => {
   const selectedCycle = useMemo(() => allCycles.find(c => String(c.id) === selectedCycleId) || null, [allCycles, selectedCycleId]);
 
   useEffect(() => {
-    if (!selectedCycle || scope.loading) return;
+    if (!selectedCycle || scopeLoading) return;
     const fetchData = async () => {
       setLoading(true);
       let batchQuery = supabase.from("batches").select("id, name, batch_code, studio_id, capacity, style_base, level").eq("organization_id", 1);
       if (selectedStudio !== "all") {
         batchQuery = batchQuery.eq("studio_id", parseInt(selectedStudio));
       }
-      if (!scope.unrestricted) {
-        if (scope.batchIds.length === 0) {
+      if (!scopeUnrestricted) {
+        if (scopeBatchIds.length === 0) {
           setBatches([]); setEnrollments([]); setPayments([]); setPaymentAllocations([]); setDropIns([]); setDropInPayments([]);
-          setRenewableCount(0); setLoading(false); return;
+          setRenewableRows([]); setRenewableCount(0); setLoading(false); return;
         }
-        batchQuery = batchQuery.in("id", scope.batchIds);
+        batchQuery = batchQuery.in("id", scopeBatchIds);
       }
       const batchRes = await batchQuery;
       const batchList = (batchRes.data || []) as Batch[];
@@ -144,7 +155,7 @@ const Dashboard = () => {
 
       if (batchIds.length === 0) {
         setEnrollments([]); setPayments([]); setPaymentAllocations([]); setDropIns([]); setDropInPayments([]);
-        setRenewableCount(0); setLoading(false);
+        setRenewableRows([]); setRenewableCount(0); setLoading(false);
         return;
       }
 
@@ -215,11 +226,18 @@ const Dashboard = () => {
         .eq("organization_id", 1)
         .gte("end_date", graceLookback.toISOString().split("T")[0])
         .lt("end_date", selectedCycle.start_date);
-      if (batchIds.length > 0 && selectedStudio !== "all") {
+      if (batchIds.length > 0) {
         renewableQuery = renewableQuery.in("batch_id", batchIds);
       }
       const renewableRes = await renewableQuery;
-      const uniqueRenewable = new Set((renewableRes.data || []).map((r: any) => r.student_id));
+      const renewableMap = new Map<string, RenewableEnrollment>();
+      (renewableRes.data || []).forEach((r) => {
+        if (!r.student_id || !r.batch_id) return;
+        renewableMap.set(`${r.student_id}-${r.batch_id}`, { student_id: r.student_id, batch_id: r.batch_id });
+      });
+      const dedupedRenewables = Array.from(renewableMap.values());
+      const uniqueRenewable = new Set(dedupedRenewables.map(r => r.student_id));
+      setRenewableRows(dedupedRenewables);
       setRenewableCount(uniqueRenewable.size);
 
       // Fetch attendance absences within selected cycle
@@ -243,7 +261,7 @@ const Dashboard = () => {
       if (absentStudentIds.length > 0) {
         const studRes = await supabase.from("students").select("id, name, phone").in("id", absentStudentIds);
         const nameMap = new Map<number, { name: string; phone: string | null }>();
-        (studRes.data || []).forEach((s: any) => nameMap.set(s.id, { name: s.name, phone: s.phone }));
+        (studRes.data || []).forEach((s) => nameMap.set(s.id, { name: s.name, phone: s.phone }));
         setStudentNames(nameMap);
       } else {
         setStudentNames(new Map());
@@ -252,7 +270,7 @@ const Dashboard = () => {
       setLoading(false);
     };
     fetchData();
-  }, [selectedCycle, selectedStudio, scope.loading, scope.unrestricted, scope.batchIds.join(",")]);
+  }, [selectedCycle, selectedStudio, scopeLoading, scopeUnrestricted, scopeBatchIds]);
 
   // Classify enrollments: C/F (carry forward from prior cycle) vs current-cycle
   const classifiedEnrollments = useMemo(() => {
@@ -300,6 +318,25 @@ const Dashboard = () => {
       .filter(b => b.total > 0)
       .sort(compareBatches);
   }, [classifiedEnrollments, batches]);
+
+  const renewableBatchData = useMemo(() => {
+    const batchStudents = new Map<number, Set<number>>();
+    renewableRows.forEach(r => {
+      if (!batchStudents.has(r.batch_id)) batchStudents.set(r.batch_id, new Set());
+      batchStudents.get(r.batch_id)!.add(r.student_id);
+    });
+    return batches
+      .map(b => ({
+        id: b.id,
+        name: b.batch_code || b.name,
+        capacity: b.capacity || 35,
+        style_base: b.style_base,
+        level: b.level,
+        renewable: batchStudents.get(b.id)?.size || 0,
+      }))
+      .filter(b => b.renewable > 0)
+      .sort(compareBatches);
+  }, [renewableRows, batches]);
 
   // Head count: unique students per batch
   const headCountData = useMemo(() => {
@@ -430,11 +467,11 @@ const Dashboard = () => {
   const fmt = (n: number) => n.toLocaleString("en-IN");
 
   const ClickableBatchRow = ({
-    children, batchId, batchName,
-  }: { children: React.ReactNode; batchId: number; batchName: string }) => {
+    children, batchId, batchName, filter,
+  }: { children: React.ReactNode; batchId: number; batchName: string; filter: BatchDetailFilter }) => {
     const handlers = useLongPress({
-      onLongPress: () => setSelectedBatch({ id: batchId, name: batchName }),
-      onClick: () => setSelectedBatch({ id: batchId, name: batchName }),
+      onLongPress: () => setSelectedBatch({ id: batchId, name: batchName, filter }),
+      onClick: () => setSelectedBatch({ id: batchId, name: batchName, filter }),
     });
     return (
       <TableRow
@@ -460,9 +497,46 @@ const Dashboard = () => {
         {data.filter(b => b[valueKey] > 0).map(b => {
           const pct = Math.min(Math.round((b[valueKey] / b.capacity) * 100), 100);
           return (
-            <ClickableBatchRow key={b.id} batchId={b.id} batchName={b.name}>
+            <ClickableBatchRow key={b.id} batchId={b.id} batchName={b.name} filter={valueKey}>
               <TableCell className="font-medium text-xs">{b.name}</TableCell>
               <TableCell className="text-right text-xs">{b[valueKey]}</TableCell>
+              <TableCell className="text-right text-xs">{b.capacity}</TableCell>
+              <TableCell>
+                <div className="flex items-center gap-2">
+                  <Progress value={pct} className="h-1.5 flex-1" />
+                  <span className="text-[10px] text-muted-foreground w-8 text-right">{pct}%</span>
+                </div>
+              </TableCell>
+            </ClickableBatchRow>
+          );
+        })}
+      </TableBody>
+    </Table>
+  );
+
+  const RenewableBatchTable = ({ data }: { data: typeof renewableBatchData }) => (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Batch</TableHead>
+          <TableHead className="text-right">Renewable</TableHead>
+          <TableHead className="text-right">Capacity</TableHead>
+          <TableHead className="w-[160px]">Pool</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {data.length === 0 ? (
+          <TableRow>
+            <TableCell colSpan={4} className="text-center text-xs text-muted-foreground py-4">
+              No renewable students for this cycle and studio.
+            </TableCell>
+          </TableRow>
+        ) : data.map(b => {
+          const pct = Math.min(Math.round((b.renewable / b.capacity) * 100), 100);
+          return (
+            <ClickableBatchRow key={b.id} batchId={b.id} batchName={b.name} filter="RENEWABLE">
+              <TableCell className="font-medium text-xs">{b.name}</TableCell>
+              <TableCell className="text-right text-xs">{b.renewable}</TableCell>
               <TableCell className="text-right text-xs">{b.capacity}</TableCell>
               <TableCell>
                 <div className="flex items-center gap-2">
@@ -516,6 +590,19 @@ const Dashboard = () => {
       </CardContent>
     </Card>
   );
+
+  const popupEnrollments = useMemo(() => {
+    if (!selectedBatch) return [];
+    if (selectedBatch.filter === "RENEWABLE") {
+      return renewableRows
+        .filter(r => r.batch_id === selectedBatch.id)
+        .map(r => ({ student_id: r.student_id, displayStatus: "RENEWABLE" }));
+    }
+    return classifiedEnrollments
+      .filter(e => e.batch_id === selectedBatch.id)
+      .filter(e => selectedBatch.filter === "total" || e.displayStatus === selectedBatch.filter)
+      .map(e => ({ student_id: e.student_id, displayStatus: e.displayStatus }));
+  }, [classifiedEnrollments, renewableRows, selectedBatch]);
 
   return (
     <AdminLayout title="Dashboard">
@@ -578,7 +665,7 @@ const Dashboard = () => {
                 </TableHeader>
                 <TableBody>
                   {headCountData.map(b => (
-                    <ClickableBatchRow key={b.id} batchId={b.id} batchName={b.name}>
+                    <ClickableBatchRow key={b.id} batchId={b.id} batchName={b.name} filter="total">
                       <TableCell className="font-medium text-xs">{b.name}</TableCell>
                       <TableCell className="text-right text-xs">{b.count}</TableCell>
                     </ClickableBatchRow>
@@ -613,7 +700,12 @@ const Dashboard = () => {
               subtitle={`${renDreams} / ${renewableCount} renewable`}
               open={renOpen} onOpenChange={setRenOpen} highlight
             >
-              <BatchTable data={batchData} valueKey="REN" />
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground">
+                  Renewable pool by previous batch. Click a batch to view students due for renewal.
+                </p>
+                <RenewableBatchTable data={renewableBatchData} />
+              </div>
             </ExpandableCard>
             <ExpandableCard
               title="REN Dreams" value={renDreams}
@@ -805,13 +897,7 @@ const Dashboard = () => {
 
       <BatchDetailsPopup
         batch={selectedBatch}
-        enrollments={
-          selectedBatch
-            ? classifiedEnrollments
-                .filter(e => e.batch_id === selectedBatch.id)
-                .map(e => ({ student_id: e.student_id, displayStatus: e.displayStatus }))
-            : []
-        }
+        enrollments={popupEnrollments}
         open={!!selectedBatch}
         onOpenChange={(v) => { if (!v) setSelectedBatch(null); }}
       />
