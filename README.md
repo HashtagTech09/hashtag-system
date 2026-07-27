@@ -440,7 +440,7 @@ Base pricing:
 
 - Regular cycle price: INR 3,200.
 - Grid cycle price: INR 7,667.
-- Registration fee fallback: INR 424.
+- Registration fee fallback: INR 500 before GST, which is INR 590 including 18% GST.
 - GST fallback: 18 percent.
 - Runtime registration fee and GST are loaded from settings where supported.
 

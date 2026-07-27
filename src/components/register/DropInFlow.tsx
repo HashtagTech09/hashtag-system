@@ -12,9 +12,11 @@ import SessionBrowser from "./SessionBrowser";
 import PhoneEntry from "./PhoneEntry";
 import UserHub from "./UserHub";
 import AccountSetup from "./AccountSetup";
+import AccountOwnerChoice from "./AccountOwnerChoice";
 import ReceiptPreviewDialog from "./ReceiptPreviewDialog";
 import { useSimulatedToday } from "@/contexts/TestDateContext";
 import type { ReceiptData } from "@/lib/receiptTemplate";
+import { needsAccountSetup, type AccountOwnerType } from "@/lib/accountOwner";
 
 type Step = "browse" | "phone" | "setup" | "hub" | "details" | "confirm";
 type UserRow = Database["public"]["Tables"]["users"]["Row"];
@@ -32,7 +34,7 @@ export default function DropInFlow() {
   const [newPhone, setNewPhone] = useState("");
   const [ownerName, setOwnerName] = useState("");
   const [studentName, setStudentName] = useState("");
-  const [studentSameAsOwner, setStudentSameAsOwner] = useState(true);
+  const [accountOwnerType, setAccountOwnerType] = useState<AccountOwnerType>("self");
   const [dropInFee, setDropInFee] = useState(700);
   const [paymentMode, setPaymentMode] = useState("cash");
   const [submitting, setSubmitting] = useState(false);
@@ -60,7 +62,7 @@ export default function DropInFlow() {
   const handleUserResolved = (u: UserRow, list: StudentRow[]) => {
     setUser(u);
     setStudents(list);
-    if (u.account_setup_completed === false) {
+    if (needsAccountSetup(u)) {
       setStep("setup");
       return;
     }
@@ -69,7 +71,7 @@ export default function DropInFlow() {
 
   const handleSignup = async () => {
     if (!ownerName.trim()) { toast.error("Enter the account owner's name"); return; }
-    const sName = studentSameAsOwner ? ownerName.trim() : studentName.trim();
+    const sName = accountOwnerType === "self" ? ownerName.trim() : studentName.trim();
     if (!sName) { toast.error("Enter the student's name"); return; }
     setSubmitting(true);
     try {
@@ -85,7 +87,7 @@ export default function DropInFlow() {
         organization_id: 1,
         name: ownerName.trim(),
         phone: newPhone,
-        account_owner_type: studentSameAsOwner ? "self" : "parent_guardian",
+        account_owner_type: accountOwnerType,
         account_setup_completed: true,
         account_setup_completed_at: new Date().toISOString(),
       }).select().single();
@@ -148,7 +150,7 @@ export default function DropInFlow() {
     setStudents([]);
     setOwnerName("");
     setStudentName("");
-    setStudentSameAsOwner(true);
+    setAccountOwnerType("self");
   };
 
   return (
@@ -207,15 +209,20 @@ export default function DropInFlow() {
           <CardContent className="p-6 space-y-4">
             <h3 className="font-display font-semibold text-foreground">Create your account</h3>
             <p className="text-sm text-muted-foreground">Phone: {newPhone}</p>
+            <div className="space-y-2">
+              <Label>Who owns this account?</Label>
+              <AccountOwnerChoice value={accountOwnerType} onChange={setAccountOwnerType} />
+            </div>
             <div>
               <Label>Account owner name</Label>
-              <Input value={ownerName} onChange={e => setOwnerName(e.target.value)} placeholder="Parent or your own name" className="mt-1" />
+              <Input
+                value={ownerName}
+                onChange={e => setOwnerName(e.target.value)}
+                placeholder={accountOwnerType === "self" ? "Your name" : "Parent or guardian name"}
+                className="mt-1"
+              />
             </div>
-            <label className="flex items-center gap-2 text-sm cursor-pointer">
-              <input type="checkbox" checked={studentSameAsOwner} onChange={e => setStudentSameAsOwner(e.target.checked)} />
-              <span>I am the student</span>
-            </label>
-            {!studentSameAsOwner && (
+            {accountOwnerType === "parent_guardian" && (
               <div>
                 <Label>Student name</Label>
                 <Input value={studentName} onChange={e => setStudentName(e.target.value)} placeholder="Child or member's name" className="mt-1" />

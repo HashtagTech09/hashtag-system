@@ -90,8 +90,9 @@ const SettingsPage = () => {
           <CardHeader><CardTitle className="text-base">System Settings</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <Label>Registration Fee (₹)</Label>
+              <Label>Registration Fee Before GST (₹)</Label>
               <Input type="number" value={settings.registration_fee || ""} onChange={(e) => setSettings({ ...settings, registration_fee: e.target.value })} />
+              <p className="text-xs text-muted-foreground mt-1">Use ₹500 to charge ₹590 including 18% GST.</p>
             </div>
             <div>
               <Label>Drop-in Fee (₹)</Label>

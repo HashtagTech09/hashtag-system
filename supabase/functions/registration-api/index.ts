@@ -37,7 +37,7 @@ async function loadSettings(supabase: any) {
   (data || []).forEach((r: any) => { map[r.key] = r.value; });
   CACHED_SETTINGS = {
     orgId: Number(map.default_organization_id ?? 1),
-    regFee: Number(map.registration_fee ?? 424),
+    regFee: Number(map.registration_fee ?? 500),
     dropInFee: Number(map.drop_in_fee ?? 500),
     gstRate: Number(map.gst_percent ?? 18) / 100,
   };

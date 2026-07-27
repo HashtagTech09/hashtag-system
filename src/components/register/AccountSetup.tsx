@@ -6,14 +6,15 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
-import { Check, UserRound, UsersRound } from "lucide-react";
+import { Check } from "lucide-react";
 import { toast } from "sonner";
+import AccountOwnerChoice from "./AccountOwnerChoice";
+import { isAccountOwnerType, type AccountOwnerType } from "@/lib/accountOwner";
 
 type UserRow = Database["public"]["Tables"]["users"]["Row"];
 type StudentRow = Database["public"]["Tables"]["students"]["Row"] & {
   users?: UserRow | null;
 };
-type AccountOwnerType = "self" | "parent_guardian";
 
 interface AccountSetupProps {
   user: UserRow;
@@ -34,34 +35,41 @@ function initialDrafts(user: UserRow, students: StudentRow[]): StudentDraft[] {
 }
 
 export default function AccountSetup({ user, students, onComplete }: AccountSetupProps) {
+  const hasSingleStudent = students.length <= 1;
   const defaultOwnerType: AccountOwnerType = students.length > 1 ? "parent_guardian" : "self";
   const [ownerType, setOwnerType] = useState<AccountOwnerType>(
     students.length > 1 ? "parent_guardian" :
-      user.account_owner_type === "parent_guardian" || user.account_owner_type === "self" ? user.account_owner_type : defaultOwnerType,
+      isAccountOwnerType(user.account_owner_type) ? user.account_owner_type : defaultOwnerType,
   );
   const [ownerName, setOwnerName] = useState(user.name || "");
   const [email, setEmail] = useState(user.email || "");
   const [studentDrafts, setStudentDrafts] = useState<StudentDraft[]>(() => initialDrafts(user, students));
-  const [selfUsesOwnerName, setSelfUsesOwnerName] = useState(students.length <= 1);
+  const [parentUsesStudentName, setParentUsesStudentName] = useState(() => {
+    if (students.length !== 1) return false;
+    return (user.name || "").trim().toLowerCase() === (students[0]?.name || "").trim().toLowerCase();
+  });
   const [saving, setSaving] = useState(false);
 
   const effectiveDrafts = useMemo(() => {
-    if (ownerType === "self" && selfUsesOwnerName && studentDrafts.length === 1) {
+    if (ownerType === "self" && studentDrafts.length === 1) {
       return [{ ...studentDrafts[0], name: ownerName }];
     }
     return studentDrafts;
-  }, [ownerName, ownerType, selfUsesOwnerName, studentDrafts]);
+  }, [ownerName, ownerType, studentDrafts]);
 
   const updateStudentName = (index: number, name: string) => {
     setStudentDrafts((current) => current.map((draft, i) => (i === index ? { ...draft, name } : draft)));
   };
 
   const handleSave = async () => {
-    const trimmedOwnerName = ownerName.trim();
     const validDrafts = effectiveDrafts.map((draft) => ({ ...draft, name: draft.name.trim() })).filter((draft) => draft.name);
+    const firstStudentName = validDrafts[0]?.name || "";
+    const effectiveOwnerName = ownerType === "parent_guardian" && hasSingleStudent && parentUsesStudentName
+      ? firstStudentName
+      : ownerName.trim();
 
-    if (!trimmedOwnerName) {
-      toast.error("Enter the account owner name");
+    if (!effectiveOwnerName) {
+      toast.error(ownerType === "self" ? "Enter the student's name" : "Enter the account owner name");
       return;
     }
     if (ownerType === "self" && validDrafts.length !== 1) {
@@ -78,7 +86,7 @@ export default function AccountSetup({ user, students, onComplete }: AccountSetu
       const { data: updatedUser, error: userError } = await supabase
         .from("users")
         .update({
-          name: trimmedOwnerName,
+          name: effectiveOwnerName,
           email: email.trim() || null,
           account_owner_type: ownerType,
           account_setup_completed: true,
@@ -136,42 +144,13 @@ export default function AccountSetup({ user, students, onComplete }: AccountSetu
           <p className="text-sm text-muted-foreground">{user.phone}</p>
         </div>
 
-        <RadioGroup
+        <AccountOwnerChoice
           value={ownerType}
-          onValueChange={(value) => setOwnerType(value as AccountOwnerType)}
-          className="grid grid-cols-1 sm:grid-cols-2 gap-3"
-        >
-          <Label
-            htmlFor="owner-self"
-            className={`rounded-lg border p-4 cursor-pointer transition-all ${ownerType === "self" ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"}`}
-          >
-            <div className="flex items-start gap-3">
-              <RadioGroupItem id="owner-self" value="self" className="mt-1" disabled={students.length > 1} />
-              <div className="space-y-1">
-                <div className="flex items-center gap-2 font-medium text-foreground">
-                  <UserRound className="h-4 w-4" />
-                  I manage my own classes
-                </div>
-                <p className="text-xs text-muted-foreground">The account owner and student are the same person.</p>
-              </div>
-            </div>
-          </Label>
-          <Label
-            htmlFor="owner-parent"
-            className={`rounded-lg border p-4 cursor-pointer transition-all ${ownerType === "parent_guardian" ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"}`}
-          >
-            <div className="flex items-start gap-3">
-              <RadioGroupItem id="owner-parent" value="parent_guardian" className="mt-1" />
-              <div className="space-y-1">
-                <div className="flex items-center gap-2 font-medium text-foreground">
-                  <UsersRound className="h-4 w-4" />
-                  Parent or guardian
-                </div>
-                <p className="text-xs text-muted-foreground">This phone manages one or more student profiles.</p>
-              </div>
-            </div>
-          </Label>
-        </RadioGroup>
+          onChange={setOwnerType}
+          disableSelf={students.length > 1}
+          selfDescription="I am the student signing in."
+          parentDescription="I am a parent or guardian managing a student."
+        />
 
         {students.length > 1 && (
           <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm text-muted-foreground">
@@ -179,15 +158,49 @@ export default function AccountSetup({ user, students, onComplete }: AccountSetu
           </div>
         )}
 
+        {ownerType === "parent_guardian" && hasSingleStudent && (
+          <div className="space-y-2">
+            <Label>Is the parent/guardian name the same as the student name?</Label>
+            <RadioGroup
+              value={parentUsesStudentName ? "same" : "different"}
+              onValueChange={(value) => setParentUsesStudentName(value === "same")}
+              className="grid grid-cols-1 sm:grid-cols-2 gap-3"
+            >
+              <Label htmlFor="parent-name-same" className="rounded-lg border border-border p-3 cursor-pointer hover:border-primary/50">
+                <div className="flex items-start gap-2">
+                  <RadioGroupItem id="parent-name-same" value="same" className="mt-1" />
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Same name</p>
+                    <p className="text-xs text-muted-foreground">Use the student name for this account too.</p>
+                  </div>
+                </div>
+              </Label>
+              <Label htmlFor="parent-name-different" className="rounded-lg border border-border p-3 cursor-pointer hover:border-primary/50">
+                <div className="flex items-start gap-2">
+                  <RadioGroupItem id="parent-name-different" value="different" className="mt-1" />
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Different name</p>
+                    <p className="text-xs text-muted-foreground">Enter the parent/guardian name separately.</p>
+                  </div>
+                </div>
+              </Label>
+            </RadioGroup>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <Label>Account owner name</Label>
+            <Label>{ownerType === "self" ? "Student name" : "Account owner name"}</Label>
             <Input
-              value={ownerName}
+              value={ownerType === "parent_guardian" && hasSingleStudent && parentUsesStudentName ? (effectiveDrafts[0]?.name || "") : ownerName}
               onChange={(event) => setOwnerName(event.target.value)}
-              placeholder="Parent, guardian, or your name"
+              placeholder={ownerType === "self" ? "Your name" : "Parent or guardian name"}
+              disabled={ownerType === "parent_guardian" && hasSingleStudent && parentUsesStudentName}
               className="mt-1"
             />
+            {ownerType === "parent_guardian" && hasSingleStudent && parentUsesStudentName && (
+              <p className="text-xs text-muted-foreground mt-1">This will be copied from the student name below.</p>
+            )}
           </div>
           <div>
             <Label>Email</Label>
@@ -201,30 +214,24 @@ export default function AccountSetup({ user, students, onComplete }: AccountSetu
           </div>
         </div>
 
-        {ownerType === "self" && studentDrafts.length === 1 && (
-          <label className="flex items-center gap-2 text-sm cursor-pointer">
-            <input
-              type="checkbox"
-              checked={selfUsesOwnerName}
-              onChange={(event) => setSelfUsesOwnerName(event.target.checked)}
-            />
-            <span>Use the account owner name as the student name</span>
-          </label>
+        {ownerType === "self" && studentDrafts.length === 1 ? (
+          <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm text-muted-foreground">
+            This phone number will open the student account for <span className="text-foreground font-medium">{ownerName || "this student"}</span>.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <Label className="text-base">Student profile{effectiveDrafts.length > 1 ? "s" : ""}</Label>
+            {effectiveDrafts.map((draft, index) => (
+              <div key={draft.id ?? `new-${index}`}>
+                <Input
+                  value={draft.name}
+                  onChange={(event) => updateStudentName(index, event.target.value)}
+                  placeholder="Student name"
+                />
+              </div>
+            ))}
+          </div>
         )}
-
-        <div className="space-y-3">
-          <Label className="text-base">Student profile{effectiveDrafts.length > 1 ? "s" : ""}</Label>
-          {effectiveDrafts.map((draft, index) => (
-            <div key={draft.id ?? `new-${index}`}>
-              <Input
-                value={draft.name}
-                onChange={(event) => updateStudentName(index, event.target.value)}
-                placeholder="Student name"
-                disabled={ownerType === "self" && selfUsesOwnerName && studentDrafts.length === 1}
-              />
-            </div>
-          ))}
-        </div>
 
         <Button className="w-full gradient-primary" onClick={handleSave} disabled={saving}>
           {saving ? "Saving..." : (<><Check className="h-4 w-4 mr-1" /> Save and continue</>)}
