@@ -34,6 +34,26 @@ function initialDrafts(user: UserRow, students: StudentRow[]): StudentDraft[] {
   return [{ id: null, name: user.name || "" }];
 }
 
+async function getErrorMessage(error: unknown): Promise<string> {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === "object") {
+    const record = error as { message?: unknown; error?: unknown; details?: unknown; context?: unknown };
+    if (record.context instanceof Response) {
+      try {
+        const data = await record.context.clone().json();
+        if (typeof data?.error === "string") return data.error;
+        if (typeof data?.message === "string") return data.message;
+      } catch {
+        // Fall through to object fields below.
+      }
+    }
+    if (typeof record.message === "string") return record.message;
+    if (typeof record.error === "string") return record.error;
+    if (typeof record.details === "string") return record.details;
+  }
+  return String(error);
+}
+
 export default function AccountSetup({ user, students, onComplete }: AccountSetupProps) {
   const hasSingleStudent = students.length <= 1;
   const defaultOwnerType: AccountOwnerType = students.length > 1 ? "parent_guardian" : "self";
@@ -83,53 +103,24 @@ export default function AccountSetup({ user, students, onComplete }: AccountSetu
 
     setSaving(true);
     try {
-      const { data: updatedUser, error: userError } = await supabase
-        .from("users")
-        .update({
-          name: effectiveOwnerName,
+      const { data, error } = await supabase.functions.invoke("complete-account-setup", {
+        body: {
+          user_id: user.id,
+          organization_id: user.organization_id,
+          phone: user.phone,
+          owner_name: effectiveOwnerName,
           email: email.trim() || null,
           account_owner_type: ownerType,
-          account_setup_completed: true,
-          account_setup_completed_at: new Date().toISOString(),
-        })
-        .eq("id", user.id)
-        .select()
-        .single();
-      if (userError) throw userError;
-
-      for (const draft of validDrafts) {
-        if (draft.id) {
-          const { error } = await supabase
-            .from("students")
-            .update({ name: draft.name })
-            .eq("id", draft.id);
-          if (error) throw error;
-        } else {
-          const { error } = await supabase
-            .from("students")
-            .insert({
-              organization_id: user.organization_id,
-              user_id: user.id,
-              name: draft.name,
-              phone: user.phone,
-              email: email.trim() || null,
-            });
-          if (error) throw error;
-        }
-      }
-
-      const { data: updatedStudents, error: studentsError } = await supabase
-        .from("students")
-        .select("*, users(*)")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: true });
-      if (studentsError) throw studentsError;
+          students: validDrafts,
+        },
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || "Could not save account setup");
 
       toast.success("Account setup saved");
-      onComplete(updatedUser, updatedStudents || []);
+      onComplete(data.user, data.students || []);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      toast.error("Could not save account setup: " + message);
+      toast.error("Could not save account setup: " + await getErrorMessage(error));
     } finally {
       setSaving(false);
     }
