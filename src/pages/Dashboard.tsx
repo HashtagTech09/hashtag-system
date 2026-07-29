@@ -60,6 +60,7 @@ interface Enrollment {
   id: number; student_id: number; batch_id: number; status_type: string;
   start_date: string; end_date: string; payment_id: number | null;
   created_at: string; start_cycle_id: number | null; end_cycle_id: number | null;
+  previous_batch_id: number | null;
 }
 interface Payment {
   id: number; amount: number; gst: number | null; final_amount: number | null;
@@ -161,7 +162,7 @@ const Dashboard = () => {
 
       const enrollRaw = await fetchAll<Enrollment>(() =>
         supabase.from("enrollments")
-          .select("id, student_id, batch_id, status_type, start_date, end_date, payment_id, created_at, start_cycle_id, end_cycle_id")
+          .select("id, student_id, batch_id, status_type, start_date, end_date, payment_id, created_at, start_cycle_id, end_cycle_id, previous_batch_id")
           .eq("organization_id", 1)
           .eq("is_active", true)
           .in("batch_id", batchIds)
@@ -302,7 +303,10 @@ const Dashboard = () => {
       if (e.displayStatus === "C/F") cfMap.set(e.batch_id, (cfMap.get(e.batch_id) || 0) + 1);
       if (e.displayStatus === "NEW") newMap.set(e.batch_id, (newMap.get(e.batch_id) || 0) + 1);
       if (e.displayStatus === "REV") revMap.set(e.batch_id, (revMap.get(e.batch_id) || 0) + 1);
-      if (e.displayStatus === "REN") renMap.set(e.batch_id, (renMap.get(e.batch_id) || 0) + 1);
+      if (e.displayStatus === "REN") {
+        const renewalBatchId = e.previous_batch_id || e.batch_id;
+        renMap.set(renewalBatchId, (renMap.get(renewalBatchId) || 0) + 1);
+      }
     });
     return batches
       .map(b => ({
@@ -314,7 +318,7 @@ const Dashboard = () => {
         REV: revMap.get(b.id) || 0,
         REN: renMap.get(b.id) || 0,
       }))
-      .filter(b => b.total > 0)
+      .filter(b => b.total > 0 || b["C/F"] > 0 || b.NEW > 0 || b.REV > 0 || b.REN > 0)
       .sort(compareBatches);
   }, [classifiedEnrollments, batches]);
 
@@ -598,7 +602,12 @@ const Dashboard = () => {
         .map(r => ({ student_id: r.student_id, displayStatus: "RENEWABLE" }));
     }
     return classifiedEnrollments
-      .filter(e => e.batch_id === selectedBatch.id)
+      .filter(e => {
+        if (selectedBatch.filter === "REN") {
+          return (e.previous_batch_id || e.batch_id) === selectedBatch.id;
+        }
+        return e.batch_id === selectedBatch.id;
+      })
       .filter(e => selectedBatch.filter === "total" || e.displayStatus === selectedBatch.filter)
       .map(e => ({ student_id: e.student_id, displayStatus: e.displayStatus }));
   }, [classifiedEnrollments, renewableRows, selectedBatch]);
