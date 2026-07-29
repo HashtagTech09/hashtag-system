@@ -12,6 +12,7 @@ import StudentDashboard from "./StudentDashboard";
 import AccountSetup from "./AccountSetup";
 import AccountOwnerChoice from "./AccountOwnerChoice";
 import { needsAccountSetup, type AccountOwnerType } from "@/lib/accountOwner";
+import { Check, Plus, X } from "lucide-react";
 
 type Step = "phone" | "signup" | "setup" | "hub" | "dashboard";
 type UserRow = Database["public"]["Tables"]["users"]["Row"];
@@ -31,6 +32,9 @@ export default function AccountFlow() {
   const [studentName, setStudentName] = useState("");
   const [accountOwnerType, setAccountOwnerType] = useState<AccountOwnerType>("self");
   const [submitting, setSubmitting] = useState(false);
+  const [addingStudent, setAddingStudent] = useState(false);
+  const [newStudentName, setNewStudentName] = useState("");
+  const [addingStudentSubmit, setAddingStudentSubmit] = useState(false);
 
   const continueAfterSetup = (list: StudentRow[]) => {
     if (list.length === 0) {
@@ -98,7 +102,46 @@ export default function AccountFlow() {
     setOwnerName("");
     setStudentName("");
     setAccountOwnerType("self");
+    setAddingStudent(false);
+    setNewStudentName("");
     setStep("phone");
+  };
+
+  const handleAddStudent = async () => {
+    if (!user) return;
+    const name = newStudentName.trim();
+    if (!name) {
+      toast.error("Enter the student's name");
+      return;
+    }
+
+    setAddingStudentSubmit(true);
+    try {
+      const { data: created, error } = await supabase
+        .from("students")
+        .insert({
+          organization_id: user.organization_id || 1,
+          user_id: user.id,
+          name,
+          phone: user.phone,
+          email: user.email,
+        })
+        .select("*, users(*)")
+        .single();
+      if (error) throw error;
+
+      setStudents((current) => current.some((student) => student.id === created.id) ? current : [...current, created]);
+      setActiveStudent(created);
+      setNewStudentName("");
+      setAddingStudent(false);
+      setStep("dashboard");
+      toast.success(`${name} added under ${user.name}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error("Could not add student: " + message);
+    } finally {
+      setAddingStudentSubmit(false);
+    }
   };
 
   if (step === "phone") {
@@ -192,17 +235,51 @@ export default function AccountFlow() {
   // dashboard
   return (
     <div className="space-y-4">
-      <div className="p-4 rounded-lg border border-primary/20 bg-primary/5 flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">Logged in as {user.name}</p>
-          <h2 className="text-lg font-display font-semibold text-foreground truncate">
-            Viewing {activeStudent.name} 👋
-          </h2>
+      <div className="p-4 rounded-lg border border-primary/20 bg-primary/5 space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Logged in as {user.name}</p>
+            <h2 className="text-lg font-display font-semibold text-foreground truncate">
+              Viewing {activeStudent.name} 👋
+            </h2>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" onClick={() => setAddingStudent(true)}>
+              <Plus className="h-4 w-4 mr-1" /> Add student
+            </Button>
+            {students.length > 1 && (
+              <Button variant="outline" size="sm" onClick={() => setStep("hub")}>
+                Switch student
+              </Button>
+            )}
+          </div>
         </div>
-        {students.length > 1 && (
-          <Button variant="outline" size="sm" onClick={() => setStep("hub")}>
-            Switch student
-          </Button>
+
+        {addingStudent && (
+          <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2">
+            <Input
+              autoFocus
+              value={newStudentName}
+              onChange={(event) => setNewStudentName(event.target.value)}
+              onKeyDown={(event) => event.key === "Enter" && handleAddStudent()}
+              placeholder="New student's name"
+            />
+            <div className="flex gap-2">
+              <Button onClick={handleAddStudent} disabled={addingStudentSubmit} className="gradient-primary flex-1 sm:flex-none">
+                <Check className="h-4 w-4 mr-1" /> {addingStudentSubmit ? "Adding..." : "Add"}
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => {
+                  setAddingStudent(false);
+                  setNewStudentName("");
+                }}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
         )}
       </div>
       <StudentDashboard
