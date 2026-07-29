@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeCycleAssignment, detectStudentStatus, isPlanValid, matchPlanCycles, type PlanCycle, type SubPlan } from "./enrollmentUtils";
+import { computeCycleAssignment, detectStudentStatus, getStartCycleIndex, isPlanValid, matchPlanCycles, type PlanCycle, type SubPlan } from "./enrollmentUtils";
 
 const cycles: PlanCycle[] = [
   {
@@ -87,5 +87,17 @@ describe("grid-aware enrollment cycle matching", () => {
 
   it("does not treat missed regular cycles as a Grid-gap renewal", () => {
     expect(detectStudentStatus([{ end_date: "2026-09-30" }], cycles, "2027-01-10").status).toBe("REV");
+  });
+
+  it("starts from the next cycle after the registration grace deadline", () => {
+    expect(getStartCycleIndex(cycles, "2026-09-14")).toBe(0);
+    expect(getStartCycleIndex(cycles, "2026-09-15")).toBe(1);
+  });
+
+  it("uses start date plus grace days when a cycle has no stored registration deadline", () => {
+    const cyclesWithoutDeadline = cycles.map((cycle) => cycle.id === 1 ? { ...cycle, registration_deadline: null } : cycle);
+
+    expect(getStartCycleIndex(cyclesWithoutDeadline, "2026-09-15")).toBe(0);
+    expect(getStartCycleIndex(cyclesWithoutDeadline, "2026-09-16")).toBe(1);
   });
 });

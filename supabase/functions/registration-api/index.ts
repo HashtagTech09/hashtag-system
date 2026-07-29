@@ -68,10 +68,14 @@ function addDays(date: string, days: number) {
 interface PlanCycle { id: number; name: string; start_date: string; end_date: string | null; plan_type: string; is_active: boolean; grace_days: number; registration_deadline: string | null; }
 interface SubPlan { id: number; name: string; total_cycles: number; total_regular_cycles: number; total_grid_cycles: number; is_active: boolean; }
 
+function getRegistrationDeadline(cycle: Pick<PlanCycle, "registration_deadline" | "start_date" | "grace_days">) {
+  return cycle.registration_deadline || addDays(cycle.start_date, cycle.grace_days || 14);
+}
+
 function getStartCycleIndex(cycles: PlanCycle[]) {
   const today = todayIST();
   const openIdx = cycles.findIndex(c => {
-    if (c.registration_deadline && today > c.registration_deadline) return false;
+    if (today > getRegistrationDeadline(c)) return false;
     return (c.end_date || "2099-12-31") >= today;
   });
   if (openIdx !== -1) return openIdx;
@@ -125,7 +129,7 @@ function isRenewalAcrossGridGap(latestEndDate: string, cycles: PlanCycle[], toda
   if (!skippedCycles.every(c => c.plan_type === "grid")) return false;
   if (targetCycle.plan_type === "grid") return true;
   if (targetCycle.plan_type !== "regular") return false;
-  const renewalUntil = targetCycle.registration_deadline || targetCycle.end_date || addDays(targetCycle.start_date, targetCycle.grace_days || 14);
+  const renewalUntil = getRegistrationDeadline(targetCycle);
   return today <= renewalUntil;
 }
 

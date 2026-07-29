@@ -419,11 +419,18 @@ const EnrollmentsPage = () => {
     checkDropIns();
   }, [form.student_id, form.batch_ids, batches]);
   // Find the first cycle with open registration (or next upcoming)
+  const getRegistrationDeadline = (cycle: any): string => {
+    if (cycle.registration_deadline) return cycle.registration_deadline;
+    const deadline = new Date(cycle.start_date);
+    deadline.setDate(deadline.getDate() + (cycle.grace_days || 14));
+    return deadline.toISOString().split("T")[0];
+  };
+
   const getStartCycleIndex = (): number => {
     const todayStr = todayIST();
     // First: find a cycle whose registration is still open
     const openIdx = planCycles.findIndex(c => {
-      if (c.registration_deadline && todayStr > c.registration_deadline) return false;
+      if (todayStr > getRegistrationDeadline(c)) return false;
       // Must not be fully in the past
       const endDate = c.end_date || "2099-12-31";
       return endDate >= todayStr;
@@ -440,7 +447,7 @@ const EnrollmentsPage = () => {
     const todayStr = todayIST();
     const activeCycle = planCycles.find(c => c.is_active);
     if (!activeCycle) return false;
-    return activeCycle.registration_deadline && todayStr > activeCycle.registration_deadline;
+    return todayStr > getRegistrationDeadline(activeCycle);
   })();
 
   // Count-based greedy matching: walk calendar consuming cycles by type counts.

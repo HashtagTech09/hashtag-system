@@ -51,11 +51,15 @@ export interface SubPlan {
   description?: string | null;
 }
 
+export function getRegistrationDeadline(cycle: Pick<PlanCycle, "registration_deadline" | "start_date" | "grace_days">): string {
+  return cycle.registration_deadline || addDays(cycle.start_date, cycle.grace_days || 14);
+}
+
 /** Find the first cycle with open registration (or next upcoming) */
 export function getStartCycleIndex(planCycles: PlanCycle[], today?: string): number {
   const todayStr = today || todayIST();
   const openIdx = planCycles.findIndex(c => {
-    if (c.registration_deadline && todayStr > c.registration_deadline) return false;
+    if (todayStr > getRegistrationDeadline(c)) return false;
     const endDate = c.end_date || "2099-12-31";
     return endDate >= todayStr;
   });
@@ -134,7 +138,7 @@ function isRenewalAcrossGridGap(latestEndDate: string, planCycles: PlanCycle[], 
   if (targetCycle.plan_type === "grid") return true;
   if (targetCycle.plan_type !== "regular") return false;
 
-  const renewalUntil = targetCycle.registration_deadline || targetCycle.end_date || addDays(targetCycle.start_date, targetCycle.grace_days || 14);
+  const renewalUntil = getRegistrationDeadline(targetCycle);
   return today <= renewalUntil;
 }
 
