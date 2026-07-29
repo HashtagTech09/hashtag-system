@@ -425,7 +425,8 @@ Deno.serve(async (req) => {
       if (cashErr) return json({ error: cashErr.message }, 500);
 
       // Send confirmation email to staff
-      const confirmUrl = `https://hashtag-system.lovable.app/confirm-cash?token=${cashReq.token}`;
+      const appBaseUrl = Deno.env.get("APP_BASE_URL") || Deno.env.get("SITE_URL") || "https://hashtag-system.vercel.app";
+      const confirmUrl = `${appBaseUrl.replace(/\/$/, "")}/confirm-cash?token=${cashReq.token}`;
       await supabase.functions.invoke("send-cash-confirmation", {
         body: {
           staff_email: staff?.email, staff_name: staff?.name || "Staff",

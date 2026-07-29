@@ -2,7 +2,7 @@
 
 Hashtag System is the operating platform for managing studios, users, students, batches, subscriptions, enrollments, attendance, drop-ins, payments, receipts, imports, and student self-registration.
 
-Production app: [https://hashtag-system.lovable.app](https://hashtag-system.lovable.app)
+Production app: Vercel deployment, backed by Supabase.
 
 ## Quick Links
 
@@ -802,15 +802,37 @@ Technology stack:
 
 ## Deployment
 
-This project is connected to GitHub and Lovable. Pushed changes are reflected through the Lovable deployment workflow.
+This project is deployed through Vercel and uses Supabase directly for database, auth, and Edge Functions.
 
 Standard deployment flow:
 
 1. Commit code.
 2. Push to GitHub.
-3. Open Lovable.
-4. Publish or confirm deployment.
+3. Deploy the Supabase Edge Functions to project `plrpurjponddhelgtebw`.
+4. Deploy the Vite app on Vercel.
 5. Smoke test production app.
+
+Required Vercel environment variables:
+
+```text
+VITE_SUPABASE_URL
+VITE_SUPABASE_PROJECT_ID
+VITE_SUPABASE_PUBLISHABLE_KEY
+```
+
+Required Supabase Edge Function secret:
+
+```text
+APP_BASE_URL=https://<your-vercel-domain>
+```
+
+Useful deploy commands:
+
+```sh
+npx supabase@latest functions deploy --project-ref plrpurjponddhelgtebw
+npx supabase@latest secrets set APP_BASE_URL=https://<your-vercel-domain> --project-ref plrpurjponddhelgtebw
+npx vercel --prod
+```
 
 ## Operational Safety Notes
 
