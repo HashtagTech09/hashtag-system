@@ -48,22 +48,19 @@ export async function initiateRazorpayPayment({ orderParams, onSuccess, onFailur
   try {
     await loadRazorpayScript();
 
-    const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
-    const res = await fetch(
-      `https://${projectId}.supabase.co/functions/v1/create-razorpay-order`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(orderParams),
-      }
-    );
+    const { data, error } = await supabase.functions.invoke("create-razorpay-order", {
+      body: orderParams,
+    });
 
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || "Failed to create order");
+    if (error) {
+      throw new Error(error.message || "Failed to create order");
     }
 
-    const { order_id, razorpay_key_id, amount } = await res.json();
+    if (data?.error) {
+      throw new Error(data.error);
+    }
+
+    const { order_id, razorpay_key_id, amount } = data;
 
     const options = {
       key: razorpay_key_id,

@@ -1,4 +1,4 @@
 INSERT INTO public.system_settings (organization_id, key, value)
-VALUES (1, 'registration_fee', '500')
+VALUES (1, 'registration_fee', '590')
 ON CONFLICT (organization_id, key)
 DO UPDATE SET value = EXCLUDED.value;
