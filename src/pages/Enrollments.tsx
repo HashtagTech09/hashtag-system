@@ -671,7 +671,12 @@ const EnrollmentsPage = () => {
     }
 
     if (eligibleDropIn) {
-      await supabase.from("drop_ins").update({ is_adjusted: true, adjusted_at: new Date().toISOString() }).eq("id", eligibleDropIn.id);
+      await supabase.from("drop_ins").update({
+        is_adjusted: true,
+        adjusted_at: new Date().toISOString(),
+        adjusted_payment_id: payment.id,
+        adjusted_amount: breakdown.dropInAdj,
+      }).eq("id", eligibleDropIn.id);
     }
 
     const deactNote = deactivateIds.length > 0 ? ` (${deactivateIds.length} previous enrollment(s) deactivated)` : "";
@@ -842,7 +847,12 @@ const EnrollmentsPage = () => {
     }
 
     if (addBatchDropIn) {
-      await supabase.from("drop_ins").update({ is_adjusted: true, adjusted_at: new Date().toISOString() }).eq("id", addBatchDropIn.id);
+      await supabase.from("drop_ins").update({
+        is_adjusted: true,
+        adjusted_at: new Date().toISOString(),
+        adjusted_payment_id: payment.id,
+        adjusted_amount: addBatchFee.dropInAdj,
+      }).eq("id", addBatchDropIn.id);
     }
 
     toast.success(`Added ${addBatchForm.new_batch_ids.length} batch(es)! Amount: ₹${addBatchFee.total.toLocaleString()}${addBatchFee.dropInAdj > 0 ? ` (Drop-in adjusted: -₹${addBatchFee.dropInAdj})` : ""}`);

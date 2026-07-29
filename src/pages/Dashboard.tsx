@@ -72,6 +72,7 @@ interface PaymentAllocation {
 }
 interface DropIn {
   id: number; amount: number; is_adjusted: boolean; payment_id: number | null; created_at: string;
+  adjusted_payment_id: number | null; adjusted_amount: number | null;
 }
 interface PlanCycle {
   id: number; name: string; start_date: string; end_date: string | null;
@@ -205,7 +206,7 @@ const Dashboard = () => {
 
       if (sessionIds.length > 0) {
         const diRes = await supabase.from("drop_ins")
-          .select("id, amount, is_adjusted, payment_id, created_at")
+          .select("id, amount, is_adjusted, payment_id, adjusted_payment_id, adjusted_amount, created_at")
           .eq("organization_id", 1).in("batch_session_id", sessionIds);
         const diList = (diRes.data || []) as DropIn[];
         setDropIns(diList);
@@ -366,6 +367,20 @@ const Dashboard = () => {
     return m;
   }, [payments, dropInPayments]);
 
+  const adjustedDropInByPayment = useMemo(() => {
+    const m = new Map<number, { total: number; gst: number }>();
+    dropIns.forEach(d => {
+      if (!d.is_adjusted || !d.adjusted_payment_id) return;
+      const dropInPayment = d.payment_id ? paymentMap.get(d.payment_id) : null;
+      const total = Number(d.adjusted_amount || dropInPayment?.final_amount || d.amount || 0);
+      if (total <= 0) return;
+      const gst = Number(dropInPayment?.gst || Math.round(total - (total / 1.18)));
+      const current = m.get(d.adjusted_payment_id) || { total: 0, gst: 0 };
+      m.set(d.adjusted_payment_id, { total: current.total + total, gst: current.gst + gst });
+    });
+    return m;
+  }, [dropIns, paymentMap]);
+
   // Date-wise breakdown
   const dateWise = useMemo(() => {
     const map = new Map<string, {
@@ -396,16 +411,22 @@ const Dashboard = () => {
       if (!payment) return;
       const allocatedTotal = Number(allocation.allocated_amount || 0);
       if (allocatedTotal <= 0) return;
-      const finalAmount = Number(payment.final_amount || payment.amount || 0);
-      const allocatedGst = finalAmount > 0 ? Math.round((Number(payment.gst || 0) / finalAmount) * allocatedTotal) : 0;
+      const adjustment = adjustedDropInByPayment.get(allocation.payment_id);
+      const collectedAmount = Number(payment.final_amount || payment.amount || 0);
+      const reportedFinalAmount = collectedAmount + Number(adjustment?.total || 0);
+      const reportedGst = Number(payment.gst || 0) + Number(adjustment?.gst || 0);
+      const reportedAllocatedTotal = collectedAmount > 0 && reportedFinalAmount > collectedAmount
+        ? Math.round((allocatedTotal / collectedAmount) * reportedFinalAmount)
+        : allocatedTotal;
+      const allocatedGst = reportedFinalAmount > 0 ? Math.round((reportedGst / reportedFinalAmount) * reportedAllocatedTotal) : 0;
       const date = toISTDateString(payment.created_at);
       const row = getOrCreate(date);
-      row.gross += allocatedTotal - allocatedGst;
+      row.gross += reportedAllocatedTotal - allocatedGst;
       row.gst += allocatedGst;
-      row.total += allocatedTotal;
+      row.total += reportedAllocatedTotal;
       const mode = (payment.payment_mode || "").toLowerCase();
-      if (mode === "cash") row.cash += allocatedTotal;
-      else if (mode === "razorpay") row.razorpay += allocatedTotal;
+      if (mode === "cash") row.cash += reportedAllocatedTotal;
+      else if (mode === "razorpay") row.razorpay += reportedAllocatedTotal;
       allocatedPaymentIds.add(allocation.payment_id);
     });
     countedPaymentIds.forEach(paymentId => {
@@ -414,9 +435,11 @@ const Dashboard = () => {
       if (!payment) return;
       const date = toISTDateString(payment.created_at);
       const row = getOrCreate(date);
-      const total = Number(payment.final_amount || payment.amount || 0);
-      row.gross += Number(payment.amount) || Math.max(0, total - Number(payment.gst || 0));
-      row.gst += Number(payment.gst) || 0;
+      const adjustment = adjustedDropInByPayment.get(paymentId);
+      const total = Number(payment.final_amount || payment.amount || 0) + Number(adjustment?.total || 0);
+      const gst = Number(payment.gst || 0) + Number(adjustment?.gst || 0);
+      row.gross += Math.max(0, total - gst);
+      row.gst += gst;
       row.total += total;
       const mode = (payment.payment_mode || "").toLowerCase();
       if (mode === "cash") row.cash += total;
@@ -427,7 +450,7 @@ const Dashboard = () => {
       const row = getOrCreate(date);
       row.dropIn++;
       if (d.is_adjusted) row.diAdjusted++;
-      if (d.payment_id) {
+      if ((!d.is_adjusted || !d.adjusted_payment_id) && d.payment_id) {
         const p = paymentMap.get(d.payment_id);
         if (p) {
           row.gross += Number(p.amount) || 0;
@@ -440,7 +463,7 @@ const Dashboard = () => {
       }
     });
     return Array.from(map.values()).sort((a, b) => b.date.localeCompare(a.date));
-  }, [classifiedEnrollments, dropIns, paymentAllocations, paymentMap]);
+  }, [adjustedDropInByPayment, classifiedEnrollments, dropIns, paymentAllocations, paymentMap]);
 
   const dateTotals = useMemo(() => {
     return dateWise.reduce((acc, r) => ({

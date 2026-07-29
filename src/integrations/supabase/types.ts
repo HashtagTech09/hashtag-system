@@ -500,7 +500,9 @@ export type Database = {
       }
       drop_ins: {
         Row: {
+          adjusted_amount: number | null
           adjusted_at: string | null
+          adjusted_payment_id: number | null
           amount: number
           batch_session_id: number
           created_at: string
@@ -511,7 +513,9 @@ export type Database = {
           student_id: number
         }
         Insert: {
+          adjusted_amount?: number | null
           adjusted_at?: string | null
+          adjusted_payment_id?: number | null
           amount: number
           batch_session_id: number
           created_at?: string
@@ -522,7 +526,9 @@ export type Database = {
           student_id: number
         }
         Update: {
+          adjusted_amount?: number | null
           adjusted_at?: string | null
+          adjusted_payment_id?: number | null
           amount?: number
           batch_session_id?: number
           created_at?: string
@@ -533,6 +539,13 @@ export type Database = {
           student_id?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "drop_ins_adjusted_payment_id_fkey"
+            columns: ["adjusted_payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "drop_ins_batch_session_id_fkey"
             columns: ["batch_session_id"]
