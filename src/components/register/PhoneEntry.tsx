@@ -104,7 +104,19 @@ export default function PhoneEntry({ onUserResolved, onNewUser }: PhoneEntryProp
           .select("*, users(*)")
           .eq("user_id", user.id)
           .order("created_at", { ascending: true });
-        onUserResolved(user, students || []);
+        if (students && students.length > 0) {
+          onUserResolved(user, students);
+          return;
+        }
+
+        const { data: orphanStudents } = await supabase
+          .from("students")
+          .select("*, users(*)")
+          .eq("organization_id", 1)
+          .is("user_id", null)
+          .ilike("phone", `%${searchPhone}`)
+          .order("created_at", { ascending: true });
+        onUserResolved(user, orphanStudents || []);
         return;
       }
 

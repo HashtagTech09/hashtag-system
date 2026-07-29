@@ -108,11 +108,21 @@ Deno.serve(async (req) => {
 
     for (const draft of studentDrafts) {
       if (draft.id) {
+        const { data: existingStudent, error: existingStudentError } = await supabase
+          .from("students")
+          .select("id, user_id")
+          .eq("id", draft.id)
+          .eq("organization_id", orgId)
+          .single();
+        if (existingStudentError || !existingStudent) throw existingStudentError || new Error("Student profile not found");
+        if (existingStudent.user_id && existingStudent.user_id !== user_id) {
+          return json({ success: false, error: "This student profile is linked to another account" });
+        }
+
         const { error } = await supabase
           .from("students")
-          .update({ name: draft.name })
+          .update({ name: draft.name, user_id })
           .eq("id", draft.id)
-          .eq("user_id", user_id)
           .eq("organization_id", orgId);
         if (error) throw error;
       } else {
