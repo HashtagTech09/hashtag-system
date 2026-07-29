@@ -18,6 +18,17 @@ async function verifySignature(body: string, signature: string, secret: string):
   return expected === signature;
 }
 
+function getWebhookSecret(account: string | null): string {
+  const envName = account === "test"
+    ? "RZP_TEST_WEBHOOK_SECRET"
+    : account === "pride"
+      ? "RZP_PRIDE_WEBHOOK_SECRET"
+      : "RZP_PRUDENT_WEBHOOK_SECRET";
+  const secret = Deno.env.get(envName);
+  if (!secret) throw new Error(`${envName} is not configured`);
+  return secret;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -67,9 +78,7 @@ Deno.serve(async (req) => {
     }
 
     // Verify signature with correct account secret
-    const webhookSecret = payment.rzp_account === "pride"
-      ? Deno.env.get("RZP_PRIDE_WEBHOOK_SECRET")!
-      : Deno.env.get("RZP_PRUDENT_WEBHOOK_SECRET")!;
+    const webhookSecret = getWebhookSecret(payment.rzp_account);
 
     const valid = await verifySignature(rawBody, signature, webhookSecret);
     if (!valid) {

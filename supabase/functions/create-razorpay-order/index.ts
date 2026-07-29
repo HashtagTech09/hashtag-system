@@ -16,11 +16,27 @@ async function getDefaultOrgId(supabase: any): Promise<number> {
   return CACHED_ORG_ID;
 }
 
+async function getIsTestMode(supabase: any, organizationId: number): Promise<boolean> {
+  const { data } = await supabase
+    .from("system_settings")
+    .select("value")
+    .eq("organization_id", organizationId)
+    .eq("key", "test_mode")
+    .maybeSingle();
+  return data?.value === "true";
+}
+
 function getAccount(studioCode: string): "pride" | "prudent" | null {
   const code = studioCode?.toUpperCase();
   if (PRIDE_STUDIOS.includes(code)) return "pride";
   if (PRUDENT_STUDIOS.includes(code)) return "prudent";
   return null;
+}
+
+function getRequiredEnv(name: string): string {
+  const value = Deno.env.get(name);
+  if (!value) throw new Error(`${name} is not configured`);
+  return value;
 }
 
 Deno.serve(async (req) => {
@@ -54,6 +70,8 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
+    const orgId = organization_id || await getDefaultOrgId(supabase);
+    const isTestMode = await getIsTestMode(supabase, orgId);
 
     // Look up studio code from first batch
     const { data: batch } = await supabase
@@ -72,23 +90,27 @@ Deno.serve(async (req) => {
       });
     }
 
-    const keyId = account === "pride"
-      ? Deno.env.get("RZP_PRIDE_KEY_ID")!
-      : Deno.env.get("RZP_PRUDENT_KEY_ID")!;
-    const keySecret = account === "pride"
-      ? Deno.env.get("RZP_PRIDE_KEY_SECRET")!
-      : Deno.env.get("RZP_PRUDENT_KEY_SECRET")!;
+    const keyId = isTestMode
+      ? getRequiredEnv("RZP_TEST_KEY_ID")
+      : account === "pride"
+        ? getRequiredEnv("RZP_PRIDE_KEY_ID")
+        : getRequiredEnv("RZP_PRUDENT_KEY_ID");
+    const keySecret = isTestMode
+      ? getRequiredEnv("RZP_TEST_KEY_SECRET")
+      : account === "pride"
+        ? getRequiredEnv("RZP_PRIDE_KEY_SECRET")
+        : getRequiredEnv("RZP_PRUDENT_KEY_SECRET");
 
     // Create pending payment
     const { data: payment, error: payErr } = await supabase.from("payments").insert({
-      organization_id: organization_id || await getDefaultOrgId(supabase),
+      organization_id: orgId,
       student_id,
       amount: amount || 0,
       gst: gst || 0,
       final_amount,
       payment_mode: "razorpay",
       status: "pending",
-      rzp_account: account,
+      rzp_account: isTestMode ? "test" : account,
     }).select().single();
 
     if (payErr) throw payErr;

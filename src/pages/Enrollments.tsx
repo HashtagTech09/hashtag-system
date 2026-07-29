@@ -39,6 +39,17 @@ async function fetchAll<T>(buildQuery: () => any): Promise<T[]> {
   return all;
 }
 
+function getDropInAdjustmentAmount(dropIn: any): number {
+  const finalAmount = Number(dropIn?.payments?.final_amount);
+  if (Number.isFinite(finalAmount) && finalAmount > 0) return finalAmount;
+
+  const amount = Number(dropIn?.amount) || 0;
+  const gst = Number(dropIn?.payments?.gst);
+  if (Number.isFinite(gst) && gst > 0) return amount + gst;
+
+  return amount;
+}
+
 const EnrollmentsPage = () => {
 
   const { staffUser, isAdminOrManager } = useAuth();
@@ -389,7 +400,7 @@ const EnrollmentsPage = () => {
       if (selectedStyles.length === 0) { setEligibleDropIn(null); return; }
 
       const { data } = await supabase.from("drop_ins")
-        .select("*, batch_sessions(session_date, style, start_time, end_time, batches(name))")
+        .select("*, payments(final_amount, gst), batch_sessions(session_date, style, start_time, end_time, batches(name))")
         .eq("student_id", Number(form.student_id))
         .eq("is_adjusted", false)
         .eq("organization_id", 1)
@@ -535,7 +546,7 @@ const EnrollmentsPage = () => {
     const todayStr = new Date().toISOString().split("T")[0];
     const applyRegFee = detectedStatus === "NEW" || detectedStatus === "REV" || (detectedStatus === "REN" && latestEndDate && todayStr > latestEndDate);
     const regFee = applyRegFee ? 500 : 0;
-    const dropInAdj = eligibleDropIn ? Number(eligibleDropIn.amount) : 0;
+    const dropInAdj = eligibleDropIn ? getDropInAdjustmentAmount(eligibleDropIn) : 0;
     const isLateRenewal = detectedStatus === "REN" && latestEndDate ? todayStr > latestEndDate : false;
 
     const subtotal = Math.max(0, totalBatchFee + regFee - dropInAdj);
@@ -720,7 +731,7 @@ const EnrollmentsPage = () => {
       const selectedStyles = batches.filter(b => addBatchForm.new_batch_ids.includes(String(b.id))).map(b => b.style).filter(Boolean);
       if (selectedStyles.length === 0) { setAddBatchDropIn(null); return; }
       const { data } = await supabase.from("drop_ins")
-        .select("*, batch_sessions(session_date, style, start_time, end_time, batches(name))")
+        .select("*, payments(final_amount, gst), batch_sessions(session_date, style, start_time, end_time, batches(name))")
         .eq("student_id", Number(addBatchForm.student_id))
         .eq("is_adjusted", false)
         .eq("organization_id", 1)
@@ -762,7 +773,7 @@ const EnrollmentsPage = () => {
     }
     const discountAmount = (perBatchFee * newBatchCount) - totalNewFee;
 
-    const dropInAdj = addBatchDropIn ? Number(addBatchDropIn.amount) : 0;
+    const dropInAdj = addBatchDropIn ? getDropInAdjustmentAmount(addBatchDropIn) : 0;
     const subtotal = Math.max(0, totalNewFee - dropInAdj);
     const gst = Math.round(subtotal * 0.18);
     const total = subtotal + gst;
@@ -1006,9 +1017,9 @@ const EnrollmentsPage = () => {
                 <div className="p-3 rounded-lg border border-success/30 bg-success/10 text-sm">
                   <p className="text-success font-medium">Drop-in available for adjustment</p>
                   <p className="text-muted-foreground mt-1">
-                    Session: {eligibleDropIn.batch_sessions?.session_date} • Style: {eligibleDropIn.batch_sessions?.style} • Amount: <span className="font-medium text-foreground">₹{Number(eligibleDropIn.amount).toLocaleString()}</span>
+                    Session: {eligibleDropIn.batch_sessions?.session_date} • Style: {eligibleDropIn.batch_sessions?.style} • GST-inclusive amount: <span className="font-medium text-foreground">₹{getDropInAdjustmentAmount(eligibleDropIn).toLocaleString()}</span>
                   </p>
-                  <p className="text-muted-foreground mt-1">This amount will be deducted from the enrollment fee.</p>
+                  <p className="text-muted-foreground mt-1">This GST-inclusive amount will be deducted from the enrollment fee.</p>
                 </div>
               )}
               <div><Label>Payment Mode</Label>
@@ -1093,9 +1104,9 @@ const EnrollmentsPage = () => {
                     <div className="p-3 rounded-lg border border-success/30 bg-success/10 text-sm">
                       <p className="text-success font-medium">Drop-in available for adjustment</p>
                       <p className="text-muted-foreground mt-1">
-                        Session: {addBatchDropIn.batch_sessions?.session_date} • Style: {addBatchDropIn.batch_sessions?.style} • Amount: <span className="font-medium text-foreground">₹{Number(addBatchDropIn.amount).toLocaleString()}</span>
+                        Session: {addBatchDropIn.batch_sessions?.session_date} • Style: {addBatchDropIn.batch_sessions?.style} • GST-inclusive amount: <span className="font-medium text-foreground">₹{getDropInAdjustmentAmount(addBatchDropIn).toLocaleString()}</span>
                       </p>
-                      <p className="text-muted-foreground mt-1">This amount will be deducted from the fee.</p>
+                      <p className="text-muted-foreground mt-1">This GST-inclusive amount will be deducted from the fee.</p>
                     </div>
                   )}
 
