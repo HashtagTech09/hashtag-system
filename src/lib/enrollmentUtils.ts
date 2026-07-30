@@ -68,6 +68,18 @@ export function getStartCycleIndex(planCycles: PlanCycle[], today?: string): num
   return futureIdx !== -1 ? futureIdx : 0;
 }
 
+export function getRenewalStartCycleIndex(planCycles: PlanCycle[], latestEndDate: string | null, today?: string): number {
+  const openStartIdx = getStartCycleIndex(planCycles, today);
+  if (!latestEndDate) return openStartIdx;
+
+  const latestCycleIdx = planCycles.findIndex(c => c.start_date <= latestEndDate && (c.end_date || "2099-12-31") >= latestEndDate);
+  if (latestCycleIdx === -1) return openStartIdx;
+
+  const nextAfterLatestIdx = latestCycleIdx + 1;
+  if (nextAfterLatestIdx >= planCycles.length) return planCycles.length;
+  return Math.max(openStartIdx, nextAfterLatestIdx);
+}
+
 /** Count-based greedy matching: walk calendar consuming cycles by type counts. */
 export function matchPlanCycles(
   plan: Pick<SubPlan, "total_regular_cycles" | "total_grid_cycles">,

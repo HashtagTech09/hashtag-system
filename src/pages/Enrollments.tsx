@@ -441,7 +441,20 @@ const EnrollmentsPage = () => {
     return futureIdx !== -1 ? futureIdx : 0;
   };
 
-  const startCycleIndex = planCycles.length > 0 ? getStartCycleIndex() : 0;
+  const getRenewalStartCycleIndex = (): number => {
+    const openStartIdx = getStartCycleIndex();
+    if (!latestEndDate) return openStartIdx;
+
+    const latestCycleIdx = planCycles.findIndex(c => c.start_date <= latestEndDate && (c.end_date || "2099-12-31") >= latestEndDate);
+    if (latestCycleIdx === -1) return openStartIdx;
+
+    const nextAfterLatestIdx = latestCycleIdx + 1;
+    if (nextAfterLatestIdx >= planCycles.length) return planCycles.length;
+    return Math.max(openStartIdx, nextAfterLatestIdx);
+  };
+
+  const baseStartCycleIndex = planCycles.length > 0 ? getStartCycleIndex() : 0;
+  const startCycleIndex = planCycles.length > 0 && detectedStatus === "REN" ? getRenewalStartCycleIndex() : baseStartCycleIndex;
   const startCycle = planCycles[startCycleIndex];
   const currentCycleClosed = (() => {
     const todayStr = todayIST();

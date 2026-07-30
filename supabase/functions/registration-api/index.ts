@@ -83,6 +83,18 @@ function getStartCycleIndex(cycles: PlanCycle[]) {
   return futureIdx !== -1 ? futureIdx : 0;
 }
 
+function getRenewalStartCycleIndex(cycles: PlanCycle[], latestEndDate: string | null) {
+  const openStartIdx = getStartCycleIndex(cycles);
+  if (!latestEndDate) return openStartIdx;
+
+  const latestCycleIdx = cycles.findIndex(c => c.start_date <= latestEndDate && (c.end_date || "2099-12-31") >= latestEndDate);
+  if (latestCycleIdx === -1) return openStartIdx;
+
+  const nextAfterLatestIdx = latestCycleIdx + 1;
+  if (nextAfterLatestIdx >= cycles.length) return cycles.length;
+  return Math.max(openStartIdx, nextAfterLatestIdx);
+}
+
 function isPlanValid(plan: SubPlan, cycles: PlanCycle[], startIdx: number) {
   let nr = plan.total_regular_cycles ?? 0, ng = plan.total_grid_cycles ?? 0;
   if (nr + ng === 0) return false;
@@ -332,11 +344,6 @@ Deno.serve(async (req) => {
       const batches = batchRes.data || [];
       if (!plan) return json({ error: "Plan not found" }, 404);
 
-      const startIdx = getStartCycleIndex(cycles);
-      if (!isPlanValid(plan, cycles, startIdx)) return json({ error: "Plan not valid for current cycles" }, 400);
-      const assignment = computeCycleAssignment(plan, cycles, startIdx);
-      if (!assignment) return json({ error: "Could not assign cycles" }, 400);
-
       let detectedStatus = "NEW";
       let latestEndDate: string | null = null;
       if (student_id) {
@@ -345,6 +352,11 @@ Deno.serve(async (req) => {
         detectedStatus = result.status;
         latestEndDate = result.latestEndDate;
       }
+
+      const startIdx = detectedStatus === "REN" ? getRenewalStartCycleIndex(cycles, latestEndDate) : getStartCycleIndex(cycles);
+      if (!isPlanValid(plan, cycles, startIdx)) return json({ error: "Plan not valid for current cycles" }, 400);
+      const assignment = computeCycleAssignment(plan, cycles, startIdx);
+      if (!assignment) return json({ error: "Could not assign cycles" }, 400);
 
       const sortedBatches = sortBatchesByHierarchy(batches);
       const breakdown = computeFeeBreakdown({
@@ -374,12 +386,11 @@ Deno.serve(async (req) => {
       const batches = batchRes.data || [];
       if (!plan) return json({ error: "Plan not found" }, 404);
 
-      const startIdx = getStartCycleIndex(cycles);
-      const assignment = computeCycleAssignment(plan, cycles, startIdx);
-      if (!assignment) return json({ error: "Could not assign cycles" }, 400);
-
       const { data: enrollments } = await supabase.from("enrollments").select("end_date").eq("student_id", student_id).order("end_date", { ascending: false });
       const { status: detectedStatus, latestEndDate } = detectStudentStatus(enrollments || [], cycles);
+      const startIdx = detectedStatus === "REN" ? getRenewalStartCycleIndex(cycles, latestEndDate) : getStartCycleIndex(cycles);
+      const assignment = computeCycleAssignment(plan, cycles, startIdx);
+      if (!assignment) return json({ error: "Could not assign cycles" }, 400);
 
       const sortedBatches = sortBatchesByHierarchy(batches);
       const breakdown = computeFeeBreakdown({

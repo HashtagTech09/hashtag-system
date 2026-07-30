@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { isPlanValid, computeCycleAssignment, computeFeeBreakdown, detectStudentStatus, getStartCycleIndex, getBatchDiscount, getPlanKey, PLAN_FIXED_TOTALS, REGULAR_PRICE, GRID_PRICE, computeAddBatchBreakdown } from "@/lib/enrollmentUtils";
+import { isPlanValid, computeCycleAssignment, computeFeeBreakdown, detectStudentStatus, getRenewalStartCycleIndex, getStartCycleIndex, getBatchDiscount, getPlanKey, PLAN_FIXED_TOTALS, REGULAR_PRICE, GRID_PRICE, computeAddBatchBreakdown } from "@/lib/enrollmentUtils";
 import type { PlanCycle, SubPlan, AddBatchBreakdown } from "@/lib/enrollmentUtils";
 import { allocateCyclesForPlan, insertEnrollmentCycles } from "@/lib/cycleUtils";
 import FeeBreakdownDisplay from "./FeeBreakdown";
@@ -149,13 +149,16 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
   const activeEnrollments = enrollments.filter(e => e.end_date >= todayStr);
   const expiredEnrollments = enrollments.filter(e => e.end_date < todayStr);
 
-  const startCycleIdx = planCycles.length > 0 ? getStartCycleIndex(planCycles) : 0;
-  const validPlans = subPlans.filter(p => isPlanValid(p, planCycles, startCycleIdx));
-
   const { status: detectedStatus, latestEndDate } = detectStudentStatus(
     enrollments.map(e => ({ end_date: e.end_date })),
     planCycles
   );
+  const baseStartCycleIdx = planCycles.length > 0 ? getStartCycleIndex(planCycles) : 0;
+  const renewalStartCycleIdx = planCycles.length > 0 && detectedStatus === "REN"
+    ? getRenewalStartCycleIndex(planCycles, latestEndDate)
+    : baseStartCycleIdx;
+  const startCycleIdx = mode === "renew" ? renewalStartCycleIdx : baseStartCycleIdx;
+  const validPlans = subPlans.filter(p => isPlanValid(p, planCycles, startCycleIdx));
 
   const previousBatchIds = (() => {
     if (enrollments.length === 0) return [];

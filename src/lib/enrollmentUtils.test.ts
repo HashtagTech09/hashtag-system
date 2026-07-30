@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeCycleAssignment, detectStudentStatus, getStartCycleIndex, isPlanValid, matchPlanCycles, type PlanCycle, type SubPlan } from "./enrollmentUtils";
+import { computeCycleAssignment, detectStudentStatus, getRenewalStartCycleIndex, getStartCycleIndex, isPlanValid, matchPlanCycles, type PlanCycle, type SubPlan } from "./enrollmentUtils";
 
 const cycles: PlanCycle[] = [
   {
@@ -99,5 +99,13 @@ describe("grid-aware enrollment cycle matching", () => {
 
     expect(getStartCycleIndex(cyclesWithoutDeadline, "2026-09-15")).toBe(0);
     expect(getStartCycleIndex(cyclesWithoutDeadline, "2026-09-16")).toBe(1);
+  });
+
+  it("starts an early renewal after the student's latest enrolled cycle", () => {
+    expect(getRenewalStartCycleIndex(cycles, "2026-10-31", "2026-09-10")).toBe(2);
+  });
+
+  it("does not move renewal backward before the currently open cycle", () => {
+    expect(getRenewalStartCycleIndex(cycles, "2026-09-30", "2027-01-10")).toBe(3);
   });
 });
