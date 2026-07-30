@@ -55,6 +55,7 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
   const [selectedPlanId, setSelectedPlanId] = useState("");
   const [paymentMode, setPaymentMode] = useState("cash");
   const [submitting, setSubmitting] = useState(false);
+  const [renewAddExpanded, setRenewAddExpanded] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -161,6 +162,17 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
     const latest = enrollments[0].end_date;
     return enrollments.filter(e => e.end_date === latest).map(e => e.batch_id);
   })();
+  const defaultStudioId =
+    enrollments.find(e => previousBatchIds.includes(e.batch_id))?.batches?.studio_id
+    || activeEnrollments[0]?.batches?.studio_id
+    || enrollments[0]?.batches?.studio_id
+    || null;
+  const previousBatchNames = previousBatchIds
+    .map(id => batches.find(b => b.id === id)?.name || enrollments.find(e => e.batch_id === id)?.batches?.name)
+    .filter(Boolean);
+  const renewAddedBatchCount = mode === "renew"
+    ? selectedBatchIds.filter(id => !previousBatchIds.includes(Number(id))).length
+    : 0;
 
   const assignment = selectedPlanId ? computeCycleAssignment(subPlans.find(p => p.id === Number(selectedPlanId))!, planCycles, startCycleIdx) : null;
 
@@ -191,6 +203,12 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
     }
   }, [mode, previousBatchIds]);
 
+  useEffect(() => {
+    if ((mode === "renew" || mode === "add") && !selectedStudioId && defaultStudioId) {
+      setSelectedStudioId(defaultStudioId);
+    }
+  }, [mode, selectedStudioId, defaultStudioId]);
+
   const toggleBatch = (id: string) => {
     setSelectedBatchIds(prev => prev.includes(id) ? prev.filter(b => b !== id) : [...prev, id]);
   };
@@ -217,19 +235,22 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
     setSelectedStudioId(null);
     setSelectedBatchIds([]);
     setSelectedPlanId("");
+    setRenewAddExpanded(false);
   };
 
   const buildEnrollmentRecords = (paymentId?: number) => {
     return selectedBatchIds.map(batchId => {
       let prevBatchId: number | null = null;
-      if (detectedStatus === "REN" || detectedStatus === "REV") {
-        const numBatchId = Number(batchId);
-        prevBatchId = previousBatchIds.includes(numBatchId) ? numBatchId : (previousBatchIds[0] ?? null);
+      const numBatchId = Number(batchId);
+      const isPreviousBatch = previousBatchIds.includes(numBatchId);
+      const statusType = mode === "renew" && !isPreviousBatch ? "NEW" : detectedStatus;
+      if ((detectedStatus === "REN" || detectedStatus === "REV") && isPreviousBatch) {
+        prevBatchId = numBatchId;
       }
       return {
         organization_id: 1, student_id: student.id, batch_id: Number(batchId),
         ...(paymentId ? { payment_id: paymentId } : {}),
-        status_type: detectedStatus,
+        status_type: statusType,
         registration_fee_applied: breakdown!.applyRegFee, late_renewal: breakdown!.isLateRenewal,
         start_date: assignment!.startCycle.start_date, end_date: assignment!.endCycle.end_date || assignment!.startCycle.start_date,
         subscription_plan_id: Number(selectedPlanId),
@@ -253,6 +274,7 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
     setSubStep("studio");
     setSelectedBatchIds([]);
     setSelectedPlanId("");
+    setRenewAddExpanded(false);
     fetchData();
   };
 
@@ -331,6 +353,7 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
       setSubStep("studio");
       setSelectedBatchIds([]);
       setSelectedPlanId("");
+      setRenewAddExpanded(false);
       fetchData();
     } catch {
       toast.error("Enrollment failed. Please try again.");
@@ -501,6 +524,24 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
 
   const statusColors: Record<string, string> = { NEW: "bg-success/20 text-success", REN: "bg-primary/20 text-primary", REV: "bg-warning/20 text-warning" };
 
+  const startRenewFlow = () => {
+    const defaultBatchIds = previousBatchIds.map(String);
+    setMode("renew");
+    setSubStep(defaultBatchIds.length > 0 ? "checkout" : "studio");
+    setSelectedBatchIds(defaultBatchIds);
+    setSelectedPlanId("");
+    setSelectedStudioId(defaultStudioId);
+    setRenewAddExpanded(false);
+  };
+
+  const startAddFlow = () => {
+    setMode("add");
+    setSubStep("studio");
+    setSelectedBatchIds([]);
+    setSelectedStudioId(defaultStudioId);
+    setRenewAddExpanded(false);
+  };
+
   // Studios that have batches
   const studioIdsWithBatches = [...new Set(batches.map(b => b.studio_id).filter(Boolean))];
   const availableStudios = studios.filter(s => studioIdsWithBatches.includes(s.id));
@@ -567,11 +608,11 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
           )}
 
           <div className="flex gap-2 pt-2">
-            <Button className="flex-1 gradient-primary" onClick={() => { setMode("renew"); setSubStep("studio"); setSelectedBatchIds([]); setSelectedPlanId(""); setSelectedStudioId(null); }}>
+            <Button className="flex-1 gradient-primary" onClick={startRenewFlow}>
               {detectedStatus === "NEW" ? "Enroll" : detectedStatus === "REN" ? "Renew" : "Revive"}
             </Button>
             {activeEnrollments.length > 0 && (
-              <Button variant="outline" className="flex-1" onClick={() => { setMode("add"); setSubStep("studio"); setSelectedBatchIds([]); setSelectedStudioId(null); }}>
+              <Button variant="outline" className="flex-1" onClick={startAddFlow}>
                 Add Batch
               </Button>
             )}
@@ -591,6 +632,65 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
               <ArrowLeft className="h-4 w-4 mr-1" /> Back
             </Button>
           </div>
+
+          {mode === "renew" && previousBatchIds.length > 0 && (
+            <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium text-foreground">Renew your current batch{previousBatchIds.length > 1 ? "es" : ""}?</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {previousBatchNames.length > 0 ? previousBatchNames.join(", ") : "Same batch"} selected by default.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    className="gradient-primary"
+                    onClick={() => {
+                      setSelectedBatchIds(previousBatchIds.map(String));
+                      setSelectedStudioId(defaultStudioId);
+                      setSubStep("checkout");
+                      setRenewAddExpanded(false);
+                    }}
+                  >
+                    Same batch
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setSelectedStudioId(defaultStudioId);
+                      setSubStep("studio");
+                      setRenewAddExpanded(true);
+                    }}
+                  >
+                    Change / add
+                  </Button>
+                </div>
+              </div>
+
+              <div className="rounded-md border border-border bg-background/40 p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium text-foreground">Want to add another batch too?</p>
+                  <p className="text-xs text-muted-foreground">
+                    Same studio is selected first. Extra batches in this renewal will be marked NEW.
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant={renewAddExpanded || renewAddedBatchCount > 0 ? "default" : "outline"}
+                  className={renewAddExpanded || renewAddedBatchCount > 0 ? "gradient-primary" : ""}
+                  onClick={() => {
+                    setRenewAddExpanded(true);
+                    setSelectedStudioId(defaultStudioId);
+                    setSubStep("studio");
+                  }}
+                >
+                  {renewAddedBatchCount > 0 ? `${renewAddedBatchCount} added` : "Quick add batch"}
+                </Button>
+              </div>
+            </div>
+          )}
 
           {/* Current batches for add mode */}
           {mode === "add" && subStep !== "checkout" && (
@@ -626,7 +726,11 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
 
               {selectedStudioId && (
                 <>
-                  <p className="text-sm text-muted-foreground">Tap batches to add them to your cart</p>
+                  <p className="text-sm text-muted-foreground">
+                    {mode === "renew"
+                      ? "Same studio is selected by default. Tap another batch to add it to this renewal."
+                      : "Same studio is selected by default. Tap batches to add them to your cart."}
+                  </p>
 
                   {Object.entries(batchesByStyle).sort(([a], [b]) => a.localeCompare(b)).map(([style, styleBatches]) => (
                     <div key={style} className="space-y-3">
@@ -658,6 +762,9 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
                                     <div className="flex items-center gap-2">
                                       <h4 className="font-display font-semibold text-foreground">{b.name}</h4>
                                       {isInCart && <Check className="h-4 w-4 text-primary" />}
+                                      {!isInCart && b.studio_id === defaultStudioId && !previousBatchIds.includes(b.id) && (
+                                        <Badge variant="secondary" className="bg-primary/20 text-primary text-[10px]">Suggested</Badge>
+                                      )}
                                     </div>
                                     {b.batch_code && <p className="text-xs text-muted-foreground">Code: {b.batch_code}</p>}
                                     {timings.length > 0 && (
@@ -701,11 +808,19 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
                 {selectedBatchIds.map(id => {
                   const batch = batches.find(b => b.id === Number(id));
                   const studio = batch ? studios.find(s => s.id === batch.studio_id) : null;
+                  const isPreviousBatch = previousBatchIds.includes(Number(id));
                   return (
                     <Card key={id} className="glass-card">
                       <CardContent className="p-3 flex items-center justify-between">
                         <div>
-                          <p className="font-medium text-foreground text-sm">{batch?.name || `Batch #${id}`}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium text-foreground text-sm">{batch?.name || `Batch #${id}`}</p>
+                            {mode === "renew" && (
+                              <Badge variant="secondary" className={isPreviousBatch ? "bg-primary/20 text-primary text-[10px]" : "bg-success/20 text-success text-[10px]"}>
+                                {isPreviousBatch ? "REN" : "NEW"}
+                              </Badge>
+                            )}
+                          </div>
                           <p className="text-xs text-muted-foreground">{studio?.name} · {batch?.style_base}</p>
                         </div>
                         <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => removeBatch(id)}>
