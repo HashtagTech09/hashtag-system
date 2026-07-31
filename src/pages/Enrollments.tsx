@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, PackagePlus, Download, FileWarning, MoreVertical, CalendarCog, Trash2, ArrowRightLeft } from "lucide-react";
+import { Plus, Search, PackagePlus, Download, FileWarning, MoreVertical, CalendarCog, Trash2, ArrowRightLeft, ClipboardCopy } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { getDisplayPhone } from "@/lib/studentUtils";
@@ -50,6 +50,18 @@ function getDropInAdjustmentAmount(dropIn: any): number {
   return amount;
 }
 
+function getIstDayBounds(date: string): { start: string; end: string } {
+  const start = new Date(`${date}T00:00:00+05:30`);
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 1);
+  return { start: start.toISOString(), end: end.toISOString() };
+}
+
+function cleanSheetCell(value: any): string {
+  if (value === null || value === undefined) return "";
+  return String(value).replace(/\t/g, " ").replace(/\r?\n/g, " ").trim();
+}
+
 const EnrollmentsPage = () => {
 
   const { staffUser, isAdminOrManager } = useAuth();
@@ -85,6 +97,9 @@ const EnrollmentsPage = () => {
   const [filterBatchId, setFilterBatchId] = useState<string>("all");
   const [filterType, setFilterType] = useState<string>("all");
   const [sortBy, setSortBy] = useState<string>("newest");
+  const [copyDate, setCopyDate] = useState<string>(todayIST());
+  const [copyStudioId, setCopyStudioId] = useState<string>("all");
+  const [copyingForSheets, setCopyingForSheets] = useState(false);
   const [validMonth, setValidMonth] = useState<string>("");
   const [validNow, setValidNow] = useState<boolean>(false);
   const [validCycleId, setValidCycleId] = useState<number | null>(null);
@@ -92,7 +107,7 @@ const EnrollmentsPage = () => {
   const [validLoading, setValidLoading] = useState<boolean>(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [addBatchOpen, setAddBatchOpen] = useState(false);
-  const [addBatchForm, setAddBatchForm] = useState({ student_id: "", new_batch_ids: [] as string[], payment_mode: "cash" });
+  const [addBatchForm, setAddBatchForm] = useState({ student_id: "", new_batch_ids: [] as string[], payment_mode: "razorpay" });
   const [existingBatches, setExistingBatches] = useState<any[]>([]);
   const [existingEnrollment, setExistingEnrollment] = useState<any>(null);
   const [addBatchDropIn, setAddBatchDropIn] = useState<any>(null);
@@ -100,7 +115,7 @@ const EnrollmentsPage = () => {
   const [latestEndDate, setLatestEndDate] = useState<string | null>(null);
   const [previousBatchIds, setPreviousBatchIds] = useState<number[]>([]);
   const [form, setForm] = useState({
-    student_id: "", batch_ids: [] as string[], payment_mode: "cash",
+    student_id: "", batch_ids: [] as string[], payment_mode: "razorpay",
     subscription_plan_id: "", computed_start: "", computed_end: "", start_cycle_name: "", end_cycle_name: "",
     start_cycle_id: null as number | null, end_cycle_id: null as number | null,
     regular_cycles: 1, grid_cycles: 0,
@@ -704,7 +719,7 @@ const EnrollmentsPage = () => {
     setEligibleDropIn(null);
     setDetectedStatus("NEW");
     setLatestEndDate(null);
-    setForm({ student_id: "", batch_ids: [], payment_mode: "cash", subscription_plan_id: "", computed_start: "", computed_end: "", start_cycle_name: "", end_cycle_name: "", start_cycle_id: null, end_cycle_id: null, regular_cycles: 1, grid_cycles: 0 });
+    setForm({ student_id: "", batch_ids: [], payment_mode: "razorpay", subscription_plan_id: "", computed_start: "", computed_end: "", start_cycle_name: "", end_cycle_name: "", start_cycle_id: null, end_cycle_id: null, regular_cycles: 1, grid_cycles: 0 });
     setDialogOpen(false);
     setEnrollOverlap(null);
     fetchData();
@@ -876,7 +891,7 @@ const EnrollmentsPage = () => {
     }
 
     toast.success(`Added ${addBatchForm.new_batch_ids.length} batch(es)! Amount: ₹${addBatchFee.total.toLocaleString()}${addBatchFee.dropInAdj > 0 ? ` (Drop-in adjusted: -₹${addBatchFee.dropInAdj})` : ""}`);
-    setAddBatchForm({ student_id: "", new_batch_ids: [], payment_mode: "cash" });
+    setAddBatchForm({ student_id: "", new_batch_ids: [], payment_mode: "razorpay" });
     setExistingBatches([]);
     setExistingEnrollment(null);
     setAddBatchDropIn(null);
@@ -958,6 +973,71 @@ const EnrollmentsPage = () => {
 
   const monthLabel = validMonth ? new Date(`${validMonth}-01`).toLocaleString("en-US", { month: "long", year: "numeric" }) : "";
 
+  const copyRegistrationsForSheets = async () => {
+    if (!copyDate) { toast.error("Choose a registration date"); return; }
+    setCopyingForSheets(true);
+    try {
+      const { start, end } = getIstDayBounds(copyDate);
+      let q: any = supabase
+        .from("enrollments")
+        .select("id, created_at, status_type, late_renewal, registration_fee_applied, start_date, end_date, students(name, phone, email, users(name, phone, email)), batches(name, batch_code, studio_id, style_base, studios(name, code)), subscription_plans(name), payments(amount, gst, final_amount, payment_mode, status)")
+        .eq("organization_id", 1)
+        .gte("created_at", start)
+        .lt("created_at", end)
+        .order("created_at", { ascending: true });
+      if (!scope.unrestricted) q = q.in("student_id", scope.studentIds);
+      const { data, error } = await q;
+      if (error) throw error;
+
+      const rows = (data || []).filter((e: any) => copyStudioId === "all" || String(e.batches?.studio_id) === copyStudioId);
+      if (rows.length === 0) {
+        toast.info("No registrations found for that day and studio");
+        return;
+      }
+
+      const headers = [
+        "Registered At", "Studio", "Student Name", "Phone", "Email", "Account Owner", "Batch", "Batch Code",
+        "Style", "Type", "Plan", "Start Date", "End Date", "Payment Mode", "Payment Status",
+        "Subtotal", "GST", "Total", "Registration Fee Applied",
+      ];
+      const lines = [headers.join("\t")];
+      rows.forEach((e: any) => {
+        const payment = e.payments || {};
+        const student = e.students || {};
+        lines.push([
+          e.created_at ? new Date(e.created_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : "",
+          e.batches?.studios?.name || "",
+          student.name || "",
+          student.phone || student.users?.phone || "",
+          student.email || student.users?.email || "",
+          student.users?.name || "",
+          e.batches?.name || "",
+          e.batches?.batch_code || "",
+          e.batches?.style_base || "",
+          `${e.status_type || ""}${e.late_renewal ? " (Late)" : ""}`,
+          e.subscription_plans?.name || "",
+          e.start_date || "",
+          e.end_date || "",
+          payment.payment_mode || "",
+          payment.status || "",
+          payment.amount ?? "",
+          payment.gst ?? "",
+          payment.final_amount ?? "",
+          e.registration_fee_applied ? "Yes" : "No",
+        ].map(cleanSheetCell).join("\t"));
+      });
+
+      await navigator.clipboard.writeText(lines.join("\n"));
+      const studioName = copyStudioId === "all" ? "all studios" : (studios.find(s => String(s.id) === copyStudioId)?.name || "selected studio");
+      toast.success(`Copied ${rows.length} registration${rows.length !== 1 ? "s" : ""} for ${studioName}`);
+    } catch (err: any) {
+      console.error("copyRegistrationsForSheets failed", err);
+      toast.error(`Could not copy registrations: ${err?.message || "unknown error"}`);
+    } finally {
+      setCopyingForSheets(false);
+    }
+  };
+
   return (
     <AdminLayout title="Enrollments">
       {isTestMode && isAdminOrManager && (
@@ -975,7 +1055,7 @@ const EnrollmentsPage = () => {
           setDialogOpen(open);
           if (open) {
             setForm({
-              student_id: "", batch_ids: [], payment_mode: "cash",
+              student_id: "", batch_ids: [], payment_mode: "razorpay",
               subscription_plan_id: "", computed_start: "", computed_end: "",
               start_cycle_name: "", end_cycle_name: "",
               start_cycle_id: null, end_cycle_id: null,
@@ -1056,6 +1136,7 @@ const EnrollmentsPage = () => {
                 <Select value={form.payment_mode} onValueChange={(v) => setForm({ ...form, payment_mode: v })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="razorpay">Razorpay</SelectItem>
                     <SelectItem value="cash">Cash</SelectItem>
                     <SelectItem value="upi">UPI</SelectItem>
                     <SelectItem value="online">Online</SelectItem>
@@ -1081,7 +1162,7 @@ const EnrollmentsPage = () => {
         </Dialog>
         <Dialog open={addBatchOpen} onOpenChange={(open) => {
           setAddBatchOpen(open);
-          if (!open) { setAddBatchForm({ student_id: "", new_batch_ids: [], payment_mode: "cash" }); setExistingBatches([]); setExistingEnrollment(null); setAddBatchDropIn(null); }
+          if (!open) { setAddBatchForm({ student_id: "", new_batch_ids: [], payment_mode: "razorpay" }); setExistingBatches([]); setExistingEnrollment(null); setAddBatchDropIn(null); }
         }}>
           <DialogTrigger asChild>
             <Button variant="outline"><PackagePlus className="h-4 w-4 mr-2" />Add Batch</Button>
@@ -1144,6 +1225,7 @@ const EnrollmentsPage = () => {
                     <Select value={addBatchForm.payment_mode} onValueChange={(v) => setAddBatchForm(f => ({ ...f, payment_mode: v }))}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="razorpay">Razorpay</SelectItem>
                         <SelectItem value="cash">Cash</SelectItem>
                         <SelectItem value="upi">UPI</SelectItem>
                         <SelectItem value="online">Online</SelectItem>
@@ -1268,6 +1350,26 @@ const EnrollmentsPage = () => {
             }}
           >
             <Download className="h-4 w-4" /> CSV
+          </Button>
+        </div>
+        <div className="flex flex-wrap items-end gap-3 rounded-lg border border-border bg-card/40 p-3">
+          <div className="space-y-1">
+            <Label htmlFor="copy-registration-date">Registration date</Label>
+            <Input id="copy-registration-date" type="date" value={copyDate} onChange={(e) => setCopyDate(e.target.value)} className="w-[170px]" />
+          </div>
+          <div className="space-y-1">
+            <Label>Studio</Label>
+            <Select value={copyStudioId} onValueChange={setCopyStudioId}>
+              <SelectTrigger className="w-[220px]"><SelectValue placeholder="All Studios" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Studios</SelectItem>
+                {studios.map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name}{s.code ? ` (${s.code})` : ""}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button variant="outline" onClick={copyRegistrationsForSheets} disabled={copyingForSheets || !copyDate}>
+            <ClipboardCopy className="h-4 w-4" />
+            {copyingForSheets ? "Copying..." : "Copy for Sheets"}
           </Button>
         </div>
         {validNow && (

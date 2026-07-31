@@ -53,7 +53,7 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
   // Cart state
   const [selectedBatchIds, setSelectedBatchIds] = useState<string[]>([]);
   const [selectedPlanId, setSelectedPlanId] = useState("");
-  const [paymentMode, setPaymentMode] = useState("cash");
+  const [paymentMode, setPaymentMode] = useState("razorpay");
   const [submitting, setSubmitting] = useState(false);
   const [renewAddExpanded, setRenewAddExpanded] = useState(false);
 

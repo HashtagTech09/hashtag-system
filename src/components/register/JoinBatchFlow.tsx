@@ -55,7 +55,7 @@ export default function JoinBatchFlow() {
   const [planCycles, setPlanCycles] = useState<PlanCycle[]>([]);
   const [subPlans, setSubPlans] = useState<SubPlan[]>([]);
   const [selectedPlanId, setSelectedPlanId] = useState("");
-  const [paymentMode, setPaymentMode] = useState("cash");
+  const [paymentMode, setPaymentMode] = useState("razorpay");
   const [submitting, setSubmitting] = useState(false);
   const [allBatches, setAllBatches] = useState<BatchRow[]>([]);
   const [detectedStatus, setDetectedStatus] = useState<string>("NEW");

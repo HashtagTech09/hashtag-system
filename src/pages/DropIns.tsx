@@ -34,7 +34,7 @@ const DropInsPage = () => {
     batch_id: "",
     batch_session_id: "",
     amount: "",
-    payment_mode: "cash",
+    payment_mode: "razorpay",
   });
 
   // Credit issuance form
@@ -244,8 +244,8 @@ const DropInsPage = () => {
                   <Select value={form.payment_mode} onValueChange={v => setForm({ ...form, payment_mode: v })}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="cash">Cash</SelectItem>
                       <SelectItem value="razorpay">Razorpay</SelectItem>
+                      <SelectItem value="cash">Cash</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
