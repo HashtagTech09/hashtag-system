@@ -22,7 +22,7 @@ import { useScopedStudents } from "@/hooks/useScopedStudents";
 import { useSimulatedToday, useTestDate } from "@/contexts/TestDateContext";
 import { Textarea } from "@/components/ui/textarea";
 import { allocateCollectedAmount, sortBatchesByHierarchy } from "@/lib/styleHierarchy";
-import { computeFeeBreakdown as computeSharedFeeBreakdown, detectStudentStatus } from "@/lib/enrollmentUtils";
+import { computeFeeBreakdown as computeSharedFeeBreakdown, detectStudentStatus, roundToNearest100 } from "@/lib/enrollmentUtils";
 
 async function fetchAll<T>(buildQuery: () => any): Promise<T[]> {
   const pageSize = 1000;
@@ -810,9 +810,11 @@ const EnrollmentsPage = () => {
     const dropInAdj = addBatchDropIn ? getDropInAdjustmentAmount(addBatchDropIn) : 0;
     const subtotal = totalNewFee;
     const gst = Math.round(subtotal * 0.18);
-    const total = Math.max(0, subtotal + gst - dropInAdj);
+    const batchTotalWithGst = subtotal + gst;
+    const roundedBatchTotal = roundToNearest100(batchTotalWithGst);
+    const total = Math.max(0, roundedBatchTotal - dropInAdj);
 
-    return { totalBatchCount, newBatchCount, perBatchFee, discountPct: 0, discountAmount, totalNewFee, dropInAdj, subtotal, gst, total, regularCycles, gridCycles };
+    return { totalBatchCount, newBatchCount, perBatchFee, discountPct: 0, discountAmount, totalNewFee, dropInAdj, subtotal, gst, batchTotalWithGst, roundedBatchTotal, total, regularCycles, gridCycles };
   };
 
   const addBatchFee = computeAddBatchFee();
@@ -1140,13 +1142,14 @@ const EnrollmentsPage = () => {
               {form.batch_ids.length > 0 && (
                 <div className="p-3 rounded-lg border border-border bg-muted/30 text-sm space-y-1">
                   <p className="font-medium text-foreground mb-2">Fee Breakdown</p>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Per batch ({form.regular_cycles}R × ₹3,767 + {form.grid_cycles}G × ₹5,300)</span><span>₹{feeBreakdown.perBatchFee.toLocaleString()}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Per batch ({form.regular_cycles}R × ₹3,200 + {form.grid_cycles}G × ₹7,667)</span><span>₹{feeBreakdown.perBatchFee.toLocaleString()}</span></div>
                   {feeBreakdown.discountPct > 0 && <div className="flex justify-between text-success"><span>Discount ({Math.round(feeBreakdown.discountPct * 100)}% for {feeBreakdown.batchCount} batches)</span><span>-₹{feeBreakdown.discountAmount.toLocaleString()}</span></div>}
                   <div className="flex justify-between"><span className="text-muted-foreground">Batch total ({feeBreakdown.batchCount} batch{feeBreakdown.batchCount > 1 ? "es" : ""})</span><span>₹{feeBreakdown.totalBatchFee.toLocaleString()}</span></div>
-                  {feeBreakdown.regFee > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Registration fee ({detectedStatus}{feeBreakdown.isLateRenewal ? " - Late" : ""})</span><span>₹{feeBreakdown.regFee}</span></div>}
-                  {feeBreakdown.registrationFeeDiscounted && <div className="flex justify-between text-success"><span>Registration fee discounted during renewal period</span><span>-₹{feeBreakdown.registrationFeeDiscountedAmount.toLocaleString()}</span></div>}
-                  <div className="flex justify-between border-t border-border pt-1 mt-1"><span className="text-muted-foreground">Subtotal</span><span>₹{feeBreakdown.subtotal.toLocaleString()}</span></div>
+                  <div className="flex justify-between border-t border-border pt-1 mt-1"><span className="text-muted-foreground">Class subtotal</span><span>₹{feeBreakdown.subtotal.toLocaleString()}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">GST (18%)</span><span>₹{feeBreakdown.gst.toLocaleString()}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Class fee after rounding</span><span>₹{feeBreakdown.roundedBatchTotal.toLocaleString()}</span></div>
+                  {feeBreakdown.regFee > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Registration fee ({detectedStatus}{feeBreakdown.isLateRenewal ? " - Late" : ""}) incl. GST</span><span>₹{feeBreakdown.regFee.toLocaleString()}</span></div>}
+                  {feeBreakdown.registrationFeeDiscounted && <div className="flex justify-between text-success"><span>Registration fee discounted during renewal period</span><span>-₹{feeBreakdown.registrationFeeDiscountedAmount.toLocaleString()}</span></div>}
                   {feeBreakdown.dropInAdj > 0 && <div className="flex justify-between text-success"><span>Drop-in adjustment</span><span>-₹{feeBreakdown.dropInAdj.toLocaleString()}</span></div>}
                   <div className="flex justify-between font-semibold border-t border-border pt-1 mt-1"><span>Total</span><span>₹{feeBreakdown.total.toLocaleString()}</span></div>
                 </div>
@@ -1231,13 +1234,14 @@ const EnrollmentsPage = () => {
                   {addBatchFee && addBatchForm.new_batch_ids.length > 0 && (
                     <div className="p-3 rounded-lg border border-border bg-muted/30 text-sm space-y-1">
                       <p className="font-medium text-foreground mb-2">Fee Breakdown</p>
-                      <div className="flex justify-between"><span className="text-muted-foreground">Per batch ({addBatchFee.regularCycles}R × ₹3,220 + {addBatchFee.gridCycles}G × ₹7,000)</span><span>₹{addBatchFee.perBatchFee.toLocaleString()}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground">Per batch ({addBatchFee.regularCycles}R × ₹3,200 + {addBatchFee.gridCycles}G × ₹7,667)</span><span>₹{addBatchFee.perBatchFee.toLocaleString()}</span></div>
                       <div className="flex justify-between"><span className="text-muted-foreground">Existing batches</span><span>{existingBatches.length}</span></div>
                       <div className="flex justify-between"><span className="text-muted-foreground">New batches</span><span>{addBatchFee.newBatchCount}</span></div>
                       {addBatchFee.discountPct > 0 && <div className="flex justify-between text-success"><span>Discount ({Math.round(addBatchFee.discountPct * 100)}% for {addBatchFee.totalBatchCount} total batches)</span><span>-₹{addBatchFee.discountAmount.toLocaleString()}</span></div>}
                       <div className="flex justify-between"><span className="text-muted-foreground">New batch total</span><span>₹{addBatchFee.totalNewFee.toLocaleString()}</span></div>
-                      <div className="flex justify-between border-t border-border pt-1 mt-1"><span className="text-muted-foreground">Subtotal</span><span>₹{addBatchFee.subtotal.toLocaleString()}</span></div>
+                      <div className="flex justify-between border-t border-border pt-1 mt-1"><span className="text-muted-foreground">Class subtotal</span><span>₹{addBatchFee.subtotal.toLocaleString()}</span></div>
                       <div className="flex justify-between"><span className="text-muted-foreground">GST (18%)</span><span>₹{addBatchFee.gst.toLocaleString()}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground">Class fee after rounding</span><span>₹{addBatchFee.roundedBatchTotal.toLocaleString()}</span></div>
                       {addBatchFee.dropInAdj > 0 && <div className="flex justify-between text-success"><span>Drop-in adjustment</span><span>-₹{addBatchFee.dropInAdj.toLocaleString()}</span></div>}
                       <div className="flex justify-between font-semibold border-t border-border pt-1 mt-1"><span>Total</span><span>₹{addBatchFee.total.toLocaleString()}</span></div>
                     </div>

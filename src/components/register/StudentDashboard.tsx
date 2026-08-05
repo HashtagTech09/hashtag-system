@@ -996,12 +996,16 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
                       </div>
 
                       <div className="flex justify-between border-t border-border pt-1 mt-1">
-                        <span className="text-muted-foreground">Subtotal</span>
+                        <span className="text-muted-foreground">Class subtotal</span>
                         <span>₹{addBatchBreakdown.subtotal.toLocaleString()}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">GST (18%)</span>
                         <span>₹{addBatchBreakdown.gst.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Class fee after rounding</span>
+                        <span>₹{addBatchBreakdown.roundedBatchTotal.toLocaleString()}</span>
                       </div>
                       <div className="flex justify-between font-semibold border-t border-border pt-1 mt-1">
                         <span>Total</span>

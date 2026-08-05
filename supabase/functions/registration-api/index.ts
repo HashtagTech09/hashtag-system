@@ -37,7 +37,7 @@ async function loadSettings(supabase: any) {
   (data || []).forEach((r: any) => { map[r.key] = r.value; });
   CACHED_SETTINGS = {
     orgId: Number(map.default_organization_id ?? 1),
-    regFee: Number(map.registration_fee ?? 500),
+    regFee: Number(map.registration_fee ?? 590),
     dropInFee: Number(map.drop_in_fee ?? 500),
     gstRate: Number(map.gst_percent ?? 18) / 100,
   };
@@ -54,7 +54,7 @@ function getBatchDiscount(pos: number) {
   const t: Record<number, number> = { 2: 0.12, 3: 0.13, 4: 0.14 };
   return t[pos] ?? 0.15;
 }
-function roundToNearest10(n: number) { return Math.round(n / 10) * 10; }
+function roundToNearest100(n: number) { return Math.round(n / 100) * 100; }
 function getPlanKey(r: number, g: number) { return `${r}R${g}G`; }
 function getCycleForDate(cycles: PlanCycle[], date: string): PlanCycle | null {
   return cycles.find(c => c.start_date <= date && (c.end_date || "2099-12-31") >= date) || null;
@@ -172,9 +172,8 @@ function computeFeeBreakdown(params: {
   const today = todayIST();
   const isLateRenewal = detectedStatus === "REN" && latestEndDate ? today > latestEndDate : false;
   let applyRegFee = detectedStatus === "NEW" || detectedStatus === "REV" || isLateRenewal;
-  if (isFixedPricePlan) applyRegFee = false;
   const regFee = applyRegFee ? regFeeVal : 0;
-  const registrationFeeDiscounted = !isFixedPricePlan && detectedStatus === "REN" && !!latestEndDate && today <= latestEndDate;
+  const registrationFeeDiscounted = detectedStatus === "REN" && !!latestEndDate && today <= latestEndDate;
   let perBatchFee: number;
   if (isFixedPricePlan) { perBatchFee = Math.round(fixedTotal / (1 + gstRate)); }
   else { perBatchFee = (regularCycles * REGULAR_PRICE) + (gridCycles * GRID_PRICE); }
@@ -185,10 +184,12 @@ function computeFeeBreakdown(params: {
   });
   const totalBatchFee = batchAllocations.length > 0 ? batchAllocations.reduce((s, a) => s + a.amount, 0) : perBatchFee * batchCount;
   const discountAmount = (perBatchFee * batchCount) - totalBatchFee;
-  const subtotal = totalBatchFee + regFee;
+  const subtotal = totalBatchFee;
   const gst = Math.round(subtotal * gstRate);
-  let total = Math.max(0, subtotal + gst - dropInAmount);
-  if (!isFixedPricePlan) total = roundToNearest10(total);
+  const batchTotalWithGst = subtotal + gst;
+  const roundedBatchTotal = isFixedPricePlan ? batchTotalWithGst : roundToNearest100(batchTotalWithGst);
+  const roundingAdjustment = roundedBatchTotal - batchTotalWithGst;
+  const total = Math.max(0, roundedBatchTotal + regFee - dropInAmount);
   return {
     batchCount,
     perBatchFee,
@@ -198,6 +199,9 @@ function computeFeeBreakdown(params: {
     dropInAdj: dropInAmount,
     subtotal,
     gst,
+    batchTotalWithGst,
+    roundedBatchTotal,
+    roundingAdjustment,
     total,
     applyRegFee,
     registrationFeeDiscounted,

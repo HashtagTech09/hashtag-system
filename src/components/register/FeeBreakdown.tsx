@@ -48,10 +48,22 @@ export default function FeeBreakdownDisplay({ breakdown, regularCycles, gridCycl
         <span className="text-muted-foreground">Batch total ({breakdown.batchCount} batch{breakdown.batchCount > 1 ? "es" : ""})</span>
         <span>₹{breakdown.totalBatchFee.toLocaleString()}</span>
       </div>
+      <div className="flex justify-between border-t border-border pt-1 mt-1">
+        <span className="text-muted-foreground">Class subtotal</span>
+        <span>₹{breakdown.subtotal.toLocaleString()}</span>
+      </div>
+      <div className="flex justify-between">
+        <span className="text-muted-foreground">GST (18%)</span>
+        <span>₹{breakdown.gst.toLocaleString()}</span>
+      </div>
+      <div className="flex justify-between">
+        <span className="text-muted-foreground">Class fee after rounding</span>
+        <span>₹{breakdown.roundedBatchTotal.toLocaleString()}</span>
+      </div>
       {breakdown.regFee > 0 && (
         <div className="flex justify-between">
-          <span className="text-muted-foreground">Registration fee ({detectedStatus}{breakdown.isLateRenewal ? " - Late" : ""}) — ₹590 incl. GST</span>
-          <span>₹{breakdown.regFee}</span>
+          <span className="text-muted-foreground">Registration fee ({detectedStatus}{breakdown.isLateRenewal ? " - Late" : ""}) incl. GST</span>
+          <span>₹{breakdown.regFee.toLocaleString()}</span>
         </div>
       )}
       {breakdown.registrationFeeDiscounted && (
@@ -66,14 +78,6 @@ export default function FeeBreakdownDisplay({ breakdown, regularCycles, gridCycl
           <span>-₹{breakdown.dropInAdj.toLocaleString()}</span>
         </div>
       )}
-      <div className="flex justify-between border-t border-border pt-1 mt-1">
-        <span className="text-muted-foreground">Subtotal</span>
-        <span>₹{breakdown.subtotal.toLocaleString()}</span>
-      </div>
-      <div className="flex justify-between">
-        <span className="text-muted-foreground">GST (18%)</span>
-        <span>₹{breakdown.gst.toLocaleString()}</span>
-      </div>
       <div className="flex justify-between font-semibold border-t border-border pt-1 mt-1">
         <span>Total</span>
         <span>₹{breakdown.total.toLocaleString()}</span>

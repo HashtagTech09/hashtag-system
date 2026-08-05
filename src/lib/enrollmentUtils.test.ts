@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeCycleAssignment, computeFeeBreakdown, detectStudentStatus, getRenewalStartCycleIndex, getStartCycleIndex, isPlanValid, matchPlanCycles, roundToNearest10, type PlanCycle, type SubPlan } from "./enrollmentUtils";
+import { computeCycleAssignment, computeFeeBreakdown, detectStudentStatus, getRenewalStartCycleIndex, getStartCycleIndex, isPlanValid, matchPlanCycles, roundToNearest100, type PlanCycle, type SubPlan } from "./enrollmentUtils";
 
 const cycles: PlanCycle[] = [
   {
@@ -120,13 +120,15 @@ describe("registration fee and rounding", () => {
       latestEndDate: "2026-09-30",
       dropInAmount: 0,
       today: "2026-09-30",
-      regFee: 500,
+      regFee: 590,
     });
 
     expect(breakdown.regFee).toBe(0);
     expect(breakdown.applyRegFee).toBe(false);
     expect(breakdown.registrationFeeDiscounted).toBe(true);
-    expect(breakdown.registrationFeeDiscountedAmount).toBe(500);
+    expect(breakdown.registrationFeeDiscountedAmount).toBe(590);
+    expect(breakdown.roundedBatchTotal).toBe(3800);
+    expect(breakdown.total).toBe(3800);
   });
 
   it("charges registration fee for late renewals inside grace days", () => {
@@ -138,17 +140,37 @@ describe("registration fee and rounding", () => {
       latestEndDate: "2026-09-30",
       dropInAmount: 0,
       today: "2026-10-05",
-      regFee: 500,
+      regFee: 590,
     });
 
-    expect(breakdown.regFee).toBe(500);
+    expect(breakdown.regFee).toBe(590);
     expect(breakdown.applyRegFee).toBe(true);
     expect(breakdown.isLateRenewal).toBe(true);
     expect(breakdown.registrationFeeDiscounted).toBe(false);
+    expect(breakdown.roundedBatchTotal).toBe(3800);
+    expect(breakdown.total).toBe(4390);
   });
 
-  it("rounds payable totals to the nearest 10", () => {
-    expect(roundToNearest10(1183)).toBe(1180);
-    expect(roundToNearest10(1186)).toBe(1190);
+  it("rounds class totals to the nearest 100 before adding registration fee", () => {
+    expect(roundToNearest100(11328)).toBe(11300);
+    expect(roundToNearest100(11351)).toBe(11400);
+
+    const breakdown = computeFeeBreakdown({
+      batchCount: 1,
+      regularCycles: 3,
+      gridCycles: 0,
+      detectedStatus: "NEW",
+      latestEndDate: null,
+      dropInAmount: 0,
+      today: "2026-09-01",
+      regFee: 590,
+    });
+
+    expect(breakdown.subtotal).toBe(9600);
+    expect(breakdown.gst).toBe(1728);
+    expect(breakdown.batchTotalWithGst).toBe(11328);
+    expect(breakdown.roundedBatchTotal).toBe(11300);
+    expect(breakdown.regFee).toBe(590);
+    expect(breakdown.total).toBe(11890);
   });
 });

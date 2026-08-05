@@ -10,7 +10,7 @@ export function getBatchDiscount(position: number): number {
 export const REGULAR_PRICE = 3200;
 export const GRID_PRICE = 7667;
 /** @deprecated Use the value from system_settings.registration_fee (loaded at runtime). Kept as a fallback only. */
-export const REG_FEE = 500;
+export const REG_FEE = 590;
 /** @deprecated Use system_settings.gst_percent / 100. Kept as a fallback only. */
 export const GST_RATE = 0.18;
 
@@ -24,8 +24,8 @@ export function getPlanKey(regularCycles: number, gridCycles: number): string {
   return `${regularCycles}R${gridCycles}G`;
 }
 
-export function roundToNearest10(n: number): number {
-  return Math.round(n / 10) * 10;
+export function roundToNearest100(n: number): number {
+  return Math.round(n / 100) * 100;
 }
 
 export interface PlanCycle {
@@ -187,6 +187,9 @@ export interface FeeBreakdown {
   dropInAdj: number;
   subtotal: number;
   gst: number;
+  batchTotalWithGst: number;
+  roundedBatchTotal: number;
+  roundingAdjustment: number;
   total: number;
   applyRegFee: boolean;
   registrationFeeDiscounted: boolean;
@@ -222,9 +225,8 @@ export function computeFeeBreakdown(params: {
   const todayStr = today || todayIST();
   const isLateRenewal = detectedStatus === "REN" && latestEndDate ? todayStr > latestEndDate : false;
   let applyRegFee = detectedStatus === "NEW" || detectedStatus === "REV" || isLateRenewal;
-  if (isFixedPricePlan) applyRegFee = false;
   const regFee = applyRegFee ? effRegFee : 0;
-  const registrationFeeDiscounted = !isFixedPricePlan && detectedStatus === "REN" && !!latestEndDate && todayStr <= latestEndDate;
+  const registrationFeeDiscounted = detectedStatus === "REN" && !!latestEndDate && todayStr <= latestEndDate;
 
   let perBatchFee: number;
   let discountAmount: number;
@@ -256,13 +258,12 @@ export function computeFeeBreakdown(params: {
     : perBatchFee * batchCount;
   discountAmount = (perBatchFee * batchCount) - totalBatchFee;
 
-  const subtotal = totalBatchFee + regFee;
+  const subtotal = totalBatchFee;
   const gst = Math.round(subtotal * effGstRate);
-  let total = Math.max(0, subtotal + gst - dropInAmount);
-
-  if (!isFixedPricePlan) {
-    total = roundToNearest10(total);
-  }
+  const batchTotalWithGst = subtotal + gst;
+  const roundedBatchTotal = isFixedPricePlan ? batchTotalWithGst : roundToNearest100(batchTotalWithGst);
+  const roundingAdjustment = roundedBatchTotal - batchTotalWithGst;
+  const total = Math.max(0, roundedBatchTotal + regFee - dropInAmount);
 
   return {
     batchCount,
@@ -274,6 +275,9 @@ export function computeFeeBreakdown(params: {
     dropInAdj: dropInAmount,
     subtotal,
     gst,
+    batchTotalWithGst,
+    roundedBatchTotal,
+    roundingAdjustment,
     total,
     applyRegFee,
     registrationFeeDiscounted,
@@ -332,6 +336,9 @@ export interface AddBatchBreakdown {
   dropInAdj: number;
   subtotal: number;
   gst: number;
+  batchTotalWithGst: number;
+  roundedBatchTotal: number;
+  roundingAdjustment: number;
   total: number;
   applyRegFee: boolean;
   registrationFeeDiscounted: boolean;
@@ -431,10 +438,10 @@ export function computeAddBatchBreakdown(params: {
 
   const subtotal = totalFee;
   const gst = Math.round(subtotal * GST_RATE);
-  let total = subtotal + gst;
-  if (!isFixedPricePlan) {
-    total = roundToNearest10(total);
-  }
+  const batchTotalWithGst = subtotal + gst;
+  const roundedBatchTotal = isFixedPricePlan ? batchTotalWithGst : roundToNearest100(batchTotalWithGst);
+  const roundingAdjustment = roundedBatchTotal - batchTotalWithGst;
+  const total = roundedBatchTotal;
 
   return {
     batchCount: existingBatches.length + newBatches.length,
@@ -446,6 +453,9 @@ export function computeAddBatchBreakdown(params: {
     dropInAdj: 0,
     subtotal,
     gst,
+    batchTotalWithGst,
+    roundedBatchTotal,
+    roundingAdjustment,
     total,
     applyRegFee: false,
     registrationFeeDiscounted: false,
