@@ -42,12 +42,38 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
+    const orgId = await getDefaultOrgId(supabase);
+    const { data: testSetting } = await supabase
+      .from("system_settings")
+      .select("value")
+      .eq("organization_id", orgId)
+      .eq("key", "test_mode")
+      .maybeSingle();
+    const isTestMode = testSetting?.value === "true";
     const resendKey = Deno.env.get("RESEND_API_KEY");
 
-    if (!resendKey) {
+    if (isTestMode || !resendKey) {
+      await supabase.from("notification_log").insert({
+        organization_id: orgId,
+        channel: "email",
+        recipient: recipientList.map((r: any) => r.email).join(","),
+        template_name: "cash-confirmation",
+        payload: { recipients: recipientList, student_name, amount, confirmation_url, expires_in_minutes: expires_in_minutes || 10 },
+        status: isTestMode ? "test_logged" : "failed",
+        error_message: isTestMode ? null : "RESEND_API_KEY not configured",
+      });
+
       return new Response(
-        JSON.stringify({ error: "RESEND_API_KEY not configured" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({
+          success: isTestMode,
+          test_mode: isTestMode,
+          logged: true,
+          error: isTestMode ? "" : "RESEND_API_KEY not configured",
+        }),
+        {
+          status: isTestMode ? 200 : 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
       );
     }
 
@@ -87,7 +113,6 @@ Deno.serve(async (req) => {
     const resBody = await res.text();
     const success = res.ok;
 
-    const orgId = await getDefaultOrgId(supabase);
     await supabase.from("notification_log").insert({
       organization_id: orgId,
       channel: "email",

@@ -436,8 +436,9 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
       setSelectedPlanId("");
       setRenewAddExpanded(false);
       fetchData();
-    } catch {
-      toast.error("Enrollment failed. Please try again.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Please try again.";
+      toast.error("Enrollment failed: " + message);
     } finally {
       setSubmitting(false);
     }

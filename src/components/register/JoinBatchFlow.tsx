@@ -310,8 +310,9 @@ export default function JoinBatchFlow() {
       toast.success("Cash payment request sent to the batch team for 10-minute confirmation!");
       showReceipt("Cash", `CASH-${cashReq.id}`);
       setStep("waiting");
-    } catch {
-      toast.error("Enrollment failed. Please try again.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Please try again.";
+      toast.error("Enrollment failed: " + message);
     } finally {
       setSubmitting(false);
     }
