@@ -36,9 +36,10 @@ interface StudentDashboardProps {
   student: any;
   user: any;
   onDone: () => void;
+  simulatedToday?: string;
 }
 
-export default function StudentDashboard({ student, user, onDone }: StudentDashboardProps) {
+export default function StudentDashboard({ student, user, onDone, simulatedToday: simulatedTodayProp }: StudentDashboardProps) {
   const [enrollments, setEnrollments] = useState<any[]>([]);
   const [batches, setBatches] = useState<any[]>([]);
   const [studios, setStudios] = useState<any[]>([]);
@@ -57,7 +58,8 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
   const [paymentMode, setPaymentMode] = useState("razorpay");
   const [submitting, setSubmitting] = useState(false);
   const [renewAddExpanded, setRenewAddExpanded] = useState(false);
-  const simulatedToday = useSimulatedToday();
+  const contextToday = useSimulatedToday();
+  const simulatedToday = simulatedTodayProp || contextToday;
 
   useEffect(() => {
     fetchData();

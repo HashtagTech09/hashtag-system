@@ -13,6 +13,7 @@ import AccountSetup from "./AccountSetup";
 import AccountOwnerChoice from "./AccountOwnerChoice";
 import { needsAccountSetup, type AccountOwnerType } from "@/lib/accountOwner";
 import { Check, Plus, X } from "lucide-react";
+import { useSimulatedToday } from "@/contexts/TestDateContext";
 
 type Step = "phone" | "signup" | "setup" | "hub" | "dashboard";
 type UserRow = Database["public"]["Tables"]["users"]["Row"];
@@ -35,6 +36,7 @@ export default function AccountFlow() {
   const [addingStudent, setAddingStudent] = useState(false);
   const [newStudentName, setNewStudentName] = useState("");
   const [addingStudentSubmit, setAddingStudentSubmit] = useState(false);
+  const simulatedToday = useSimulatedToday();
 
   const continueAfterSetup = (list: StudentRow[]) => {
     if (list.length === 0) {
@@ -286,6 +288,7 @@ export default function AccountFlow() {
         student={activeStudent}
         user={user}
         onDone={reset}
+        simulatedToday={simulatedToday}
       />
     </div>
   );

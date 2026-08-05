@@ -2,6 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useState, ReactNode 
 import { todayIST } from "@/lib/dateUtils";
 import { supabase } from "@/integrations/supabase/client";
 
+const TEST_DATE_STORAGE_KEY = "hashtag:test-date";
+
 interface TestDateContextValue {
   isTestMode: boolean;
   simulatedDate: string | null; // YYYY-MM-DD or null = use real today
@@ -18,7 +20,26 @@ const TestDateContext = createContext<TestDateContextValue>({
 
 export function TestDateProvider({ children }: { children: ReactNode }) {
   const [isTestMode, setIsTestMode] = useState(false);
-  const [simulatedDate, setSimulatedDate] = useState<string | null>(null);
+  const [simulatedDateState, setSimulatedDateState] = useState<string | null>(() => {
+    try {
+      return window.localStorage.getItem(TEST_DATE_STORAGE_KEY);
+    } catch {
+      return null;
+    }
+  });
+
+  const setSimulatedDate = useCallback((date: string | null) => {
+    setSimulatedDateState(date);
+    try {
+      if (date) {
+        window.localStorage.setItem(TEST_DATE_STORAGE_KEY, date);
+      } else {
+        window.localStorage.removeItem(TEST_DATE_STORAGE_KEY);
+      }
+    } catch {
+      // Ignore storage failures; the in-memory date still works.
+    }
+  }, []);
 
   const refresh = useCallback(() => {
     supabase
@@ -40,10 +61,16 @@ export function TestDateProvider({ children }: { children: ReactNode }) {
       if (document.visibilityState === "visible") refresh();
     };
     const onCustom = () => refresh();
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === TEST_DATE_STORAGE_KEY) {
+        setSimulatedDateState(event.newValue);
+      }
+    };
 
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("test-mode-changed", onCustom);
+    window.addEventListener("storage", onStorage);
 
     const channel = supabase
       .channel("system_settings:test_mode")
@@ -58,12 +85,13 @@ export function TestDateProvider({ children }: { children: ReactNode }) {
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("test-mode-changed", onCustom);
+      window.removeEventListener("storage", onStorage);
       supabase.removeChannel(channel);
     };
   }, [refresh]);
 
   return (
-    <TestDateContext.Provider value={{ isTestMode, simulatedDate, setSimulatedDate, refresh }}>
+    <TestDateContext.Provider value={{ isTestMode, simulatedDate: simulatedDateState, setSimulatedDate, refresh }}>
       {children}
     </TestDateContext.Provider>
   );
