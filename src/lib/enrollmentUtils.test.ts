@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeCycleAssignment, detectStudentStatus, getRenewalStartCycleIndex, getStartCycleIndex, isPlanValid, matchPlanCycles, type PlanCycle, type SubPlan } from "./enrollmentUtils";
+import { computeCycleAssignment, computeFeeBreakdown, detectStudentStatus, getRenewalStartCycleIndex, getStartCycleIndex, isPlanValid, matchPlanCycles, roundToNearest10, type PlanCycle, type SubPlan } from "./enrollmentUtils";
 
 const cycles: PlanCycle[] = [
   {
@@ -107,5 +107,48 @@ describe("grid-aware enrollment cycle matching", () => {
 
   it("does not move renewal backward before the currently open cycle", () => {
     expect(getRenewalStartCycleIndex(cycles, "2026-09-30", "2027-01-10")).toBe(3);
+  });
+});
+
+describe("registration fee and rounding", () => {
+  it("waives registration fee for renewals on or before the latest end date", () => {
+    const breakdown = computeFeeBreakdown({
+      batchCount: 1,
+      regularCycles: 1,
+      gridCycles: 0,
+      detectedStatus: "REN",
+      latestEndDate: "2026-09-30",
+      dropInAmount: 0,
+      today: "2026-09-30",
+      regFee: 500,
+    });
+
+    expect(breakdown.regFee).toBe(0);
+    expect(breakdown.applyRegFee).toBe(false);
+    expect(breakdown.registrationFeeDiscounted).toBe(true);
+    expect(breakdown.registrationFeeDiscountedAmount).toBe(500);
+  });
+
+  it("charges registration fee for late renewals inside grace days", () => {
+    const breakdown = computeFeeBreakdown({
+      batchCount: 1,
+      regularCycles: 1,
+      gridCycles: 0,
+      detectedStatus: "REN",
+      latestEndDate: "2026-09-30",
+      dropInAmount: 0,
+      today: "2026-10-05",
+      regFee: 500,
+    });
+
+    expect(breakdown.regFee).toBe(500);
+    expect(breakdown.applyRegFee).toBe(true);
+    expect(breakdown.isLateRenewal).toBe(true);
+    expect(breakdown.registrationFeeDiscounted).toBe(false);
+  });
+
+  it("rounds payable totals to the nearest 10", () => {
+    expect(roundToNearest10(1183)).toBe(1180);
+    expect(roundToNearest10(1186)).toBe(1190);
   });
 });

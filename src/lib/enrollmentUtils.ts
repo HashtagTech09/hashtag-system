@@ -24,8 +24,8 @@ export function getPlanKey(regularCycles: number, gridCycles: number): string {
   return `${regularCycles}R${gridCycles}G`;
 }
 
-export function roundToNearest100(n: number): number {
-  return Math.round(n / 100) * 100;
+export function roundToNearest10(n: number): number {
+  return Math.round(n / 10) * 10;
 }
 
 export interface PlanCycle {
@@ -189,6 +189,8 @@ export interface FeeBreakdown {
   gst: number;
   total: number;
   applyRegFee: boolean;
+  registrationFeeDiscounted: boolean;
+  registrationFeeDiscountedAmount: number;
   isLateRenewal: boolean;
   isFixedPricePlan: boolean;
   planKey: string;
@@ -218,10 +220,11 @@ export function computeFeeBreakdown(params: {
   const isFixedPricePlan = fixedTotal !== undefined;
 
   const todayStr = today || todayIST();
-  let applyRegFee = detectedStatus === "NEW" || detectedStatus === "REV" || (detectedStatus === "REN" && latestEndDate ? todayStr > latestEndDate : false);
+  const isLateRenewal = detectedStatus === "REN" && latestEndDate ? todayStr > latestEndDate : false;
+  let applyRegFee = detectedStatus === "NEW" || detectedStatus === "REV" || isLateRenewal;
   if (isFixedPricePlan) applyRegFee = false;
   const regFee = applyRegFee ? effRegFee : 0;
-  const isLateRenewal = detectedStatus === "REN" && latestEndDate ? todayStr > latestEndDate : false;
+  const registrationFeeDiscounted = !isFixedPricePlan && detectedStatus === "REN" && !!latestEndDate && todayStr <= latestEndDate;
 
   let perBatchFee: number;
   let discountAmount: number;
@@ -253,15 +256,33 @@ export function computeFeeBreakdown(params: {
     : perBatchFee * batchCount;
   discountAmount = (perBatchFee * batchCount) - totalBatchFee;
 
-  const subtotal = Math.max(0, totalBatchFee + regFee - dropInAmount);
+  const subtotal = totalBatchFee + regFee;
   const gst = Math.round(subtotal * effGstRate);
-  let total = subtotal + gst;
+  let total = Math.max(0, subtotal + gst - dropInAmount);
 
   if (!isFixedPricePlan) {
-    total = roundToNearest100(total);
+    total = roundToNearest10(total);
   }
 
-  return { batchCount, perBatchFee, discountPct: 0, discountAmount, totalBatchFee, regFee, dropInAdj: dropInAmount, subtotal, gst, total, applyRegFee, isLateRenewal, isFixedPricePlan, planKey, batchAllocations };
+  return {
+    batchCount,
+    perBatchFee,
+    discountPct: 0,
+    discountAmount,
+    totalBatchFee,
+    regFee,
+    dropInAdj: dropInAmount,
+    subtotal,
+    gst,
+    total,
+    applyRegFee,
+    registrationFeeDiscounted,
+    registrationFeeDiscountedAmount: registrationFeeDiscounted ? effRegFee : 0,
+    isLateRenewal,
+    isFixedPricePlan,
+    planKey,
+    batchAllocations,
+  };
 }
 
 /** Detect student enrollment status: NEW, REN, or REV */
@@ -313,6 +334,8 @@ export interface AddBatchBreakdown {
   gst: number;
   total: number;
   applyRegFee: boolean;
+  registrationFeeDiscounted: boolean;
+  registrationFeeDiscountedAmount: number;
   isLateRenewal: boolean;
   isFixedPricePlan: boolean;
   planKey: string;
@@ -410,7 +433,7 @@ export function computeAddBatchBreakdown(params: {
   const gst = Math.round(subtotal * GST_RATE);
   let total = subtotal + gst;
   if (!isFixedPricePlan) {
-    total = roundToNearest100(total);
+    total = roundToNearest10(total);
   }
 
   return {
@@ -425,6 +448,8 @@ export function computeAddBatchBreakdown(params: {
     gst,
     total,
     applyRegFee: false,
+    registrationFeeDiscounted: false,
+    registrationFeeDiscountedAmount: 0,
     isLateRenewal: false,
     isFixedPricePlan,
     planKey,

@@ -54,7 +54,7 @@ function getBatchDiscount(pos: number) {
   const t: Record<number, number> = { 2: 0.12, 3: 0.13, 4: 0.14 };
   return t[pos] ?? 0.15;
 }
-function roundToNearest100(n: number) { return Math.round(n / 100) * 100; }
+function roundToNearest10(n: number) { return Math.round(n / 10) * 10; }
 function getPlanKey(r: number, g: number) { return `${r}R${g}G`; }
 function getCycleForDate(cycles: PlanCycle[], date: string): PlanCycle | null {
   return cycles.find(c => c.start_date <= date && (c.end_date || "2099-12-31") >= date) || null;
@@ -170,9 +170,11 @@ function computeFeeBreakdown(params: {
   const fixedTotal = PLAN_FIXED_TOTALS[planKey];
   const isFixedPricePlan = fixedTotal !== undefined;
   const today = todayIST();
-  let applyRegFee = detectedStatus === "NEW" || detectedStatus === "REV" || (detectedStatus === "REN" && latestEndDate ? today > latestEndDate : false);
+  const isLateRenewal = detectedStatus === "REN" && latestEndDate ? today > latestEndDate : false;
+  let applyRegFee = detectedStatus === "NEW" || detectedStatus === "REV" || isLateRenewal;
   if (isFixedPricePlan) applyRegFee = false;
   const regFee = applyRegFee ? regFeeVal : 0;
+  const registrationFeeDiscounted = !isFixedPricePlan && detectedStatus === "REN" && !!latestEndDate && today <= latestEndDate;
   let perBatchFee: number;
   if (isFixedPricePlan) { perBatchFee = Math.round(fixedTotal / (1 + gstRate)); }
   else { perBatchFee = (regularCycles * REGULAR_PRICE) + (gridCycles * GRID_PRICE); }
@@ -183,11 +185,28 @@ function computeFeeBreakdown(params: {
   });
   const totalBatchFee = batchAllocations.length > 0 ? batchAllocations.reduce((s, a) => s + a.amount, 0) : perBatchFee * batchCount;
   const discountAmount = (perBatchFee * batchCount) - totalBatchFee;
-  const subtotal = Math.max(0, totalBatchFee + regFee - dropInAmount);
+  const subtotal = totalBatchFee + regFee;
   const gst = Math.round(subtotal * gstRate);
-  let total = subtotal + gst;
-  if (!isFixedPricePlan) total = roundToNearest100(total);
-  return { batchCount, perBatchFee, discountAmount, totalBatchFee, regFee, dropInAdj: dropInAmount, subtotal, gst, total, applyRegFee, isFixedPricePlan, planKey, batchAllocations };
+  let total = Math.max(0, subtotal + gst - dropInAmount);
+  if (!isFixedPricePlan) total = roundToNearest10(total);
+  return {
+    batchCount,
+    perBatchFee,
+    discountAmount,
+    totalBatchFee,
+    regFee,
+    dropInAdj: dropInAmount,
+    subtotal,
+    gst,
+    total,
+    applyRegFee,
+    registrationFeeDiscounted,
+    registrationFeeDiscountedAmount: registrationFeeDiscounted ? regFeeVal : 0,
+    isLateRenewal,
+    isFixedPricePlan,
+    planKey,
+    batchAllocations,
+  };
 }
 
 function allocateCollectedAmount<T extends { allocated_amount: number; is_primary?: boolean }>(allocations: T[], collectedAmount?: number): T[] {
@@ -402,7 +421,7 @@ Deno.serve(async (req) => {
 
       const enrollmentRecords = sortedBatches.map((batch: any) => ({
         organization_id: orgId, student_id, batch_id: batch.id,
-        status_type: detectedStatus, registration_fee_applied: breakdown.applyRegFee, late_renewal: false,
+        status_type: detectedStatus, registration_fee_applied: breakdown.applyRegFee, late_renewal: breakdown.isLateRenewal,
         start_date: assignment.startCycle.start_date, end_date: assignment.endCycle.end_date || assignment.startCycle.start_date,
         subscription_plan_id: plan_id, start_cycle_id: assignment.startCycle.id, end_cycle_id: assignment.endCycle.id,
         previous_batch_id: null,

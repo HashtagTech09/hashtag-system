@@ -213,7 +213,7 @@ export default function JoinBatchFlow() {
       const enrollmentRecords = sortedSelectedBatches.map(batch => ({
         organization_id: 1, student_id: student.id, batch_id: batch.id,
         status_type: detectedStatus,
-        registration_fee_applied: breakdown.applyRegFee, late_renewal: false,
+        registration_fee_applied: breakdown.applyRegFee, late_renewal: breakdown.isLateRenewal,
         start_date: assignment.startCycle.start_date,
         end_date: assignment.endCycle.end_date || assignment.startCycle.start_date,
         subscription_plan_id: Number(selectedPlanId),

@@ -19,10 +19,10 @@ import { parseISO } from "date-fns";
 import { allocateCyclesForPlan, insertEnrollmentCycles, filterEnrollmentsByCycle } from "@/lib/cycleUtils";
 import { useAuth } from "@/hooks/useAuth";
 import { useScopedStudents } from "@/hooks/useScopedStudents";
-import { useTestDate } from "@/contexts/TestDateContext";
+import { useSimulatedToday, useTestDate } from "@/contexts/TestDateContext";
 import { Textarea } from "@/components/ui/textarea";
-import { allocateCollectedAmount } from "@/lib/styleHierarchy";
-import { detectStudentStatus } from "@/lib/enrollmentUtils";
+import { allocateCollectedAmount, sortBatchesByHierarchy } from "@/lib/styleHierarchy";
+import { computeFeeBreakdown as computeSharedFeeBreakdown, detectStudentStatus } from "@/lib/enrollmentUtils";
 
 async function fetchAll<T>(buildQuery: () => any): Promise<T[]> {
   const pageSize = 1000;
@@ -66,6 +66,7 @@ const EnrollmentsPage = () => {
 
   const { staffUser, isAdminOrManager } = useAuth();
   const { isTestMode } = useTestDate();
+  const simulatedToday = useSimulatedToday();
   const scope = useScopedStudents();
   const [enrollments, setEnrollments] = useState<any[]>([]);
   const [editValidityFor, setEditValidityFor] = useState<any>(null);
@@ -568,27 +569,21 @@ const EnrollmentsPage = () => {
   };
 
   const computeFeeBreakdown = () => {
-    const batchCount = form.batch_ids.length;
-    const perBatchFee = (form.regular_cycles * 3200) + (form.grid_cycles * 7667);
-    let totalBatchFee = 0;
-    for (let i = 0; i < batchCount; i++) {
-      const position = i + 1;
-      const disc = position <= 1 ? 0 : ({ 2: 0.12, 3: 0.13, 4: 0.14 } as Record<number, number>)[position] ?? 0.15;
-      totalBatchFee += position === 1 ? perBatchFee : Math.round(perBatchFee * (1 - disc));
-    }
-    const discountAmount = (perBatchFee * batchCount) - totalBatchFee;
-
-    const todayStr = new Date().toISOString().split("T")[0];
-    const applyRegFee = detectedStatus === "NEW" || detectedStatus === "REV" || (detectedStatus === "REN" && latestEndDate && todayStr > latestEndDate);
-    const regFee = applyRegFee ? 500 : 0;
+    const selectedBatches = form.batch_ids
+      .map(batchId => batches.find(b => b.id === Number(batchId)))
+      .filter(Boolean);
+    const sortedBatches = sortBatchesByHierarchy(selectedBatches);
     const dropInAdj = eligibleDropIn ? getDropInAdjustmentAmount(eligibleDropIn) : 0;
-    const isLateRenewal = detectedStatus === "REN" && latestEndDate ? todayStr > latestEndDate : false;
-
-    const subtotal = totalBatchFee + regFee;
-    const gst = Math.round(subtotal * 0.18);
-    const total = Math.max(0, subtotal + gst - dropInAdj);
-
-    return { batchCount, perBatchFee, discountPct: 0, discountAmount, totalBatchFee, regFee, dropInAdj, subtotal, gst, total, applyRegFee: !!applyRegFee, isLateRenewal };
+    return computeSharedFeeBreakdown({
+      batchCount: form.batch_ids.length,
+      regularCycles: form.regular_cycles,
+      gridCycles: form.grid_cycles,
+      detectedStatus,
+      latestEndDate,
+      dropInAmount: dropInAdj,
+      sortedBatches: sortedBatches.map(b => ({ id: b.id, name: b.name, style_base: b.style_base })),
+      today: simulatedToday,
+    });
   };
 
   const feeBreakdown = computeFeeBreakdown();
@@ -633,7 +628,6 @@ const EnrollmentsPage = () => {
 
   const performEnroll = async (deactivateIds: number[]) => {
     const breakdown = computeFeeBreakdown();
-    const todayStr = new Date().toISOString().split("T")[0];
     const totalAmount = breakdown.total;
 
     // Deactivate prior overlapping enrollments first (if Replace was chosen)
@@ -1150,6 +1144,7 @@ const EnrollmentsPage = () => {
                   {feeBreakdown.discountPct > 0 && <div className="flex justify-between text-success"><span>Discount ({Math.round(feeBreakdown.discountPct * 100)}% for {feeBreakdown.batchCount} batches)</span><span>-₹{feeBreakdown.discountAmount.toLocaleString()}</span></div>}
                   <div className="flex justify-between"><span className="text-muted-foreground">Batch total ({feeBreakdown.batchCount} batch{feeBreakdown.batchCount > 1 ? "es" : ""})</span><span>₹{feeBreakdown.totalBatchFee.toLocaleString()}</span></div>
                   {feeBreakdown.regFee > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Registration fee ({detectedStatus}{feeBreakdown.isLateRenewal ? " - Late" : ""})</span><span>₹{feeBreakdown.regFee}</span></div>}
+                  {feeBreakdown.registrationFeeDiscounted && <div className="flex justify-between text-success"><span>Registration fee discounted during renewal period</span><span>-₹{feeBreakdown.registrationFeeDiscountedAmount.toLocaleString()}</span></div>}
                   <div className="flex justify-between border-t border-border pt-1 mt-1"><span className="text-muted-foreground">Subtotal</span><span>₹{feeBreakdown.subtotal.toLocaleString()}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">GST (18%)</span><span>₹{feeBreakdown.gst.toLocaleString()}</span></div>
                   {feeBreakdown.dropInAdj > 0 && <div className="flex justify-between text-success"><span>Drop-in adjustment</span><span>-₹{feeBreakdown.dropInAdj.toLocaleString()}</span></div>}
