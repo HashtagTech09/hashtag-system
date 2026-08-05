@@ -33,11 +33,7 @@ type StudentRow = Database["public"]["Tables"]["students"]["Row"] & {
   users?: UserRow | null;
 };
 type BatchRow = Database["public"]["Tables"]["batches"]["Row"];
-type StaffUser = Pick<UserRow, "id" | "name" | "email">;
-type RoleLookupRow = {
-  user_id: number;
-  roles: { type: string | null } | null;
-};
+type CashRecipient = Pick<UserRow, "id" | "name" | "email">;
 
 export default function JoinBatchFlow() {
   const [step, setStep] = useState<Step>("studio");
@@ -60,26 +56,12 @@ export default function JoinBatchFlow() {
   const [allBatches, setAllBatches] = useState<BatchRow[]>([]);
   const [detectedStatus, setDetectedStatus] = useState<string>("NEW");
   const [latestEndDate, setLatestEndDate] = useState<string | null>(null);
-  const [staffList, setStaffList] = useState<StaffUser[]>([]);
-  const [selectedStaffId, setSelectedStaffId] = useState("");
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
   const simulatedToday = useSimulatedToday();
 
   useEffect(() => {
     supabase.from("batches").select("*").eq("organization_id", 1).then(({ data }) => setAllBatches(data || []));
-    const fetchStaff = async () => {
-      const { data: roleData } = await supabase
-        .from("user_roles")
-        .select("user_id, roles(name, type)")
-        .eq("organization_id", 1);
-      if (!roleData) return;
-      const staffUserIds = [...new Set((roleData as RoleLookupRow[]).filter((r) => r.roles?.type === "organization").map((r) => r.user_id))];
-      if (staffUserIds.length === 0) return;
-      const { data: users } = await supabase.from("users").select("id, name, email").in("id", staffUserIds);
-      setStaffList(users || []);
-    };
-    fetchStaff();
   }, []);
 
   useEffect(() => {
@@ -107,6 +89,44 @@ export default function JoinBatchFlow() {
 
   const selectedBatchObjects = selectedBatchIds.map(id => allBatches.find(b => b.id === Number(id))).filter(Boolean);
   const sortedSelectedBatches = sortBatchesByHierarchy(selectedBatchObjects);
+
+  const getCashApprovalRecipients = async (): Promise<CashRecipient[]> => {
+    const batchIds = selectedBatchIds.map(Number);
+    if (batchIds.length === 0) return [];
+
+    const { data: batchRows } = await supabase
+      .from("batches")
+      .select("id, instructor_id, instructor_2_id, studios(dreamcatcher_id, wingperson_id)")
+      .in("id", batchIds);
+
+    const recipientIds = new Set<number>();
+    (batchRows || []).forEach((batch: any) => {
+      [batch.instructor_id, batch.instructor_2_id, batch.studios?.dreamcatcher_id, batch.studios?.wingperson_id]
+        .filter(Boolean)
+        .forEach((id: number) => recipientIds.add(id));
+    });
+
+    if (recipientIds.size === 0) {
+      const { data: managerRoles } = await supabase
+        .from("user_roles")
+        .select("user_id, roles!inner(name)")
+        .eq("organization_id", 1)
+        .eq("roles.name", "manager");
+      (managerRoles || []).forEach((row: any) => recipientIds.add(row.user_id));
+    }
+
+    if (recipientIds.size === 0) return [];
+    const { data: users } = await supabase
+      .from("users")
+      .select("id, name, email")
+      .in("id", Array.from(recipientIds));
+
+    const byEmail = new Map<string, CashRecipient>();
+    (users || []).forEach((u) => {
+      if (u.email) byEmail.set(u.email.toLowerCase(), u);
+    });
+    return Array.from(byEmail.values());
+  };
 
   useEffect(() => {
     const detectStatus = async () => {
@@ -260,30 +280,34 @@ export default function JoinBatchFlow() {
         return;
       }
 
-      if (!selectedStaffId) {
-        toast.error("Please select a staff member to confirm the cash payment.");
+      const cashRecipients = await getCashApprovalRecipients();
+      if (cashRecipients.length === 0) {
+        toast.error("No manager or instructor email is assigned to this batch. Please contact support.");
         setSubmitting(false);
         return;
       }
-
-      const selectedStaff = staffList.find(s => String(s.id) === selectedStaffId);
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+      const primaryApprover = cashRecipients[0];
       const { data: cashReq, error: cashErr } = await supabase.from("cash_payment_requests").insert({
-        organization_id: 1, student_id: student.id, staff_user_id: Number(selectedStaffId),
+        organization_id: 1, student_id: student.id, staff_user_id: primaryApprover.id,
         amount: breakdown.subtotal, gst: breakdown.gst, final_amount: breakdown.total,
         enrollment_data: { enrollments: enrollmentRecords, enrollment_cycles_template: cyclesTemplate, payment_allocations: allocations } as unknown as Json,
         batch_ids: selectedBatchIds.map(Number) as unknown as Json,
+        expires_at: expiresAt,
+        recipient_user_ids: cashRecipients.map((r) => r.id) as unknown as Json,
       }).select().single();
       if (cashErr) throw cashErr;
 
       const confirmUrl = `${window.location.origin}/confirm-cash?token=${cashReq.token}`;
       await supabase.functions.invoke("send-cash-confirmation", {
         body: {
-          staff_email: selectedStaff?.email, staff_name: selectedStaff?.name || "Staff",
+          recipients: cashRecipients.map((r) => ({ email: r.email, name: r.name })),
           student_name: student.name, amount: breakdown.total.toLocaleString("en-IN"), confirmation_url: confirmUrl,
+          expires_in_minutes: 10,
         },
       });
 
-      toast.success("Cash payment request sent to staff for confirmation!");
+      toast.success("Cash payment request sent to the batch team for 10-minute confirmation!");
       showReceipt("Cash", `CASH-${cashReq.id}`);
       setStep("waiting");
     } catch {
@@ -490,17 +514,11 @@ export default function JoinBatchFlow() {
             </div>
 
             {paymentMode === "cash" && (
-              <div>
-                <Label>Confirm with Staff</Label>
-                <Select value={selectedStaffId} onValueChange={setSelectedStaffId}>
-                  <SelectTrigger><SelectValue placeholder="Select staff member" /></SelectTrigger>
-                  <SelectContent>
-                    {staffList.map(s => (
-                      <SelectItem key={s.id} value={String(s.id)}>{s.name}{s.email ? ` (${s.email})` : ""}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground mt-1">A confirmation email will be sent to this staff member.</p>
+              <div className="rounded-lg border border-warning/30 bg-warning/10 p-3">
+                <Label>Cash approval</Label>
+                <p className="text-xs text-muted-foreground mt-1">
+                  A confirmation email will be sent to the batch manager and instructor. They must confirm within 10 minutes after receiving cash.
+                </p>
               </div>
             )}
 
@@ -523,7 +541,7 @@ export default function JoinBatchFlow() {
             </div>
             <h3 className="font-display font-semibold text-foreground">Waiting for Staff Confirmation</h3>
             <p className="text-sm text-muted-foreground">
-              A confirmation email has been sent to the selected staff member. Once they confirm the cash payment, your enrollment will be completed.
+              A confirmation email has been sent to the batch manager and instructor. Once one of them confirms within 10 minutes, your enrollment will be completed.
             </p>
             <Button variant="outline" onClick={resetFlow}>Start New Registration</Button>
           </CardContent>

@@ -42,8 +42,36 @@ const ConfirmCashPage = () => {
         return;
       }
 
+      if (data.status === "expired") {
+        setError("This confirmation link has expired.");
+        setLoading(false);
+        return;
+      }
+
       if (data.status === "cancelled") {
         setError("This request has been cancelled.");
+        setLoading(false);
+        return;
+      }
+
+      if (data.status === "rejected") {
+        setError("This request has been rejected.");
+        setLoading(false);
+        return;
+      }
+
+      if (data.status === "processing") {
+        setError("This request is already being processed.");
+        setLoading(false);
+        return;
+      }
+
+      if (data.expires_at && new Date(data.expires_at).getTime() <= Date.now()) {
+        await supabase.from("cash_payment_requests")
+          .update({ status: "expired" })
+          .eq("id", data.id)
+          .eq("status", "pending");
+        setError("This confirmation link has expired.");
         setLoading(false);
         return;
       }
@@ -70,6 +98,28 @@ const ConfirmCashPage = () => {
     if (!request) return;
     setConfirming(true);
     try {
+      if (request.expires_at && new Date(request.expires_at).getTime() <= Date.now()) {
+        await supabase.from("cash_payment_requests")
+          .update({ status: "expired" })
+          .eq("id", request.id)
+          .eq("status", "pending");
+        setError("This confirmation link has expired.");
+        return;
+      }
+
+      const { data: claimed, error: claimErr } = await supabase
+        .from("cash_payment_requests")
+        .update({ status: "processing", confirmed_at: new Date().toISOString() })
+        .eq("id", request.id)
+        .eq("status", "pending")
+        .gt("expires_at", new Date().toISOString())
+        .select()
+        .single();
+      if (claimErr || !claimed) {
+        setError("This request has already been handled or has expired.");
+        return;
+      }
+
       const enrollmentData = request.enrollment_data as any;
 
       // Create payment
@@ -122,12 +172,16 @@ const ConfirmCashPage = () => {
 
       // Mark cash request as confirmed
       await supabase.from("cash_payment_requests")
-        .update({ status: "confirmed", confirmed_at: new Date().toISOString() })
+        .update({ status: "confirmed" })
         .eq("id", request.id);
 
       setConfirmed(true);
       toast.success("Payment confirmed successfully!");
     } catch (e: any) {
+      await supabase.from("cash_payment_requests")
+        .update({ status: "pending", confirmed_at: null })
+        .eq("id", request.id)
+        .eq("status", "processing");
       toast.error("Failed to confirm: " + e.message);
     } finally {
       setConfirming(false);
@@ -201,6 +255,12 @@ const ConfirmCashPage = () => {
                   <span>Total Amount</span>
                   <span className="text-primary">₹{Number(request.final_amount).toLocaleString("en-IN")}</span>
                 </div>
+                {request.expires_at && (
+                  <div className="flex justify-between text-xs border-t border-border pt-2 mt-2">
+                    <span className="text-muted-foreground">Accept by</span>
+                    <span className="text-warning">{new Date(request.expires_at).toLocaleString("en-IN")}</span>
+                  </div>
+                )}
               </div>
 
               <Button

@@ -19,11 +19,22 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { staff_email, staff_name, student_name, amount, confirmation_url } = await req.json();
+    const { staff_email, staff_name, recipients, student_name, amount, confirmation_url, expires_in_minutes } = await req.json();
+    const recipientList = Array.isArray(recipients)
+      ? recipients
+          .map((r: any) => ({
+            email: String(r?.email || "").trim(),
+            name: String(r?.name || "").trim(),
+          }))
+          .filter((r: any) => r.email)
+      : [];
+    if (staff_email && !recipientList.some((r: any) => r.email === staff_email)) {
+      recipientList.push({ email: staff_email, name: staff_name || "Staff" });
+    }
 
-    if (!staff_email || !confirmation_url) {
+    if (recipientList.length === 0 || !confirmation_url) {
       return new Response(
-        JSON.stringify({ error: "staff_email and confirmation_url required" }),
+        JSON.stringify({ error: "at least one recipient and confirmation_url required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -49,7 +60,7 @@ Deno.serve(async (req) => {
     <p style="color:#888;font-size:13px;margin:4px 0">Cash Payment Confirmation</p>
   </div>
   <hr style="border:none;border-top:1px solid #eee;margin:16px 0">
-  <p style="font-size:14px;color:#333">Hi ${staff_name || "Staff"},</p>
+  <p style="font-size:14px;color:#333">Hi team,</p>
   <p style="font-size:14px;color:#333">A student has requested a cash payment confirmation:</p>
   <table style="width:100%;font-size:14px;color:#333;margin:16px 0">
     <tr><td style="padding:8px 0;color:#888">Student</td><td style="padding:8px 0;text-align:right;font-weight:600">${student_name || "—"}</td></tr>
@@ -58,7 +69,7 @@ Deno.serve(async (req) => {
   <div style="text-align:center;margin:24px 0">
     <a href="${confirmation_url}" style="display:inline-block;background:#7c3aed;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:16px">Confirm Payment</a>
   </div>
-  <p style="font-size:12px;color:#aaa;text-align:center">Click the button above to review and confirm the cash payment.</p>
+  <p style="font-size:12px;color:#aaa;text-align:center">Click the button above to review and confirm the cash payment. This link expires in ${expires_in_minutes || 10} minutes.</p>
 </div>
 </body></html>`;
 
@@ -67,7 +78,7 @@ Deno.serve(async (req) => {
       headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         from: "Hashtag <receipts@hashtagdance.in>",
-        to: [staff_email],
+        to: recipientList.map((r: any) => r.email),
         subject: `Cash Payment Confirmation - ${student_name} - ₹${amount}`,
         html: htmlContent,
       }),
@@ -80,9 +91,9 @@ Deno.serve(async (req) => {
     await supabase.from("notification_log").insert({
       organization_id: orgId,
       channel: "email",
-      recipient: staff_email,
+      recipient: recipientList.map((r: any) => r.email).join(","),
       template_name: "cash-confirmation",
-      payload: { staff_name, student_name, amount, confirmation_url },
+      payload: { recipients: recipientList, student_name, amount, confirmation_url, expires_in_minutes: expires_in_minutes || 10 },
       status: success ? "sent" : "failed",
       error_message: success ? null : resBody,
     });

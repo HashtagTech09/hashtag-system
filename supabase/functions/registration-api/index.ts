@@ -259,6 +259,41 @@ function computePaymentAllocations(sortedBatches: { id: number; studio_id: numbe
   return allocateCollectedAmount(baseAllocations, collectedAmount);
 }
 
+async function getCashApprovalRecipients(supabase: any, orgId: number, batchIds: number[]) {
+  const { data: batchRows } = await supabase
+    .from("batches")
+    .select("id, instructor_id, instructor_2_id, studios(dreamcatcher_id, wingperson_id)")
+    .in("id", batchIds);
+
+  const recipientIds = new Set<number>();
+  (batchRows || []).forEach((batch: any) => {
+    [batch.instructor_id, batch.instructor_2_id, batch.studios?.dreamcatcher_id, batch.studios?.wingperson_id]
+      .filter(Boolean)
+      .forEach((id: number) => recipientIds.add(id));
+  });
+
+  if (recipientIds.size === 0) {
+    const { data: managerRoles } = await supabase
+      .from("user_roles")
+      .select("user_id, roles!inner(name)")
+      .eq("organization_id", orgId)
+      .eq("roles.name", "manager");
+    (managerRoles || []).forEach((row: any) => recipientIds.add(row.user_id));
+  }
+
+  if (recipientIds.size === 0) return [];
+  const { data: users } = await supabase
+    .from("users")
+    .select("id, name, email")
+    .in("id", Array.from(recipientIds));
+
+  const byEmail = new Map<string, any>();
+  (users || []).forEach((user: any) => {
+    if (user.email) byEmail.set(String(user.email).toLowerCase(), user);
+  });
+  return Array.from(byEmail.values());
+}
+
 // ── Main handler ─────────────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -405,7 +440,7 @@ Deno.serve(async (req) => {
 
     // ── ENROLL (cash flow) ───────────────────────────────────────
     if (action === "enroll") {
-      const { student_id, batch_ids, plan_id, payment_mode, staff_id } = payload || {};
+      const { student_id, batch_ids, plan_id, payment_mode } = payload || {};
       if (!student_id || !batch_ids?.length || !plan_id) return json({ error: "student_id, batch_ids, plan_id required" }, 400);
 
       const [cycleRes, planRes, batchRes] = await Promise.all([
@@ -459,26 +494,30 @@ Deno.serve(async (req) => {
       }
 
       // Cash flow
-      if (!staff_id) return json({ error: "staff_id required for cash payments" }, 400);
       const { data: student } = await supabase.from("students").select("name, phone").eq("id", student_id).single();
-      const { data: staff } = await supabase.from("users").select("name, email").eq("id", staff_id).single();
+      const cashRecipients = await getCashApprovalRecipients(supabase, orgId, batch_ids);
+      if (cashRecipients.length === 0) return json({ error: "No manager or instructor email assigned to this batch" }, 400);
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+      const primaryApprover = cashRecipients[0];
 
       const { data: cashReq, error: cashErr } = await supabase.from("cash_payment_requests").insert({
-        organization_id: orgId, student_id, staff_user_id: staff_id,
+        organization_id: orgId, student_id, staff_user_id: primaryApprover.id,
         amount: breakdown.subtotal, gst: breakdown.gst, final_amount: breakdown.total,
         enrollment_data: { enrollments: enrollmentRecords, payment_allocations: allocations },
         batch_ids,
+        expires_at: expiresAt,
+        recipient_user_ids: cashRecipients.map((r: any) => r.id),
       }).select().single();
       if (cashErr) return json({ error: cashErr.message }, 500);
 
-      // Send confirmation email to staff
+      // Send confirmation email to batch managers and instructors.
       const appBaseUrl = Deno.env.get("APP_BASE_URL") || Deno.env.get("SITE_URL") || "https://hashtag-system.vercel.app";
       const confirmUrl = `${appBaseUrl.replace(/\/$/, "")}/confirm-cash?token=${cashReq.token}`;
       await supabase.functions.invoke("send-cash-confirmation", {
         body: {
-          staff_email: staff?.email, staff_name: staff?.name || "Staff",
+          recipients: cashRecipients.map((r: any) => ({ email: r.email, name: r.name })),
           student_name: student?.name || "Student", amount: breakdown.total.toLocaleString("en-IN"),
-          confirmation_url: confirmUrl,
+          confirmation_url: confirmUrl, expires_in_minutes: 10,
         },
       });
 

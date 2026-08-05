@@ -323,10 +323,12 @@ export type Database = {
           confirmed_at: string | null
           created_at: string
           enrollment_data: Json
+          expires_at: string | null
           final_amount: number
           gst: number
           id: number
           organization_id: number
+          recipient_user_ids: Json
           staff_user_id: number
           status: string
           student_id: number
@@ -338,10 +340,12 @@ export type Database = {
           confirmed_at?: string | null
           created_at?: string
           enrollment_data: Json
+          expires_at?: string | null
           final_amount: number
           gst?: number
           id?: number
           organization_id?: number
+          recipient_user_ids?: Json
           staff_user_id: number
           status?: string
           student_id: number
@@ -353,10 +357,12 @@ export type Database = {
           confirmed_at?: string | null
           created_at?: string
           enrollment_data?: Json
+          expires_at?: string | null
           final_amount?: number
           gst?: number
           id?: number
           organization_id?: number
+          recipient_user_ids?: Json
           staff_user_id?: number
           status?: string
           student_id?: number
