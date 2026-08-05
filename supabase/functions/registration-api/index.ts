@@ -169,11 +169,19 @@ function computeFeeBreakdown(params: {
   const planKey = getPlanKey(regularCycles, gridCycles);
   const fixedTotal = PLAN_FIXED_TOTALS[planKey];
   const isFixedPricePlan = fixedTotal !== undefined;
+  const isLongTermPlan = regularCycles + gridCycles >= 6;
   const today = todayIST();
   const isLateRenewal = detectedStatus === "REN" && latestEndDate ? today > latestEndDate : false;
+  const waiveRenewalFeeForLongTermPlan = detectedStatus === "REN" && isLongTermPlan;
   let applyRegFee = detectedStatus === "NEW" || detectedStatus === "REV" || isLateRenewal;
+  if (waiveRenewalFeeForLongTermPlan) applyRegFee = false;
   const regFee = applyRegFee ? regFeeVal : 0;
-  const registrationFeeDiscounted = detectedStatus === "REN" && !!latestEndDate && today <= latestEndDate;
+  const registrationFeeDiscounted = detectedStatus === "REN" && (!!latestEndDate && today <= latestEndDate || waiveRenewalFeeForLongTermPlan);
+  const registrationFeeDiscountLabel = registrationFeeDiscounted
+    ? waiveRenewalFeeForLongTermPlan
+      ? "Registration fee discounted for 6-month/yearly renewal"
+      : "Registration fee discounted during renewal period"
+    : null;
   let perBatchFee: number;
   if (isFixedPricePlan) { perBatchFee = Math.round(fixedTotal / (1 + gstRate)); }
   else { perBatchFee = (regularCycles * REGULAR_PRICE) + (gridCycles * GRID_PRICE); }
@@ -206,6 +214,7 @@ function computeFeeBreakdown(params: {
     applyRegFee,
     registrationFeeDiscounted,
     registrationFeeDiscountedAmount: registrationFeeDiscounted ? regFeeVal : 0,
+    registrationFeeDiscountLabel,
     isLateRenewal,
     isFixedPricePlan,
     planKey,

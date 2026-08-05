@@ -1149,7 +1149,7 @@ const EnrollmentsPage = () => {
                   <div className="flex justify-between"><span className="text-muted-foreground">GST (18%)</span><span>₹{feeBreakdown.gst.toLocaleString()}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Class fee after rounding</span><span>₹{feeBreakdown.roundedBatchTotal.toLocaleString()}</span></div>
                   {feeBreakdown.regFee > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Registration fee ({detectedStatus}{feeBreakdown.isLateRenewal ? " - Late" : ""}) incl. GST</span><span>₹{feeBreakdown.regFee.toLocaleString()}</span></div>}
-                  {feeBreakdown.registrationFeeDiscounted && <div className="flex justify-between text-success"><span>Registration fee discounted during renewal period</span><span>-₹{feeBreakdown.registrationFeeDiscountedAmount.toLocaleString()}</span></div>}
+                  {feeBreakdown.registrationFeeDiscounted && <div className="flex justify-between text-success"><span>{feeBreakdown.registrationFeeDiscountLabel || "Registration fee discounted"}</span><span>-₹{feeBreakdown.registrationFeeDiscountedAmount.toLocaleString()}</span></div>}
                   {feeBreakdown.dropInAdj > 0 && <div className="flex justify-between text-success"><span>Drop-in adjustment</span><span>-₹{feeBreakdown.dropInAdj.toLocaleString()}</span></div>}
                   <div className="flex justify-between font-semibold border-t border-border pt-1 mt-1"><span>Total</span><span>₹{feeBreakdown.total.toLocaleString()}</span></div>
                 </div>

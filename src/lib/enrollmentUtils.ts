@@ -194,6 +194,7 @@ export interface FeeBreakdown {
   applyRegFee: boolean;
   registrationFeeDiscounted: boolean;
   registrationFeeDiscountedAmount: number;
+  registrationFeeDiscountLabel: string | null;
   isLateRenewal: boolean;
   isFixedPricePlan: boolean;
   planKey: string;
@@ -221,12 +222,20 @@ export function computeFeeBreakdown(params: {
   const planKey = getPlanKey(regularCycles, gridCycles);
   const fixedTotal = PLAN_FIXED_TOTALS[planKey];
   const isFixedPricePlan = fixedTotal !== undefined;
+  const isLongTermPlan = regularCycles + gridCycles >= 6;
 
   const todayStr = today || todayIST();
   const isLateRenewal = detectedStatus === "REN" && latestEndDate ? todayStr > latestEndDate : false;
+  const waiveRenewalFeeForLongTermPlan = detectedStatus === "REN" && isLongTermPlan;
   let applyRegFee = detectedStatus === "NEW" || detectedStatus === "REV" || isLateRenewal;
+  if (waiveRenewalFeeForLongTermPlan) applyRegFee = false;
   const regFee = applyRegFee ? effRegFee : 0;
-  const registrationFeeDiscounted = detectedStatus === "REN" && !!latestEndDate && todayStr <= latestEndDate;
+  const registrationFeeDiscounted = detectedStatus === "REN" && (!!latestEndDate && todayStr <= latestEndDate || waiveRenewalFeeForLongTermPlan);
+  const registrationFeeDiscountLabel = registrationFeeDiscounted
+    ? waiveRenewalFeeForLongTermPlan
+      ? "Registration fee discounted for 6-month/yearly renewal"
+      : "Registration fee discounted during renewal period"
+    : null;
 
   let perBatchFee: number;
   let discountAmount: number;
@@ -282,6 +291,7 @@ export function computeFeeBreakdown(params: {
     applyRegFee,
     registrationFeeDiscounted,
     registrationFeeDiscountedAmount: registrationFeeDiscounted ? effRegFee : 0,
+    registrationFeeDiscountLabel,
     isLateRenewal,
     isFixedPricePlan,
     planKey,
@@ -343,6 +353,7 @@ export interface AddBatchBreakdown {
   applyRegFee: boolean;
   registrationFeeDiscounted: boolean;
   registrationFeeDiscountedAmount: number;
+  registrationFeeDiscountLabel: string | null;
   isLateRenewal: boolean;
   isFixedPricePlan: boolean;
   planKey: string;
@@ -460,6 +471,7 @@ export function computeAddBatchBreakdown(params: {
     applyRegFee: false,
     registrationFeeDiscounted: false,
     registrationFeeDiscountedAmount: 0,
+    registrationFeeDiscountLabel: null,
     isLateRenewal: false,
     isFixedPricePlan,
     planKey,

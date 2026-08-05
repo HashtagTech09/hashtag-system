@@ -151,6 +151,46 @@ describe("registration fee and rounding", () => {
     expect(breakdown.total).toBe(4390);
   });
 
+  it("waives registration fee for late 6-month renewals", () => {
+    const breakdown = computeFeeBreakdown({
+      batchCount: 1,
+      regularCycles: 5,
+      gridCycles: 1,
+      detectedStatus: "REN",
+      latestEndDate: "2026-09-30",
+      dropInAmount: 0,
+      today: "2026-10-05",
+      regFee: 590,
+    });
+
+    expect(breakdown.regFee).toBe(0);
+    expect(breakdown.applyRegFee).toBe(false);
+    expect(breakdown.isLateRenewal).toBe(true);
+    expect(breakdown.registrationFeeDiscounted).toBe(true);
+    expect(breakdown.registrationFeeDiscountLabel).toBe("Registration fee discounted for 6-month/yearly renewal");
+    expect(breakdown.roundedBatchTotal).toBe(26500);
+    expect(breakdown.total).toBe(26500);
+  });
+
+  it("waives registration fee for late yearly renewals", () => {
+    const breakdown = computeFeeBreakdown({
+      batchCount: 1,
+      regularCycles: 10,
+      gridCycles: 2,
+      detectedStatus: "REN",
+      latestEndDate: "2026-09-30",
+      dropInAmount: 0,
+      today: "2026-10-05",
+      regFee: 590,
+    });
+
+    expect(breakdown.regFee).toBe(0);
+    expect(breakdown.applyRegFee).toBe(false);
+    expect(breakdown.registrationFeeDiscounted).toBe(true);
+    expect(breakdown.roundedBatchTotal).toBe(50000);
+    expect(breakdown.total).toBe(50000);
+  });
+
   it("rounds class totals to the nearest 100 before adding registration fee", () => {
     expect(roundToNearest100(11328)).toBe(11300);
     expect(roundToNearest100(11351)).toBe(11400);

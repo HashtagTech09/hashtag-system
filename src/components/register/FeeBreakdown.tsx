@@ -68,7 +68,7 @@ export default function FeeBreakdownDisplay({ breakdown, regularCycles, gridCycl
       )}
       {breakdown.registrationFeeDiscounted && (
         <div className="flex justify-between text-success">
-          <span>Registration fee discounted during renewal period</span>
+          <span>{breakdown.registrationFeeDiscountLabel || "Registration fee discounted"}</span>
           <span>-₹{breakdown.registrationFeeDiscountedAmount.toLocaleString()}</span>
         </div>
       )}
