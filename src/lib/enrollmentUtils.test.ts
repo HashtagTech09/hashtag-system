@@ -131,6 +131,26 @@ describe("registration fee and rounding", () => {
     expect(breakdown.total).toBe(3800);
   });
 
+  it("waives registration fee for an August renewal simulated on July 28 while the current cycle is still active", () => {
+    const status = detectStudentStatus([{ end_date: "2026-08-02" }], cycles, "2026-07-28");
+    const breakdown = computeFeeBreakdown({
+      batchCount: 1,
+      regularCycles: 1,
+      gridCycles: 0,
+      detectedStatus: status.status,
+      latestEndDate: status.latestEndDate,
+      dropInAmount: 0,
+      today: "2026-07-28",
+      regFee: 590,
+    });
+
+    expect(status).toEqual({ status: "REN", latestEndDate: "2026-08-02" });
+    expect(breakdown.regFee).toBe(0);
+    expect(breakdown.applyRegFee).toBe(false);
+    expect(breakdown.registrationFeeDiscounted).toBe(true);
+    expect(breakdown.registrationFeeDiscountLabel).toBe("Registration fee discounted during renewal period");
+  });
+
   it("charges registration fee for late renewals inside grace days", () => {
     const breakdown = computeFeeBreakdown({
       batchCount: 1,

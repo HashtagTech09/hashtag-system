@@ -13,6 +13,7 @@ import FeeBreakdownDisplay from "./FeeBreakdown";
 import { initiateRazorpayPayment } from "@/lib/razorpayUtils";
 import { sortBatchesByHierarchy, computePaymentAllocations, allocateCollectedAmount } from "@/lib/styleHierarchy";
 import { MapPin, ChevronRight, ShoppingCart, X, Check, ArrowLeft, Trash2 } from "lucide-react";
+import { useSimulatedToday } from "@/contexts/TestDateContext";
 
 /** Format "2026-07-31" → "31 Jul'26" */
 function formatDate(dateStr: string): string {
@@ -56,6 +57,7 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
   const [paymentMode, setPaymentMode] = useState("razorpay");
   const [submitting, setSubmitting] = useState(false);
   const [renewAddExpanded, setRenewAddExpanded] = useState(false);
+  const simulatedToday = useSimulatedToday();
 
   useEffect(() => {
     fetchData();
@@ -145,17 +147,18 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
     return () => window.removeEventListener("beforeunload", handler);
   }, [selectedBatchIds, mode, student.id]);
 
-  const todayStr = new Date().toISOString().split("T")[0];
+  const todayStr = simulatedToday;
   const activeEnrollments = enrollments.filter(e => e.end_date >= todayStr);
   const expiredEnrollments = enrollments.filter(e => e.end_date < todayStr);
 
   const { status: detectedStatus, latestEndDate } = detectStudentStatus(
     enrollments.map(e => ({ end_date: e.end_date })),
-    planCycles
+    planCycles,
+    simulatedToday
   );
-  const baseStartCycleIdx = planCycles.length > 0 ? getStartCycleIndex(planCycles) : 0;
+  const baseStartCycleIdx = planCycles.length > 0 ? getStartCycleIndex(planCycles, simulatedToday) : 0;
   const renewalStartCycleIdx = planCycles.length > 0 && detectedStatus === "REN"
-    ? getRenewalStartCycleIndex(planCycles, latestEndDate)
+    ? getRenewalStartCycleIndex(planCycles, latestEndDate, simulatedToday)
     : baseStartCycleIdx;
   const startCycleIdx = mode === "renew" ? renewalStartCycleIdx : baseStartCycleIdx;
   const validPlans = subPlans.filter(p => isPlanValid(p, planCycles, startCycleIdx));
@@ -190,6 +193,7 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
     latestEndDate,
     dropInAmount: 0,
     sortedBatches: sortedSelectedBatches.map(b => ({ id: b.id, name: b.name, style_base: b.style_base })),
+    today: simulatedToday,
   }) : null;
 
   // Auto-select first valid plan
@@ -313,6 +317,7 @@ export default function StudentDashboard({ student, user, onDone }: StudentDashb
             student_phone: user?.phone || student.phone || "",
             batch_names: batchNames,
             plan_name: planName,
+            date: simulatedToday,
           },
           onSuccess: onRenewSuccess,
           onFailure: (err) => toast.error(err),
