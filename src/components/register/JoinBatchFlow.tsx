@@ -58,6 +58,7 @@ export default function JoinBatchFlow() {
   const [latestEndDate, setLatestEndDate] = useState<string | null>(null);
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
+  const [testConfirmationUrl, setTestConfirmationUrl] = useState<string | null>(null);
   const simulatedToday = useSimulatedToday();
 
   useEffect(() => {
@@ -299,13 +300,15 @@ export default function JoinBatchFlow() {
       if (cashErr) throw cashErr;
 
       const confirmUrl = `${window.location.origin}/confirm-cash?token=${cashReq.token}`;
-      await supabase.functions.invoke("send-cash-confirmation", {
+      const { data: emailData, error: emailErr } = await supabase.functions.invoke("send-cash-confirmation", {
         body: {
           recipients: cashRecipients.map((r) => ({ email: r.email, name: r.name })),
           student_name: student.name, amount: breakdown.total.toLocaleString("en-IN"), confirmation_url: confirmUrl,
           expires_in_minutes: 10,
         },
       });
+      if (emailErr) throw emailErr;
+      setTestConfirmationUrl(emailData?.test_mode ? confirmUrl : null);
 
       toast.success("Cash payment request sent to the batch team for 10-minute confirmation!");
       showReceipt("Cash", `CASH-${cashReq.id}`);
@@ -331,6 +334,7 @@ export default function JoinBatchFlow() {
     setStudentName("");
     setAccountOwnerType("self");
     setSelectedPlanId("");
+    setTestConfirmationUrl(null);
   };
 
   const stepLabels = ["Studio", "Style", "Level", "Batch", "Verify", "Pay"];
@@ -543,6 +547,17 @@ export default function JoinBatchFlow() {
             <p className="text-sm text-muted-foreground">
               A confirmation email has been sent to the batch manager and instructor. Once one of them confirms within 10 minutes, your enrollment will be completed.
             </p>
+            {testConfirmationUrl && (
+              <div className="rounded-lg border border-warning/30 bg-warning/10 p-3 space-y-3 text-left">
+                <div>
+                  <Label>Test mode confirmation link</Label>
+                  <p className="text-xs text-muted-foreground mt-1 break-all">{testConfirmationUrl}</p>
+                </div>
+                <Button className="w-full gradient-primary" onClick={() => window.open(testConfirmationUrl, "_blank", "noopener,noreferrer")}>
+                  Open confirmation link
+                </Button>
+              </div>
+            )}
             <Button variant="outline" onClick={resetFlow}>Start New Registration</Button>
           </CardContent>
         </Card>

@@ -68,6 +68,7 @@ Deno.serve(async (req) => {
           success: isTestMode,
           test_mode: isTestMode,
           logged: true,
+          confirmation_url,
           error: isTestMode ? "" : "RESEND_API_KEY not configured",
         }),
         {

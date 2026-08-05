@@ -62,6 +62,7 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
   const [paymentMode, setPaymentMode] = useState("razorpay");
   const [submitting, setSubmitting] = useState(false);
   const [renewAddExpanded, setRenewAddExpanded] = useState(false);
+  const [testConfirmationUrl, setTestConfirmationUrl] = useState<string | null>(null);
   const contextToday = useSimulatedToday();
   const simulatedToday = simulatedTodayProp || contextToday;
 
@@ -258,7 +259,7 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
 
     const batchNames = params.batchIds.map(id => batches.find(b => b.id === id)?.name).filter(Boolean).join(", ");
     const confirmUrl = `${window.location.origin}/confirm-cash?token=${cashReq.token}`;
-    const { error: emailErr } = await supabase.functions.invoke("send-cash-confirmation", {
+    const { data: emailData, error: emailErr } = await supabase.functions.invoke("send-cash-confirmation", {
       body: {
         recipients: cashRecipients.map((r) => ({ email: r.email, name: r.name })),
         student_name: student.name,
@@ -270,7 +271,7 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
     });
     if (emailErr) throw emailErr;
 
-    return cashReq;
+    return { cashReq, confirmUrl, testMode: Boolean(emailData?.test_mode) };
   };
 
   const breakdown = selectedBatchIds.length > 0 && assignment ? computeFeeBreakdown({
@@ -417,7 +418,7 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
       // Cash flow
       const enrollmentRecords = buildEnrollmentRecords();
       const cyclesTemplate = buildCyclesTemplate();
-      await createCashApprovalRequest({
+      const cashApproval = await createCashApprovalRequest({
         batchIds: selectedBatchIds.map(Number),
         amount: breakdown.subtotal,
         gst: breakdown.gst,
@@ -428,6 +429,7 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
           payment_allocations: allocations,
         } as unknown as Json,
       });
+      setTestConfirmationUrl(cashApproval.testMode ? cashApproval.confirmUrl : null);
       await markCartConverted();
       toast.success("Cash approval request sent to the batch manager and instructor. Enrollment will happen after confirmation.");
       setMode("view");
@@ -577,7 +579,7 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
       }
 
       // Cash flow
-      await createCashApprovalRequest({
+      const cashApproval = await createCashApprovalRequest({
         batchIds: selectedBatchIds.map(Number),
         amount: addBatchBreakdown.subtotal,
         gst: addBatchBreakdown.gst,
@@ -589,6 +591,7 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
           payment_allocations: collectedAllocations,
         } as unknown as Json,
       });
+      setTestConfirmationUrl(cashApproval.testMode ? cashApproval.confirmUrl : null);
 
       await markCartConverted();
       toast.success("Cash approval request sent to the batch manager and instructor. Batch changes will happen after confirmation.");
@@ -608,6 +611,7 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
   const statusColors: Record<string, string> = { NEW: "bg-success/20 text-success", REN: "bg-primary/20 text-primary", REV: "bg-warning/20 text-warning" };
 
   const startRenewFlow = () => {
+    setTestConfirmationUrl(null);
     const defaultBatchIds = previousBatchIds.map(String);
     setMode("renew");
     setSubStep(defaultBatchIds.length > 0 ? "checkout" : "studio");
@@ -618,6 +622,7 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
   };
 
   const startAddFlow = () => {
+    setTestConfirmationUrl(null);
     setMode("add");
     setSubStep("studio");
     setSelectedBatchIds([]);
@@ -656,6 +661,20 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
       {/* VIEW MODE */}
       {mode === "view" && (
         <>
+          {testConfirmationUrl && (
+            <Card className="border-warning/30 bg-warning/10">
+              <CardContent className="p-4 space-y-3">
+                <div>
+                  <Label>Test mode confirmation link</Label>
+                  <p className="text-xs text-muted-foreground mt-1 break-all">{testConfirmationUrl}</p>
+                </div>
+                <Button className="w-full gradient-primary" onClick={() => window.open(testConfirmationUrl, "_blank", "noopener,noreferrer")}>
+                  Open confirmation link
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
           {activeEnrollments.length > 0 && (
             <div className="space-y-2">
               <h3 className="text-sm font-medium text-foreground">Active Enrollments</h3>
