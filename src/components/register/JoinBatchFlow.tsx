@@ -330,7 +330,6 @@ export default function JoinBatchFlow() {
     setStudentName("");
     setAccountOwnerType("self");
     setSelectedPlanId("");
-    setSelectedStaffId("");
   };
 
   const stepLabels = ["Studio", "Style", "Level", "Batch", "Verify", "Pay"];

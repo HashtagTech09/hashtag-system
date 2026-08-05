@@ -163,6 +163,33 @@ const ConfirmCashPage = () => {
         if (ecErr) throw ecErr;
       }
 
+      // Extend existing enrollments for Add Batch requests.
+      const existingExtensions = enrollmentData.existing_extensions || [];
+      for (const extension of existingExtensions) {
+        if (extension.missing_cycles?.length) {
+          const missingRows = extension.missing_cycles.map((cycle: any) => ({
+            enrollment_id: extension.enrollment_id,
+            student_id: request.student_id,
+            batch_id: extension.batch_id,
+            cycle_id: cycle.cycle_id,
+            cycle_type: cycle.cycle_type || "regular",
+          }));
+          const { error: missingErr } = await supabase.from("enrollment_cycles").insert(missingRows);
+          if (missingErr) throw missingErr;
+        }
+
+        const update: Record<string, unknown> = {};
+        if (extension.end_date) update.end_date = extension.end_date;
+        if (extension.end_cycle_id) update.end_cycle_id = extension.end_cycle_id;
+        if (Object.keys(update).length > 0) {
+          const { error: updateErr } = await supabase
+            .from("enrollments")
+            .update(update)
+            .eq("id", extension.enrollment_id);
+          if (updateErr) throw updateErr;
+        }
+      }
+
       // Create payment allocations
       if (enrollmentData.payment_allocations && enrollmentData.payment_allocations.length > 0) {
         await supabase.from("payment_allocations").insert(

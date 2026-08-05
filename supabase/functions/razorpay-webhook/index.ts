@@ -129,6 +129,29 @@ Deno.serve(async (req) => {
         }
       }
 
+      // Apply existing-enrollment extensions for Add Batch payments.
+      if (data.existing_extensions?.length) {
+        for (const extension of data.existing_extensions) {
+          if (extension.missing_cycles?.length) {
+            const missingRows = extension.missing_cycles.map((cycle: any) => ({
+              enrollment_id: extension.enrollment_id,
+              student_id: payment.student_id,
+              batch_id: extension.batch_id,
+              cycle_id: cycle.cycle_id,
+              cycle_type: cycle.cycle_type || "regular",
+            }));
+            await supabase.from("enrollment_cycles").insert(missingRows);
+          }
+
+          const update: Record<string, unknown> = {};
+          if (extension.end_date) update.end_date = extension.end_date;
+          if (extension.end_cycle_id) update.end_cycle_id = extension.end_cycle_id;
+          if (Object.keys(update).length > 0) {
+            await supabase.from("enrollments").update(update).eq("id", extension.enrollment_id);
+          }
+        }
+      }
+
       // Insert payment allocations
       if (data.payment_allocations?.length) {
         const allocs = data.payment_allocations.map((a: any) => ({

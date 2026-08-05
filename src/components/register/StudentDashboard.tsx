@@ -8,12 +8,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { isPlanValid, computeCycleAssignment, computeFeeBreakdown, detectStudentStatus, getRenewalStartCycleIndex, getStartCycleIndex, getBatchDiscount, getPlanKey, PLAN_FIXED_TOTALS, REGULAR_PRICE, GRID_PRICE, computeAddBatchBreakdown } from "@/lib/enrollmentUtils";
 import type { PlanCycle, SubPlan, AddBatchBreakdown } from "@/lib/enrollmentUtils";
-import { allocateCyclesForPlan, insertEnrollmentCycles } from "@/lib/cycleUtils";
+import { allocateCyclesForPlan } from "@/lib/cycleUtils";
 import FeeBreakdownDisplay from "./FeeBreakdown";
 import { initiateRazorpayPayment } from "@/lib/razorpayUtils";
 import { sortBatchesByHierarchy, computePaymentAllocations, allocateCollectedAmount } from "@/lib/styleHierarchy";
 import { MapPin, ChevronRight, ShoppingCart, X, Check, ArrowLeft, Trash2 } from "lucide-react";
 import { useSimulatedToday } from "@/contexts/TestDateContext";
+import type { Database, Json } from "@/integrations/supabase/types";
+
+type UserRow = Database["public"]["Tables"]["users"]["Row"];
+type CashRecipient = Pick<UserRow, "id" | "name" | "email">;
 
 /** Format "2026-07-31" → "31 Jul'26" */
 function formatDate(dateStr: string): string {
@@ -187,6 +191,88 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
   const selectedBatchObjects = selectedBatchIds.map(id => batches.find(b => b.id === Number(id))).filter(Boolean);
   const sortedSelectedBatches = sortBatchesByHierarchy(selectedBatchObjects);
 
+  const getCashApprovalRecipients = async (batchIds: number[]): Promise<CashRecipient[]> => {
+    if (batchIds.length === 0) return [];
+
+    const { data: batchRows } = await supabase
+      .from("batches")
+      .select("id, instructor_id, instructor_2_id, studios(dreamcatcher_id, wingperson_id)")
+      .in("id", batchIds);
+
+    const recipientIds = new Set<number>();
+    (batchRows || []).forEach((batch: any) => {
+      [batch.instructor_id, batch.instructor_2_id, batch.studios?.dreamcatcher_id, batch.studios?.wingperson_id]
+        .filter(Boolean)
+        .forEach((id: number) => recipientIds.add(id));
+    });
+
+    if (recipientIds.size === 0) {
+      const { data: managerRoles } = await supabase
+        .from("user_roles")
+        .select("user_id, roles!inner(name)")
+        .eq("organization_id", 1)
+        .eq("roles.name", "manager");
+      (managerRoles || []).forEach((row: any) => recipientIds.add(row.user_id));
+    }
+
+    if (recipientIds.size === 0) return [];
+    const { data: users } = await supabase
+      .from("users")
+      .select("id, name, email")
+      .in("id", Array.from(recipientIds));
+
+    const byEmail = new Map<string, CashRecipient>();
+    (users || []).forEach((recipient) => {
+      if (recipient.email) byEmail.set(recipient.email.toLowerCase(), recipient);
+    });
+    return Array.from(byEmail.values());
+  };
+
+  const createCashApprovalRequest = async (params: {
+    batchIds: number[];
+    amount: number;
+    gst: number;
+    total: number;
+    enrollmentData: Json;
+  }) => {
+    const cashRecipients = await getCashApprovalRecipients(params.batchIds);
+    if (cashRecipients.length === 0) {
+      throw new Error("No manager or instructor email is assigned to this batch.");
+    }
+
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+    const primaryApprover = cashRecipients[0];
+    const { data: cashReq, error: cashErr } = await supabase.from("cash_payment_requests").insert({
+      organization_id: 1,
+      student_id: student.id,
+      staff_user_id: primaryApprover.id,
+      amount: params.amount,
+      gst: params.gst,
+      final_amount: params.total,
+      enrollment_data: params.enrollmentData,
+      batch_ids: params.batchIds as unknown as Json,
+      expires_at: expiresAt,
+      recipient_user_ids: cashRecipients.map((r) => r.id) as unknown as Json,
+    }).select().single();
+    if (cashErr) throw cashErr;
+
+    const batchNames = params.batchIds.map(id => batches.find(b => b.id === id)?.name).filter(Boolean).join(", ");
+    const confirmUrl = `${window.location.origin}/confirm-cash?token=${cashReq.token}`;
+    const { error: emailErr } = await supabase.functions.invoke("send-cash-confirmation", {
+      body: {
+        recipients: cashRecipients.map((r) => ({ email: r.email, name: r.name })),
+        student_name: student.name,
+        amount: params.total.toLocaleString("en-IN"),
+        confirmation_url: confirmUrl,
+        expires_in_minutes: 10,
+        batch_names: batchNames,
+      },
+    });
+    if (emailErr) throw emailErr;
+
+    return cashReq;
+  };
+
   const breakdown = selectedBatchIds.length > 0 && assignment ? computeFeeBreakdown({
     batchCount: selectedBatchIds.length,
     regularCycles: assignment.regularCount,
@@ -329,36 +415,21 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
       }
 
       // Cash flow
-      const { data: payment, error: payError } = await supabase.from("payments").insert({
-        organization_id: 1, student_id: student.id, amount: breakdown.subtotal,
-        gst: breakdown.gst, final_amount: breakdown.total,
-        payment_mode: paymentMode, status: "success",
-      }).select().single();
-      if (payError) throw payError;
-
-      const records = buildEnrollmentRecords(payment.id);
-      const { data: insertedRecords, error } = await supabase.from("enrollments").insert(records).select();
-      if (error) throw error;
-
-      if (allocations.length > 0) {
-        await supabase.from("payment_allocations").insert(
-          allocations.map(a => ({ ...a, payment_id: payment.id }))
-        );
-      }
-
-      if (insertedRecords && assignment) {
-        const plan = subPlans.find(p => p.id === Number(selectedPlanId));
-        if (plan) {
-          const startIdx = planCycles.findIndex(c => c.id === assignment.startCycle.id);
-          const allocated = allocateCyclesForPlan(plan, planCycles, startIdx !== -1 ? startIdx : 0);
-          for (const enrollment of insertedRecords) {
-            await insertEnrollmentCycles(enrollment.id, enrollment.student_id, enrollment.batch_id, allocated);
-          }
-        }
-      }
-
+      const enrollmentRecords = buildEnrollmentRecords();
+      const cyclesTemplate = buildCyclesTemplate();
+      await createCashApprovalRequest({
+        batchIds: selectedBatchIds.map(Number),
+        amount: breakdown.subtotal,
+        gst: breakdown.gst,
+        total: breakdown.total,
+        enrollmentData: {
+          enrollments: enrollmentRecords,
+          enrollment_cycles_template: cyclesTemplate,
+          payment_allocations: allocations,
+        } as unknown as Json,
+      });
       await markCartConverted();
-      toast.success(`Enrolled successfully! Amount: ₹${breakdown.total.toLocaleString()}`);
+      toast.success("Cash approval request sent to the batch manager and instructor. Enrollment will happen after confirmation.");
       setMode("view");
       setSubStep("studio");
       setSelectedBatchIds([]);
@@ -430,103 +501,104 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
     if (!addPlan || selectedBatchIds.length === 0 || !addBatchBreakdown || !addAssignment) return;
     setSubmitting(true);
     try {
-      const { data: payment, error: payError } = await supabase.from("payments").insert({
-        organization_id: 1, student_id: student.id, amount: addBatchBreakdown.subtotal,
-        gst: addBatchBreakdown.gst, final_amount: addBatchBreakdown.total,
-        payment_mode: paymentMode, status: "success",
-      }).select().single();
-      if (payError) throw payError;
-
-      // Create enrollments for NEW batches
       const newAllocations = addBatchBreakdown.batchAllocations.filter(a => !a.is_existing);
-      if (newAllocations.length > 0) {
-        const records = newAllocations.map(a => ({
-          organization_id: 1, student_id: student.id, batch_id: a.batch_id,
-          payment_id: payment.id, status_type: "ADD",
-          registration_fee_applied: false, late_renewal: false,
-          start_date: addAssignment.startCycle.start_date,
-          end_date: addAssignment.endCycle.end_date || addAssignment.startCycle.start_date,
-          subscription_plan_id: Number(addSelectedPlanId),
-          start_cycle_id: addAssignment.startCycle.id, end_cycle_id: addAssignment.endCycle.id,
-          previous_batch_id: null,
-        }));
+      const startIdx = planCycles.findIndex(c => c.id === addAssignment.startCycle.id);
+      const allocatedCycles = allocateCyclesForPlan(addPlan, planCycles, startIdx !== -1 ? startIdx : 0);
+      const newEnrollmentRecords = newAllocations.map(a => ({
+        organization_id: 1, student_id: student.id, batch_id: a.batch_id,
+        status_type: "ADD",
+        registration_fee_applied: false, late_renewal: false,
+        start_date: addAssignment.startCycle.start_date,
+        end_date: addAssignment.endCycle.end_date || addAssignment.startCycle.start_date,
+        subscription_plan_id: Number(addSelectedPlanId),
+        start_cycle_id: addAssignment.startCycle.id, end_cycle_id: addAssignment.endCycle.id,
+        previous_batch_id: null,
+      }));
 
-        const { data: insertedRecords, error } = await supabase.from("enrollments").insert(records).select();
-        if (error) throw error;
-
-        // Insert enrollment_cycles for new batches
-        if (insertedRecords) {
-          const startIdx = planCycles.findIndex(c => c.id === addAssignment.startCycle.id);
-          const allocated = allocateCyclesForPlan(addPlan, planCycles, startIdx !== -1 ? startIdx : 0);
-          for (const enrollment of insertedRecords) {
-            await insertEnrollmentCycles(enrollment.id, enrollment.student_id, enrollment.batch_id, allocated);
-          }
-        }
-      }
-
-      // Extend existing enrollments with missing cycles
-      const existingAllocations = addBatchBreakdown.batchAllocations.filter(a => a.is_existing && a.missingCycleIds.length > 0);
-      for (const alloc of existingAllocations) {
-        // Find the enrollment for this batch
-        const enrollment = activeEnrollments.find(e => e.batch_id === alloc.batch_id);
-        if (!enrollment) continue;
-
-        // Insert missing enrollment_cycles
-        const missingRows = alloc.missingCycleIds.map(cid => {
-          const cycle = planCycles.find(c => c.id === cid);
+      const existingExtensions = addBatchBreakdown.batchAllocations
+        .filter(a => a.is_existing && a.missingCycleIds.length > 0)
+        .map((alloc) => {
+          const enrollment = activeEnrollments.find(e => e.batch_id === alloc.batch_id);
+          if (!enrollment) return null;
+          const newEndDate = addAssignment.endCycle.end_date || addAssignment.startCycle.start_date;
           return {
             enrollment_id: enrollment.id,
-            student_id: student.id,
             batch_id: alloc.batch_id,
-            cycle_id: cid,
-            cycle_type: cycle?.plan_type || "regular",
+            end_date: newEndDate > enrollment.end_date ? newEndDate : enrollment.end_date,
+            end_cycle_id: newEndDate > enrollment.end_date ? addAssignment.endCycle.id : enrollment.end_cycle_id,
+            missing_cycles: alloc.missingCycleIds.map(cid => {
+              const cycle = planCycles.find(c => c.id === cid);
+              return { cycle_id: cid, cycle_type: cycle?.plan_type || "regular" };
+            }),
           };
-        });
-        await supabase.from("enrollment_cycles").insert(missingRows);
+        })
+        .filter(Boolean);
 
-        // Update enrollment end_date/end_cycle_id if extended
-        const newEndDate = addAssignment.endCycle.end_date || addAssignment.startCycle.start_date;
-        if (newEndDate > enrollment.end_date) {
-          await supabase.from("enrollments").update({
-            end_date: newEndDate,
-            end_cycle_id: addAssignment.endCycle.id,
-          }).eq("id", enrollment.id);
-        }
-      }
-
-      // Payment allocations for all charged batches
       const chargedAllocations = addBatchBreakdown.batchAllocations.filter(a => a.amount > 0);
-      if (chargedAllocations.length > 0) {
-        const batchStudioMap = batches.reduce((m: Record<number, number | null>, b: any) => { m[b.id] = b.studio_id; return m; }, {});
-        const collectedAllocations = allocateCollectedAmount(
-          chargedAllocations.map((a, idx) => ({
-            batch_id: a.batch_id,
-            studio_id: batchStudioMap[a.batch_id] || null,
-            allocated_amount: a.amount,
-            is_primary: idx === 0,
-          })),
-          addBatchBreakdown.total,
-        );
-        await supabase.from("payment_allocations").insert(
-          collectedAllocations.map((a) => ({
-            payment_id: payment.id,
-            batch_id: a.batch_id,
-            studio_id: a.studio_id,
-            allocated_amount: a.allocated_amount,
-            is_primary: a.is_primary,
-          }))
-        );
+      const batchStudioMap = batches.reduce((m: Record<number, number | null>, b: any) => { m[b.id] = b.studio_id; return m; }, {});
+      const collectedAllocations = allocateCollectedAmount(
+        chargedAllocations.map((a, idx) => ({
+          batch_id: a.batch_id,
+          studio_id: batchStudioMap[a.batch_id] || null,
+          allocated_amount: a.amount,
+          is_primary: idx === 0,
+        })),
+        addBatchBreakdown.total,
+      );
+
+      if (paymentMode === "razorpay") {
+        const batchNames = selectedBatchIds.map(id => batches.find(b => b.id === Number(id))?.name).filter(Boolean).join(", ");
+        await initiateRazorpayPayment({
+          orderParams: {
+            student_id: student.id,
+            organization_id: 1,
+            batch_ids: selectedBatchIds.map(Number),
+            amount: addBatchBreakdown.subtotal,
+            gst: addBatchBreakdown.gst,
+            final_amount: addBatchBreakdown.total,
+            enrollment_data: {
+              enrollments: newEnrollmentRecords,
+              enrollment_cycles_template: allocatedCycles,
+              existing_extensions: existingExtensions,
+              payment_allocations: collectedAllocations,
+            },
+            student_name: student.name,
+            student_phone: user?.phone || student.phone || "",
+            batch_names: batchNames,
+            plan_name: addPlan.name,
+            date: simulatedToday,
+          },
+          onSuccess: onRenewSuccess,
+          onFailure: (err) => toast.error(err),
+        });
+        setSubmitting(false);
+        return;
       }
+
+      // Cash flow
+      await createCashApprovalRequest({
+        batchIds: selectedBatchIds.map(Number),
+        amount: addBatchBreakdown.subtotal,
+        gst: addBatchBreakdown.gst,
+        total: addBatchBreakdown.total,
+        enrollmentData: {
+          enrollments: newEnrollmentRecords,
+          enrollment_cycles_template: allocatedCycles,
+          existing_extensions: existingExtensions,
+          payment_allocations: collectedAllocations,
+        } as unknown as Json,
+      });
 
       await markCartConverted();
-      toast.success(`Added batch(es)! Amount: ₹${addBatchBreakdown.total.toLocaleString()}`);
+      toast.success("Cash approval request sent to the batch manager and instructor. Batch changes will happen after confirmation.");
       setMode("view");
       setSubStep("studio");
       setSelectedBatchIds([]);
       setAddSelectedPlanId("");
       fetchData();
-    } catch {
-      toast.error("Failed to add batches. Please try again.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Please try again.";
+      toast.error("Failed to request cash approval: " + message);
     } finally {
       setSubmitting(false);
     }
