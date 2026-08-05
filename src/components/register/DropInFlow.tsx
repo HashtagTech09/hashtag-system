@@ -41,6 +41,10 @@ export default function DropInFlow() {
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
   const simulatedToday = useSimulatedToday();
+  const dropInTotal = dropInFee + Math.round(dropInFee * 0.18);
+  const paymentActionLabel = paymentMode === "cash"
+    ? `Record Cash Drop-in ₹${dropInTotal.toLocaleString("en-IN")}`
+    : `Pay ₹${dropInTotal.toLocaleString("en-IN")} with Razorpay`;
 
   useEffect(() => {
     supabase.from("system_settings").select("*").eq("organization_id", 1).eq("key", "drop_in_fee").then(({ data }) => {
@@ -239,7 +243,7 @@ export default function DropInFlow() {
         <Card className="glass-card">
           <CardContent className="p-6 space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="font-display font-semibold text-foreground">Confirm Drop-In</h3>
+              <h3 className="font-display font-semibold text-foreground">Confirm Drop-in</h3>
               <Button variant="ghost" size="sm" onClick={reset}>← Start Over</Button>
             </div>
             <p className="text-sm text-muted-foreground">
@@ -252,20 +256,20 @@ export default function DropInFlow() {
               <div className="flex justify-between"><span className="text-muted-foreground">Session</span><span>{selectedSession?.session_date} • {selectedSession?.start_time}–{selectedSession?.end_time}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Drop-in fee</span><span>₹{dropInFee.toLocaleString()}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">GST (18%)</span><span>₹{Math.round(dropInFee * 0.18).toLocaleString()}</span></div>
-              <div className="flex justify-between font-semibold border-t border-border pt-1 mt-1"><span>Total</span><span>₹{(dropInFee + Math.round(dropInFee * 0.18)).toLocaleString()}</span></div>
+              <div className="flex justify-between font-semibold border-t border-border pt-1 mt-1"><span>Total</span><span>₹{dropInTotal.toLocaleString()}</span></div>
             </div>
             <div>
               <Label>Payment Mode</Label>
               <Select value={paymentMode} onValueChange={setPaymentMode}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="cash">Cash</SelectItem>
                   <SelectItem value="razorpay">Razorpay</SelectItem>
+                  <SelectItem value="cash">Cash</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <Button className="w-full gradient-primary" onClick={handleDropIn} disabled={submitting}>
-              {submitting ? "Processing..." : `Confirm & Pay ₹${(dropInFee + Math.round(dropInFee * 0.18)).toLocaleString()}`}
+              {submitting ? "Processing..." : paymentActionLabel}
             </Button>
           </CardContent>
         </Card>

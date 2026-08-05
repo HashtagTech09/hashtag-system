@@ -247,7 +247,7 @@ const ConfirmCashPage = () => {
           <Card className="glass-card">
             <CardContent className="p-6 text-center space-y-4">
               <CheckCircle className="h-12 w-12 text-green-500 mx-auto" />
-              <h2 className="text-lg font-display font-semibold text-foreground">Payment Confirmed!</h2>
+              <h2 className="text-lg font-display font-semibold text-foreground">Cash Confirmed</h2>
               <p className="text-sm text-muted-foreground">The cash payment has been recorded and the student has been enrolled.</p>
             </CardContent>
           </Card>
@@ -256,9 +256,9 @@ const ConfirmCashPage = () => {
         {!loading && !error && !confirmed && request && (
           <Card className="glass-card">
             <CardContent className="p-6 space-y-5">
-              <h2 className="text-lg font-display font-semibold text-foreground">Confirm Cash Payment</h2>
+              <h2 className="text-lg font-display font-semibold text-foreground">Confirm Cash Received</h2>
               <p className="text-sm text-muted-foreground">
-                You ({staffName}) are confirming a cash payment from <span className="text-foreground font-medium">{studentName}</span>.
+                You ({staffName}) are confirming cash received from <span className="text-foreground font-medium">{studentName}</span>. This will enroll the student immediately.
               </p>
 
               <div className="p-4 rounded-lg border border-border bg-muted/30 space-y-2 text-sm">
@@ -298,7 +298,7 @@ const ConfirmCashPage = () => {
                 {confirming ? (
                   <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Confirming...</>
                 ) : (
-                  `Confirm ₹${Number(request.final_amount).toLocaleString("en-IN")} Received`
+                  `Confirm Cash Received & Enroll`
                 )}
               </Button>
             </CardContent>

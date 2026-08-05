@@ -499,6 +499,16 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
       startCycleIndex: startCycleIdx,
     });
   })();
+  const renewPaymentActionLabel = breakdown
+    ? paymentMode === "cash"
+      ? `Send ₹${breakdown.total.toLocaleString("en-IN")} for Cash Approval`
+      : `Pay ₹${breakdown.total.toLocaleString("en-IN")} with Razorpay`
+    : "Review payment";
+  const addPaymentActionLabel = addBatchBreakdown
+    ? paymentMode === "cash"
+      ? `Send ₹${addBatchBreakdown.total.toLocaleString("en-IN")} for Cash Approval`
+      : `Pay ₹${addBatchBreakdown.total.toLocaleString("en-IN")} with Razorpay`
+    : "Review payment";
 
   const handleAddBatch = async () => {
     if (!addPlan || selectedBatchIds.length === 0 || !addBatchBreakdown || !addAssignment) return;
@@ -903,10 +913,24 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
               <Button variant="ghost" size="sm" onClick={() => setSubStep("studio")} className="text-muted-foreground">
                 <ArrowLeft className="h-4 w-4 mr-1" /> Add more batches
               </Button>
+              <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm space-y-2">
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">Action</span>
+                  <span className="font-medium text-foreground">{mode === "add" ? "Add new batch" : detectedStatus === "REN" ? "Renew current batch" : detectedStatus === "REV" ? "Revive enrollment" : "New enrollment"}</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">Student</span>
+                  <span className="text-right font-medium text-foreground">{student.name}</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">Selected</span>
+                  <span className="font-medium text-foreground">{selectedBatchIds.length} batch{selectedBatchIds.length !== 1 ? "es" : ""}</span>
+                </div>
+              </div>
 
               {/* Cart items */}
               <div className="space-y-2">
-                <Label>Your Cart ({selectedBatchIds.length} batch{selectedBatchIds.length !== 1 ? "es" : ""})</Label>
+                <Label>{mode === "add" ? "New Batch Selection" : "Renewal Selection"} ({selectedBatchIds.length} batch{selectedBatchIds.length !== 1 ? "es" : ""})</Label>
                 {selectedBatchIds.map(id => {
                   const batch = batches.find(b => b.id === Number(id));
                   const studio = batch ? studios.find(s => s.id === batch.studio_id) : null;
@@ -985,16 +1009,25 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
                     <Select value={paymentMode} onValueChange={setPaymentMode}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="cash">Cash</SelectItem>
                         <SelectItem value="razorpay">Razorpay</SelectItem>
+                        <SelectItem value="cash">Cash</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
 
+                  {paymentMode === "cash" && (
+                    <div className="rounded-lg border border-warning/30 bg-warning/10 p-3">
+                      <Label>Manager/Instructor Approval</Label>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Cash does not enroll immediately. The studio manager or instructor must confirm cash received within 10 minutes.
+                      </p>
+                    </div>
+                  )}
+
                   {breakdown && <FeeBreakdownDisplay breakdown={breakdown} regularCycles={assignment!.regularCount} gridCycles={assignment!.gridCount} detectedStatus={detectedStatus} />}
 
                   <Button className="w-full gradient-primary" onClick={handleRenew} disabled={submitting || selectedBatchIds.length === 0 || !assignment}>
-                    {submitting ? "Processing..." : "Confirm & Pay"}
+                    {submitting ? "Processing..." : renewPaymentActionLabel}
                   </Button>
                 </>
               )}
@@ -1066,11 +1099,20 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
                     <Select value={paymentMode} onValueChange={setPaymentMode}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="cash">Cash</SelectItem>
                         <SelectItem value="razorpay">Razorpay</SelectItem>
+                        <SelectItem value="cash">Cash</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
+
+                  {paymentMode === "cash" && (
+                    <div className="rounded-lg border border-warning/30 bg-warning/10 p-3">
+                      <Label>Manager/Instructor Approval</Label>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Cash does not add batches immediately. The studio manager or instructor must confirm cash received within 10 minutes.
+                      </p>
+                    </div>
+                  )}
 
                   {addBatchBreakdown && (
                     <div className="p-3 rounded-lg border border-border bg-muted/30 text-sm space-y-1">
@@ -1114,7 +1156,7 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
                   )}
 
                   <Button className="w-full gradient-primary" onClick={handleAddBatch} disabled={submitting || selectedBatchIds.length === 0 || !addAssignment || !addBatchBreakdown}>
-                    {submitting ? "Processing..." : `Add Batch${selectedBatchIds.length > 1 ? "es" : ""}`}
+                    {submitting ? "Processing..." : addPaymentActionLabel}
                   </Button>
                 </>
               )}

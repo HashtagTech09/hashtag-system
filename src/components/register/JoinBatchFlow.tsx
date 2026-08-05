@@ -151,6 +151,11 @@ export default function JoinBatchFlow() {
     sortedBatches: sortedSelectedBatches.map(b => ({ id: b.id, name: b.name, style_base: b.style_base })),
     today: simulatedToday,
   }) : null;
+  const paymentActionLabel = breakdown
+    ? paymentMode === "cash"
+      ? `Send ₹${breakdown.total.toLocaleString("en-IN")} for Cash Approval`
+      : `Pay ₹${breakdown.total.toLocaleString("en-IN")} with Razorpay`
+    : "Review payment";
 
   const toggleBatch = (id: string) => {
     setSelectedBatchIds(prev => prev.includes(id) ? prev.filter(b => b !== id) : [...prev, id]);
@@ -310,8 +315,7 @@ export default function JoinBatchFlow() {
       if (emailErr) throw emailErr;
       setTestConfirmationUrl(emailData?.test_mode ? confirmUrl : null);
 
-      toast.success("Cash payment request sent to the batch team for 10-minute confirmation!");
-      showReceipt("Cash", `CASH-${cashReq.id}`);
+      toast.success("Cash approval request sent. Enrollment will happen after manager/instructor approval.");
       setStep("waiting");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Please try again.";
@@ -465,10 +469,25 @@ export default function JoinBatchFlow() {
         <Card className="glass-card">
           <CardContent className="p-6 space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="font-display font-semibold text-foreground">Review & Pay</h3>
+              <h3 className="font-display font-semibold text-foreground">Review Registration</h3>
               <Button variant="ghost" size="sm" onClick={resetFlow}>← Start Over</Button>
             </div>
-            <p className="text-sm text-muted-foreground">Welcome, <span className="text-foreground font-medium">{student?.name}</span></p>
+            <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm space-y-2">
+              <div className="flex justify-between gap-3">
+                <span className="text-muted-foreground">Student</span>
+                <span className="text-right font-medium text-foreground">{student?.name}</span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span className="text-muted-foreground">Status</span>
+                <span className="font-medium text-foreground">{detectedStatus}</span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span className="text-muted-foreground">Batch{sortedSelectedBatches.length > 1 ? "es" : ""}</span>
+                <span className="text-right font-medium text-foreground">
+                  {sortedSelectedBatches.map(b => b.name).join(", ")}
+                </span>
+              </div>
+            </div>
 
             {/* Plan as cards */}
             <div className="space-y-2">
@@ -511,17 +530,17 @@ export default function JoinBatchFlow() {
               <Select value={paymentMode} onValueChange={setPaymentMode}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="cash">Cash</SelectItem>
                   <SelectItem value="razorpay">Razorpay</SelectItem>
+                  <SelectItem value="cash">Cash</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             {paymentMode === "cash" && (
               <div className="rounded-lg border border-warning/30 bg-warning/10 p-3">
-                <Label>Cash approval</Label>
+                <Label>Manager/Instructor Approval</Label>
                 <p className="text-xs text-muted-foreground mt-1">
-                  A confirmation email will be sent to the batch manager and instructor. They must confirm within 10 minutes after receiving cash.
+                  Cash does not enroll immediately. The studio manager or instructor must confirm cash received within 10 minutes.
                 </p>
               </div>
             )}
@@ -531,7 +550,7 @@ export default function JoinBatchFlow() {
             )}
 
             <Button className="w-full gradient-primary" onClick={handleEnroll} disabled={submitting || !breakdown}>
-              {submitting ? "Processing..." : `Confirm & Pay ₹${breakdown?.total.toLocaleString() || "0"}`}
+              {submitting ? "Processing..." : paymentActionLabel}
             </Button>
           </CardContent>
         </Card>
@@ -543,9 +562,9 @@ export default function JoinBatchFlow() {
             <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
               <Music className="h-6 w-6 text-primary animate-pulse" />
             </div>
-            <h3 className="font-display font-semibold text-foreground">Waiting for Staff Confirmation</h3>
+            <h3 className="font-display font-semibold text-foreground">Pending Manager/Instructor Approval</h3>
             <p className="text-sm text-muted-foreground">
-              A confirmation email has been sent to the batch manager and instructor. Once one of them confirms within 10 minutes, your enrollment will be completed.
+              Cash approval has been sent to the batch manager and instructor. Once one of them confirms cash received within 10 minutes, enrollment will be completed.
             </p>
             {testConfirmationUrl && (
               <div className="rounded-lg border border-warning/30 bg-warning/10 p-3 space-y-3 text-left">

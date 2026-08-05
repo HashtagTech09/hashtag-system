@@ -73,6 +73,12 @@ function TestDateBanner() {
 
 const RegisterPage = () => {
   const [tab, setTab] = useState("join");
+  const tabHelp =
+    tab === "join"
+      ? "Choose studio, style, batch, then review the final amount before payment."
+      : tab === "dropin"
+        ? "Book a single class without changing your batch enrollment."
+        : "Renew your current batch or add another batch under the same account.";
 
   return (
     <div className="min-h-screen bg-background">
@@ -92,10 +98,11 @@ const RegisterPage = () => {
 
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList className="w-full grid grid-cols-3">
-            <TabsTrigger value="join">Join a Batch</TabsTrigger>
-            <TabsTrigger value="dropin">Drop-In</TabsTrigger>
+            <TabsTrigger value="join">Join Batch</TabsTrigger>
+            <TabsTrigger value="dropin">Drop-in</TabsTrigger>
             <TabsTrigger value="account">My Account</TabsTrigger>
           </TabsList>
+          <p className="mt-3 text-center text-xs text-muted-foreground">{tabHelp}</p>
 
           <TabsContent value="join" className="mt-6">
             <JoinBatchFlow />
