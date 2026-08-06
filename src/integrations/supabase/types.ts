@@ -255,6 +255,7 @@ export type Database = {
           level: string | null
           name: string
           organization_id: number
+          promotion_required: boolean
           schedule: Json | null
           studio_id: number | null
           style: string | null
@@ -271,6 +272,7 @@ export type Database = {
           level?: string | null
           name: string
           organization_id: number
+          promotion_required?: boolean
           schedule?: Json | null
           studio_id?: number | null
           style?: string | null
@@ -287,6 +289,7 @@ export type Database = {
           level?: string | null
           name?: string
           organization_id?: number
+          promotion_required?: boolean
           schedule?: Json | null
           studio_id?: number | null
           style?: string | null
@@ -1208,6 +1211,148 @@ export type Database = {
           type?: string
         }
         Relationships: []
+      }
+      student_promotions: {
+        Row: {
+          approved_at: string | null
+          created_at: string
+          dreamcatcher_approved_at: string | null
+          dreamcatcher_approved_by_user_id: number | null
+          effective_from: string
+          from_batch_id: number | null
+          from_level: string | null
+          id: number
+          manager_approved_at: string | null
+          manager_approved_by_user_id: number | null
+          notes: string | null
+          organization_id: number
+          recommended_by_user_id: number | null
+          rejected_at: string | null
+          rejected_by_user_id: number | null
+          review_notes: string | null
+          source_enrollment_id: number | null
+          status: string
+          student_id: number
+          style_base: string
+          target_batch_id: number | null
+          to_level: string
+          updated_at: string
+        }
+        Insert: {
+          approved_at?: string | null
+          created_at?: string
+          dreamcatcher_approved_at?: string | null
+          dreamcatcher_approved_by_user_id?: number | null
+          effective_from?: string
+          from_batch_id?: number | null
+          from_level?: string | null
+          id?: number
+          manager_approved_at?: string | null
+          manager_approved_by_user_id?: number | null
+          notes?: string | null
+          organization_id?: number
+          recommended_by_user_id?: number | null
+          rejected_at?: string | null
+          rejected_by_user_id?: number | null
+          review_notes?: string | null
+          source_enrollment_id?: number | null
+          status?: string
+          student_id: number
+          style_base: string
+          target_batch_id?: number | null
+          to_level: string
+          updated_at?: string
+        }
+        Update: {
+          approved_at?: string | null
+          created_at?: string
+          dreamcatcher_approved_at?: string | null
+          dreamcatcher_approved_by_user_id?: number | null
+          effective_from?: string
+          from_batch_id?: number | null
+          from_level?: string | null
+          id?: number
+          manager_approved_at?: string | null
+          manager_approved_by_user_id?: number | null
+          notes?: string | null
+          organization_id?: number
+          recommended_by_user_id?: number | null
+          rejected_at?: string | null
+          rejected_by_user_id?: number | null
+          review_notes?: string | null
+          source_enrollment_id?: number | null
+          status?: string
+          student_id?: number
+          style_base?: string
+          target_batch_id?: number | null
+          to_level?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_promotions_dreamcatcher_approved_by_user_id_fkey"
+            columns: ["dreamcatcher_approved_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_promotions_from_batch_id_fkey"
+            columns: ["from_batch_id"]
+            isOneToOne: false
+            referencedRelation: "batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_promotions_manager_approved_by_user_id_fkey"
+            columns: ["manager_approved_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_promotions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_promotions_recommended_by_user_id_fkey"
+            columns: ["recommended_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_promotions_rejected_by_user_id_fkey"
+            columns: ["rejected_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_promotions_source_enrollment_id_fkey"
+            columns: ["source_enrollment_id"]
+            isOneToOne: false
+            referencedRelation: "enrollments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_promotions_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_promotions_target_batch_id_fkey"
+            columns: ["target_batch_id"]
+            isOneToOne: false
+            referencedRelation: "batches"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       students: {
         Row: {

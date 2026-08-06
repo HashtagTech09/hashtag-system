@@ -26,6 +26,7 @@ import ReceiptPreviewDialog from "./ReceiptPreviewDialog";
 import { useSimulatedToday } from "@/contexts/TestDateContext";
 import type { ReceiptData } from "@/lib/receiptTemplate";
 import { needsAccountSetup, type AccountOwnerType } from "@/lib/accountOwner";
+import { getLockedBatchNames, type ApprovedPromotionLike } from "@/lib/promotionUtils";
 
 type Step = "studio" | "style" | "level" | "batch" | "phone" | "setup" | "hub" | "details" | "pay" | "waiting";
 type UserRow = Database["public"]["Tables"]["users"]["Row"];
@@ -59,6 +60,7 @@ export default function JoinBatchFlow() {
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
   const [testConfirmationUrl, setTestConfirmationUrl] = useState<string | null>(null);
+  const [approvedPromotions, setApprovedPromotions] = useState<ApprovedPromotionLike[]>([]);
   const simulatedToday = useSimulatedToday();
 
   useEffect(() => {
@@ -140,6 +142,19 @@ export default function JoinBatchFlow() {
     };
     detectStatus();
   }, [student, planCycles, simulatedToday]);
+
+  useEffect(() => {
+    if (!student) {
+      setApprovedPromotions([]);
+      return;
+    }
+    supabase
+      .from("student_promotions")
+      .select("student_id, style_base, to_level, target_batch_id, status")
+      .eq("student_id", student.id)
+      .eq("status", "approved")
+      .then(({ data }) => setApprovedPromotions((data || []) as ApprovedPromotionLike[]));
+  }, [student]);
 
   const breakdown = selectedBatchIds.length > 0 && assignment ? computeFeeBreakdown({
     batchCount: selectedBatchIds.length,
@@ -223,6 +238,11 @@ export default function JoinBatchFlow() {
 
   const handleEnroll = async () => {
     if (!student || selectedBatchIds.length === 0 || !assignment || !breakdown) return;
+    const lockedNames = getLockedBatchNames(sortedSelectedBatches, approvedPromotions);
+    if (lockedNames.length > 0) {
+      toast.error(`Promotion approval is required for: ${lockedNames.join(", ")}`);
+      return;
+    }
     setSubmitting(true);
     try {
       const plan = subPlans.find(p => p.id === Number(selectedPlanId));
@@ -339,6 +359,7 @@ export default function JoinBatchFlow() {
     setAccountOwnerType("self");
     setSelectedPlanId("");
     setTestConfirmationUrl(null);
+    setApprovedPromotions([]);
   };
 
   const stepLabels = ["Studio", "Style", "Level", "Batch", "Verify", "Pay"];

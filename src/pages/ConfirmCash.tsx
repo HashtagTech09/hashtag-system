@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { CheckCircle, XCircle, Loader2 } from "lucide-react";
 import hashtagLogo from "@/assets/hashtag-pink.png";
+import { canStudentSelectBatch, isBatchPromotionLocked, type ApprovedPromotionLike } from "@/lib/promotionUtils";
 
 const ConfirmCashPage = () => {
   const [searchParams] = useSearchParams();
@@ -121,6 +122,37 @@ const ConfirmCashPage = () => {
       }
 
       const enrollmentData = request.enrollment_data as any;
+      const enrolledBatchIds = [
+        ...(enrollmentData.enrollments || []).map((enrollment: any) => enrollment.batch_id),
+        ...(enrollmentData.existing_extensions || []).map((extension: any) => extension.batch_id),
+      ].filter(Boolean);
+      if (enrolledBatchIds.length > 0) {
+        const [{ data: selectedBatches }, { data: promotions }, { data: existingEnrollments }] = await Promise.all([
+          supabase.from("batches").select("id, name, style_base, level, promotion_required").in("id", enrolledBatchIds),
+          supabase
+            .from("student_promotions")
+            .select("student_id, style_base, to_level, target_batch_id, status")
+            .eq("student_id", request.student_id)
+            .eq("status", "approved"),
+          supabase
+            .from("enrollments")
+            .select("batch_id, batches(style_base, level)")
+            .eq("student_id", request.student_id),
+        ]);
+
+        const hasExistingAccess = (batch: any) => (existingEnrollments || []).some((enrollment: any) => (
+          enrollment.batch_id === batch.id
+          || (enrollment.batches?.style_base === batch.style_base && enrollment.batches?.level === batch.level)
+        ));
+        const lockedWithoutApproval = (selectedBatches || []).filter((batch: any) => (
+          isBatchPromotionLocked(batch)
+          && !hasExistingAccess(batch)
+          && !canStudentSelectBatch(batch, (promotions || []) as ApprovedPromotionLike[])
+        ));
+        if (lockedWithoutApproval.length > 0) {
+          throw new Error(`Promotion approval is required for: ${lockedWithoutApproval.map((batch: any) => batch.name).join(", ")}`);
+        }
+      }
 
       // Create payment
       const { data: payment, error: payErr } = await supabase.from("payments").insert({

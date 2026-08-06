@@ -7,15 +7,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Trash2, Edit, X, Calendar, Loader2 } from "lucide-react";
+import { Plus, Search, Trash2, Edit, X, Calendar, Loader2, Lock } from "lucide-react";
 import BatchSessionsDialog from "@/components/BatchSessionsDialog";
 import { TimePickerPopover } from "@/components/ui/time-picker";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { useScopedStudents } from "@/hooks/useScopedStudents";
+import { shouldRequirePromotionForLevel } from "@/lib/promotionUtils";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -28,7 +30,7 @@ const BatchesPage = () => {
   const [instructors, setInstructors] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [form, setForm] = useState({ name: "", style_base: "", level: "", schedule: [] as ScheduleEntry[], studio_id: "", instructor_id: "", instructor_2_id: "", capacity: "" });
+  const [form, setForm] = useState({ name: "", style_base: "", level: "", schedule: [] as ScheduleEntry[], studio_id: "", instructor_id: "", instructor_2_id: "", capacity: "", promotion_required: false });
   const [editId, setEditId] = useState<number | null>(null);
   const [sessionsBatch, setSessionsBatch] = useState<any>(null);
   const [pageLoading, setPageLoading] = useState(true);
@@ -105,6 +107,7 @@ const BatchesPage = () => {
         instructor_id: form.instructor_id ? Number(form.instructor_id) : null,
         instructor_2_id: form.instructor_2_id ? Number(form.instructor_2_id) : null,
         capacity: form.capacity ? Number(form.capacity) : null,
+        promotion_required: form.promotion_required,
         batch_code: batchCode || null,
       };
       if (editId) {
@@ -126,7 +129,7 @@ const BatchesPage = () => {
     }
   };
 
-  const resetForm = () => { setForm({ name: "", style_base: "", level: "", schedule: [], studio_id: "", instructor_id: "", instructor_2_id: "", capacity: "" }); setEditId(null); setDialogOpen(false); };
+  const resetForm = () => { setForm({ name: "", style_base: "", level: "", schedule: [], studio_id: "", instructor_id: "", instructor_2_id: "", capacity: "", promotion_required: false }); setEditId(null); setDialogOpen(false); };
 
   const handleDelete = async (id: number) => {
     const { error } = await supabase.from("batches").delete().eq("id", id);
@@ -184,7 +187,7 @@ const BatchesPage = () => {
                 </Select>
               </div>
               <div><Label>Level</Label>
-                <Select value={form.level} onValueChange={(v) => setForm({ ...form, level: v })}>
+                <Select value={form.level} onValueChange={(v) => setForm({ ...form, level: v, promotion_required: shouldRequirePromotionForLevel(v) })}>
                   <SelectTrigger><SelectValue placeholder="Select level" /></SelectTrigger>
                   <SelectContent>
                     {LEVEL_OPTIONS.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
@@ -195,6 +198,18 @@ const BatchesPage = () => {
                     Display: <span className="font-medium">{buildDisplayStyle(form.style_base, form.level)}</span> · Key: <span className="font-mono">{buildEligibilityKey(form.style_base, form.level)}</span>
                   </p>
                 )}
+              </div>
+              <div className="flex items-start justify-between gap-4 rounded-lg border border-border p-3">
+                <div className="space-y-1">
+                  <Label>Promotion required</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Locked batches require an approved student promotion before registration.
+                  </p>
+                </div>
+                <Switch
+                  checked={form.promotion_required}
+                  onCheckedChange={(checked) => setForm({ ...form, promotion_required: checked })}
+                />
               </div>
               <div>
                 <Label>Days & Schedule</Label>
@@ -283,7 +298,16 @@ const BatchesPage = () => {
                   <TableRow key={batch.id}>
                     <TableCell className="font-mono text-xs text-muted-foreground">{batch.batch_code || "—"}</TableCell>
                     <TableCell className="font-medium">{batch.name}</TableCell>
-                    <TableCell className="text-muted-foreground">{batch.style || "—"}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      <div className="flex items-center gap-2">
+                        <span>{batch.style || "—"}</span>
+                        {batch.promotion_required && (
+                          <Badge variant="secondary" className="bg-warning/20 text-warning gap-1">
+                            <Lock className="h-3 w-3" /> Locked
+                          </Badge>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell className="hidden md:table-cell text-muted-foreground text-sm">{formatScheduleDisplay(batch)}</TableCell>
                     <TableCell className="hidden lg:table-cell text-muted-foreground">
                       {(() => {
@@ -307,6 +331,7 @@ const BatchesPage = () => {
                             instructor_id: batch.instructor_id ? String(batch.instructor_id) : "",
                             instructor_2_id: batch.instructor_2_id ? String(batch.instructor_2_id) : "",
                             capacity: batch.capacity ? String(batch.capacity) : "",
+                            promotion_required: Boolean(batch.promotion_required),
                           });
                           setEditId(batch.id);
                           setDialogOpen(true);

@@ -54,6 +54,35 @@ function getBatchDiscount(pos: number) {
   const t: Record<number, number> = { 2: 0.12, 3: 0.13, 4: 0.14 };
   return t[pos] ?? 0.15;
 }
+const normalize = (value?: string | null) => (value || "").trim().toLowerCase();
+function isOpenEntryLevel(level?: string | null) {
+  const normalized = normalize(level);
+  return !normalized || normalized === "kids" || normalized === "level 1" || normalized === "kids level 1";
+}
+function promotionUnlocksBatch(batch: any, promotion: any) {
+  if (promotion.status !== "approved") return false;
+  if (promotion.target_batch_id && promotion.target_batch_id === batch.id) return true;
+  return normalize(promotion.style_base) === normalize(batch.style_base)
+    && normalize(promotion.to_level) === normalize(batch.level);
+}
+async function assertPromotionAccess(supabase: any, studentId: number, batches: any[]) {
+  const locked = (batches || []).filter((batch: any) => Boolean(batch.promotion_required) || !isOpenEntryLevel(batch.level));
+  if (locked.length === 0) return;
+  const [{ data: promotions }, { data: enrollments }] = await Promise.all([
+    supabase.from("student_promotions").select("style_base, to_level, target_batch_id, status").eq("student_id", studentId).eq("status", "approved"),
+    supabase.from("enrollments").select("batch_id, batches(style_base, level)").eq("student_id", studentId),
+  ]);
+  const hasExistingAccess = (batch: any) => (enrollments || []).some((enrollment: any) => (
+    enrollment.batch_id === batch.id
+    || (normalize(enrollment.batches?.style_base) === normalize(batch.style_base)
+      && normalize(enrollment.batches?.level) === normalize(batch.level))
+  ));
+  const unauthorized = locked.filter((batch: any) => (
+    !hasExistingAccess(batch)
+    && !(promotions || []).some((promotion: any) => promotionUnlocksBatch(batch, promotion))
+  ));
+  if (unauthorized.length > 0) throw new Error(`Promotion approval is required for: ${unauthorized.map((batch: any) => batch.name).join(", ")}`);
+}
 function roundToNearest100(n: number) { return Math.round(n / 100) * 100; }
 function getPlanKey(r: number, g: number) { return `${r}R${g}G`; }
 function getCycleForDate(cycles: PlanCycle[], date: string): PlanCycle | null {
@@ -452,6 +481,7 @@ Deno.serve(async (req) => {
       const plan = planRes.data as SubPlan;
       const batches = batchRes.data || [];
       if (!plan) return json({ error: "Plan not found" }, 404);
+      await assertPromotionAccess(supabase, Number(student_id), batches);
 
       const { data: enrollments } = await supabase.from("enrollments").select("end_date").eq("student_id", student_id).order("end_date", { ascending: false });
       const { status: detectedStatus, latestEndDate } = detectStudentStatus(enrollments || [], cycles);

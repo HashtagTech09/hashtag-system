@@ -12,9 +12,10 @@ import { allocateCyclesForPlan } from "@/lib/cycleUtils";
 import FeeBreakdownDisplay from "./FeeBreakdown";
 import { initiateRazorpayPayment } from "@/lib/razorpayUtils";
 import { sortBatchesByHierarchy, computePaymentAllocations, allocateCollectedAmount } from "@/lib/styleHierarchy";
-import { MapPin, ChevronRight, ShoppingCart, X, Check, ArrowLeft, Trash2 } from "lucide-react";
+import { MapPin, ChevronRight, ShoppingCart, X, Check, ArrowLeft, Trash2, Lock } from "lucide-react";
 import { useSimulatedToday } from "@/contexts/TestDateContext";
 import type { Database, Json } from "@/integrations/supabase/types";
+import { canStudentSelectBatch, getLockedBatchNames, isBatchPromotionLocked, type ApprovedPromotionLike } from "@/lib/promotionUtils";
 
 type UserRow = Database["public"]["Tables"]["users"]["Row"];
 type CashRecipient = Pick<UserRow, "id" | "name" | "email">;
@@ -63,6 +64,8 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
   const [submitting, setSubmitting] = useState(false);
   const [renewAddExpanded, setRenewAddExpanded] = useState(false);
   const [testConfirmationUrl, setTestConfirmationUrl] = useState<string | null>(null);
+  const [promotionAccess, setPromotionAccess] = useState<ApprovedPromotionLike[]>([]);
+  const [pendingPromotions, setPendingPromotions] = useState<any[]>([]);
   const contextToday = useSimulatedToday();
   const simulatedToday = simulatedTodayProp || contextToday;
 
@@ -84,6 +87,14 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
     setPlanCycles(cycleRes.data || []);
     setStudios(studioRes.data || []);
     setLoading(false);
+
+    const { data: promotionRows } = await supabase
+      .from("student_promotions")
+      .select("id, student_id, style_base, to_level, target_batch_id, status")
+      .eq("student_id", student.id)
+      .in("status", ["approved", "pending"]);
+    setPromotionAccess(((promotionRows || []) as ApprovedPromotionLike[]).filter(p => p.status === "approved"));
+    setPendingPromotions((promotionRows || []).filter((p: any) => p.status === "pending"));
 
     // Check for abandoned cart
     const { data: cartData } = await supabase
@@ -191,6 +202,25 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
 
   const selectedBatchObjects = selectedBatchIds.map(id => batches.find(b => b.id === Number(id))).filter(Boolean);
   const sortedSelectedBatches = sortBatchesByHierarchy(selectedBatchObjects);
+
+  const hasExistingAccessToBatch = (batch: any) => {
+    return enrollments.some((enrollment) => {
+      const enrolledBatch = enrollment.batches;
+      return enrollment.batch_id === batch.id
+        || (enrolledBatch?.style_base === batch.style_base && enrolledBatch?.level === batch.level);
+    });
+  };
+
+  const canSelectBatch = (batch: any) => {
+    return canStudentSelectBatch(batch, promotionAccess) || hasExistingAccessToBatch(batch);
+  };
+
+  const getUnauthorizedLockedSelectionNames = () => {
+    return getLockedBatchNames(
+      sortedSelectedBatches.filter((batch: any) => !hasExistingAccessToBatch(batch)),
+      promotionAccess,
+    );
+  };
 
   const getCashApprovalRecipients = async (batchIds: number[]): Promise<CashRecipient[]> => {
     if (batchIds.length === 0) return [];
@@ -306,6 +336,11 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
   }, [mode, selectedStudioId, defaultStudioId]);
 
   const toggleBatch = (id: string) => {
+    const batch = batches.find(b => b.id === Number(id));
+    if (batch && !selectedBatchIds.includes(id) && !canSelectBatch(batch)) {
+      toast.error("This batch requires an approved promotion first.");
+      return;
+    }
     setSelectedBatchIds(prev => prev.includes(id) ? prev.filter(b => b !== id) : [...prev, id]);
   };
 
@@ -376,6 +411,11 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
 
   const handleRenew = async () => {
     if (selectedBatchIds.length === 0 || !assignment || !breakdown) return;
+    const lockedNames = getUnauthorizedLockedSelectionNames();
+    if (lockedNames.length > 0) {
+      toast.error(`Promotion approval is required for: ${lockedNames.join(", ")}`);
+      return;
+    }
     setSubmitting(true);
     try {
       const allocations = computePaymentAllocations(
@@ -512,6 +552,11 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
 
   const handleAddBatch = async () => {
     if (!addPlan || selectedBatchIds.length === 0 || !addBatchBreakdown || !addAssignment) return;
+    const lockedNames = getUnauthorizedLockedSelectionNames();
+    if (lockedNames.length > 0) {
+      toast.error(`Promotion approval is required for: ${lockedNames.join(", ")}`);
+      return;
+    }
     setSubmitting(true);
     try {
       const newAllocations = addBatchBreakdown.batchAllocations.filter(a => !a.is_existing);
@@ -705,6 +750,17 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
             </div>
           )}
 
+          {pendingPromotions.length > 0 && (
+            <Card className="border-warning/30 bg-warning/10">
+              <CardContent className="p-3">
+                <p className="text-sm font-medium text-foreground">Promotion under review</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {pendingPromotions.map((p: any) => `${p.style_base} ${p.to_level}`).join(", ")}
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
           {expiredEnrollments.length > 0 && (
             <div className="space-y-2">
               <h3 className="text-sm font-medium text-muted-foreground">Past Enrollments</h3>
@@ -851,6 +907,8 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
                         {styleBatches.map((b: any) => {
                           const isInCart = selectedBatchIds.includes(String(b.id));
                           const existingEnrollment = enrollments.find(e => e.batch_id === b.id && e.end_date >= todayStr);
+                          const locked = isBatchPromotionLocked(b);
+                          const selectable = canSelectBatch(b);
                           const schedule = b.schedule as any;
                           const timings: string[] = [];
                           if (schedule && Array.isArray(schedule)) {
@@ -865,8 +923,8 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
                           return (
                             <Card
                               key={b.id}
-                              className={`cursor-pointer transition-all duration-200 hover:scale-[1.02] ${isInCart ? "border-primary ring-1 ring-primary" : "hover:border-primary/40"}`}
-                              onClick={() => toggleBatch(String(b.id))}
+                              className={`transition-all duration-200 ${!selectable ? "opacity-60 cursor-not-allowed" : "cursor-pointer hover:scale-[1.02]"} ${isInCart ? "border-primary ring-1 ring-primary" : selectable ? "hover:border-primary/40" : ""}`}
+                              onClick={() => selectable && toggleBatch(String(b.id))}
                             >
                               <CardContent className="p-4">
                                 <div className="flex items-start justify-between">
@@ -874,6 +932,14 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
                                     <div className="flex items-center gap-2">
                                       <h4 className="font-display font-semibold text-foreground">{b.name}</h4>
                                       {isInCart && <Check className="h-4 w-4 text-primary" />}
+                                      {locked && selectable && !existingEnrollment && (
+                                        <Badge variant="secondary" className="bg-success/20 text-success text-[10px]">Promotion approved</Badge>
+                                      )}
+                                      {locked && !selectable && (
+                                        <Badge variant="secondary" className="bg-warning/20 text-warning text-[10px] gap-1">
+                                          <Lock className="h-3 w-3" /> Locked
+                                        </Badge>
+                                      )}
                                       {!isInCart && b.studio_id === defaultStudioId && !previousBatchIds.includes(b.id) && (
                                         <Badge variant="secondary" className="bg-primary/20 text-primary text-[10px]">Suggested</Badge>
                                       )}
@@ -888,6 +954,11 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
                                       <Badge variant="secondary" className="bg-success/20 text-success text-[10px] mt-1">
                                         Active till {formatDate(existingEnrollment.end_date)}
                                       </Badge>
+                                    )}
+                                    {locked && !selectable && (
+                                      <p className="text-xs text-muted-foreground mt-1">
+                                        Ask your instructor to recommend promotion for this level.
+                                      </p>
                                     )}
                                   </div>
                                 </div>

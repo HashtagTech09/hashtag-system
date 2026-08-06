@@ -5,9 +5,15 @@ import AdminLayout from "@/components/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { todayIST } from "@/lib/dateUtils";
-import { Clock, FileCheck2, FileWarning, Upload, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Clock, FileCheck2, FileWarning, Upload, CheckCircle2, AlertTriangle, BadgeCheck } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { shouldRequirePromotionForLevel } from "@/lib/promotionUtils";
+import { toast } from "sonner";
 
 interface SessionRow {
   id: number;
@@ -28,6 +34,13 @@ export default function InstructorHome() {
   const [submittedCount, setSubmittedCount] = useState(0);
   const [monthlyPct, setMonthlyPct] = useState<number | null>(null);
   const [choreoCount, setChoreoCount] = useState(0);
+  const [studentEnrollments, setStudentEnrollments] = useState<any[]>([]);
+  const [allBatches, setAllBatches] = useState<any[]>([]);
+  const [promotionOpen, setPromotionOpen] = useState(false);
+  const [selectedEnrollmentId, setSelectedEnrollmentId] = useState("");
+  const [targetBatchId, setTargetBatchId] = useState("");
+  const [promotionNotes, setPromotionNotes] = useState("");
+  const [submittingPromotion, setSubmittingPromotion] = useState(false);
 
   useEffect(() => {
     if (!staffUser) return;
@@ -49,6 +62,7 @@ export default function InstructorHome() {
 
     if (batchIds.length === 0) {
       setTodaySessions([]);
+      setStudentEnrollments([]);
       return;
     }
 
@@ -96,6 +110,72 @@ export default function InstructorHome() {
       .eq("kind", "choreography")
       .gte("taught_on", monthStart);
     setChoreoCount(choreo || 0);
+
+    const [{ data: activeRows }, { data: targetBatches }] = await Promise.all([
+      supabase
+        .from("enrollments")
+        .select("id, student_id, batch_id, end_date, students(name), batches(id, name, batch_code, style_base, level, studio_id)")
+        .in("batch_id", batchIds)
+        .gte("end_date", today)
+        .order("end_date", { ascending: false }),
+      supabase
+        .from("batches")
+        .select("id, name, batch_code, style_base, level, studio_id, promotion_required")
+        .eq("organization_id", 1)
+        .order("name"),
+    ]);
+    setStudentEnrollments(activeRows || []);
+    setAllBatches(targetBatches || []);
+  };
+
+  const selectedEnrollment = studentEnrollments.find((row) => String(row.id) === selectedEnrollmentId);
+  const targetOptions = selectedEnrollment
+    ? allBatches.filter((batch) =>
+        batch.id !== selectedEnrollment.batch_id
+        && batch.style_base === selectedEnrollment.batches?.style_base
+        && batch.studio_id === selectedEnrollment.batches?.studio_id
+        && shouldRequirePromotionForLevel(batch.level)
+      )
+    : [];
+
+  const recommendPromotion = async () => {
+    if (!staffUser || !selectedEnrollment || !targetBatchId) {
+      toastMissingPromotionFields();
+      return;
+    }
+    const targetBatch = allBatches.find((batch) => String(batch.id) === targetBatchId);
+    if (!targetBatch) {
+      toastMissingPromotionFields();
+      return;
+    }
+    setSubmittingPromotion(true);
+    const { error } = await supabase.from("student_promotions").insert({
+      organization_id: 1,
+      student_id: selectedEnrollment.student_id,
+      source_enrollment_id: selectedEnrollment.id,
+      from_batch_id: selectedEnrollment.batch_id,
+      target_batch_id: targetBatch.id,
+      style_base: targetBatch.style_base || selectedEnrollment.batches?.style_base || "",
+      from_level: selectedEnrollment.batches?.level || null,
+      to_level: targetBatch.level || "",
+      recommended_by_user_id: staffUser.id,
+      notes: promotionNotes.trim() || null,
+      status: "pending",
+    });
+    setSubmittingPromotion(false);
+    if (error) {
+      toast.error(error.message || "Could not recommend promotion");
+      return;
+    }
+    toast.success("Promotion request sent for approval");
+    setPromotionOpen(false);
+    setSelectedEnrollmentId("");
+    setTargetBatchId("");
+    setPromotionNotes("");
+  };
+
+  const toastMissingPromotionFields = () => {
+    toast.error("Select a student and target batch");
   };
 
   return (
@@ -181,8 +261,58 @@ export default function InstructorHome() {
           <Button variant="outline" onClick={() => navigate("/instructor/reports")}>
             View My Reports
           </Button>
+          <Button className="gradient-primary" onClick={() => setPromotionOpen(true)}>
+            <BadgeCheck className="h-4 w-4 mr-2" /> Recommend Promotion
+          </Button>
         </div>
       </div>
+
+      <Dialog open={promotionOpen} onOpenChange={setPromotionOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Recommend Promotion</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Student</Label>
+              <Select value={selectedEnrollmentId} onValueChange={(value) => { setSelectedEnrollmentId(value); setTargetBatchId(""); }}>
+                <SelectTrigger><SelectValue placeholder="Select student..." /></SelectTrigger>
+                <SelectContent>
+                  {studentEnrollments.map((row) => (
+                    <SelectItem key={row.id} value={String(row.id)}>
+                      {row.students?.name} · {row.batches?.name} · {row.batches?.level || "Level"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Promote to</Label>
+              <Select value={targetBatchId} onValueChange={setTargetBatchId} disabled={!selectedEnrollmentId}>
+                <SelectTrigger><SelectValue placeholder="Select target batch..." /></SelectTrigger>
+                <SelectContent>
+                  {targetOptions.map((batch) => (
+                    <SelectItem key={batch.id} value={String(batch.id)}>
+                      {batch.name}{batch.batch_code ? ` (${batch.batch_code})` : ""} · {batch.level}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectedEnrollmentId && targetOptions.length === 0 && (
+                <p className="text-xs text-muted-foreground mt-1">No higher locked batch found in the same style and studio.</p>
+              )}
+            </div>
+            <div>
+              <Label>Notes</Label>
+              <Textarea value={promotionNotes} onChange={(e) => setPromotionNotes(e.target.value)} placeholder="Why is the student ready for this level?" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPromotionOpen(false)}>Cancel</Button>
+            <Button className="gradient-primary" onClick={recommendPromotion} disabled={submittingPromotion}>
+              {submittingPromotion ? "Sending..." : "Send for Approval"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AdminLayout>
   );
 }

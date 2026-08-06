@@ -4,7 +4,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, Clock, Users, User } from "lucide-react";
+import { ArrowLeft, Clock, Users, User, Lock } from "lucide-react";
+import { isBatchPromotionLocked } from "@/lib/promotionUtils";
 
 interface BatchSelectionProps {
   selectedStyle: string;
@@ -84,6 +85,7 @@ export default function BatchSelection({ selectedStyle, studioId, selectedLevel,
           const selected = selectedBatchIds.includes(String(b.id));
           const enrolled = enrollCounts[b.id] || 0;
           const spotsLeft = b.capacity ? b.capacity - enrolled : null;
+          const locked = isBatchPromotionLocked(b);
 
           return (
             <Card
@@ -98,6 +100,7 @@ export default function BatchSelection({ selectedStyle, studioId, selectedLevel,
                     <div className="flex flex-wrap gap-1">
                       {b.style_base && <Badge variant="secondary" className="text-xs">{b.style_base}</Badge>}
                       {b.level && <Badge variant="outline" className="text-xs">{b.level}</Badge>}
+                      {locked && <Badge variant="secondary" className="bg-warning/20 text-warning text-xs gap-1"><Lock className="h-3 w-3" /> Promotion required</Badge>}
                     </div>
                   </div>
                   {selected && <Badge className="gradient-primary text-xs shrink-0">Selected</Badge>}
@@ -124,6 +127,11 @@ export default function BatchSelection({ selectedStyle, studioId, selectedLevel,
                       {spotsLeft > 0 ? `${spotsLeft} spots left` : "Full"}
                     </span>
                   </div>
+                )}
+                {locked && (
+                  <p className="text-xs text-muted-foreground">
+                    We will verify promotion approval after phone login.
+                  </p>
                 )}
               </CardContent>
             </Card>

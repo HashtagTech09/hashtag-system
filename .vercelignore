@@ -1,0 +1,6 @@
+.git
+.vercel
+node_modules
+output
+supabase/.temp
+supabase/supabase
