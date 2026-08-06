@@ -66,23 +66,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setLoading(true);
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
         // Defer to avoid Supabase client deadlock
-        setTimeout(() => fetchStaffData(session.user.id), 0);
+        setTimeout(() => {
+          fetchStaffData(session.user.id).finally(() => setLoading(false));
+        }, 0);
       } else {
         setStaffUser(null);
         setStaffRoles([]);
+        setLoading(false);
       }
-      setLoading(false);
     });
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        fetchStaffData(session.user.id);
+        await fetchStaffData(session.user.id);
       }
       setLoading(false);
     });

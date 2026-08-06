@@ -45,6 +45,14 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function GlobalAdminRoute({ children }: { children: React.ReactNode }) {
+  const { isAdmin, isManager, staffUser, loading } = useAuth();
+  if (loading) return <div className="min-h-screen flex items-center justify-center bg-background"><div className="text-muted-foreground">Loading...</div></div>;
+  const scopedManager = !isAdmin && isManager && (staffUser as any)?.scope_restricted === true;
+  if (scopedManager) return <Navigate to="/" replace />;
+  return <ProtectedRoute>{children}</ProtectedRoute>;
+}
+
 function HomePage() {
   const { isAdminOrManager, staffUser } = useAuth();
   // If admin/manager or no staff record (superadmin), show full dashboard
@@ -57,18 +65,18 @@ const AppRoutes = () => (
     <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
     <Route path="/" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
     <Route path="/studios" element={<ProtectedRoute><StudiosPage /></ProtectedRoute>} />
-    <Route path="/users" element={<ProtectedRoute><UsersPage /></ProtectedRoute>} />
+    <Route path="/users" element={<GlobalAdminRoute><UsersPage /></GlobalAdminRoute>} />
     <Route path="/students" element={<ProtectedRoute><StudentsPage /></ProtectedRoute>} />
     <Route path="/batches" element={<ProtectedRoute><BatchesPage /></ProtectedRoute>} />
-    <Route path="/plan-cycles" element={<ProtectedRoute><PlanCyclesPage /></ProtectedRoute>} />
+    <Route path="/plan-cycles" element={<GlobalAdminRoute><PlanCyclesPage /></GlobalAdminRoute>} />
     <Route path="/enrollments" element={<ProtectedRoute><EnrollmentsPage /></ProtectedRoute>} />
     <Route path="/application-cases" element={<ProtectedRoute><ApplicationCasesPage /></ProtectedRoute>} />
     <Route path="/promotion-requests" element={<ProtectedRoute><PromotionRequestsPage /></ProtectedRoute>} />
     <Route path="/drop-ins" element={<ProtectedRoute><DropInsPage /></ProtectedRoute>} />
     <Route path="/payments" element={<ProtectedRoute><PaymentsPage /></ProtectedRoute>} />
     <Route path="/attendance" element={<ProtectedRoute><AttendancePage /></ProtectedRoute>} />
-    <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
-    <Route path="/import" element={<ProtectedRoute><ImportPage /></ProtectedRoute>} />
+    <Route path="/settings" element={<GlobalAdminRoute><SettingsPage /></GlobalAdminRoute>} />
+    <Route path="/import" element={<GlobalAdminRoute><ImportPage /></GlobalAdminRoute>} />
     <Route path="/register" element={<RegisterPage />} />
     <Route path="/confirm-cash" element={<ConfirmCashPage />} />
     <Route path="/reset-password" element={<ResetPasswordPage />} />

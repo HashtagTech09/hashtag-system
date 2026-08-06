@@ -22,10 +22,15 @@ export default function PromotionRequestsPage() {
 
   useEffect(() => {
     void load();
-  }, []);
+  }, [staffUser?.id, isAdmin, isManager]);
 
   const load = async () => {
     setLoading(true);
+    if (!isAdmin && !staffUser) {
+      setRequests([]);
+      setLoading(false);
+      return;
+    }
     const { data, error } = await supabase
       .from("student_promotions")
       .select(`
@@ -41,14 +46,24 @@ export default function PromotionRequestsPage() {
     if (error) {
       toast.error(error.message || "Failed to load promotion requests");
     } else {
-      setRequests(data || []);
+      const rows = data || [];
+      if (isAdmin || !staffUser) {
+        setRequests(rows);
+      } else {
+        setRequests(rows.filter((request: PromotionRow) => {
+          const studio = request.target_batch?.studios;
+          const assignedToStudio = studio?.wingperson_id === staffUser.id || studio?.dreamcatcher_id === staffUser.id;
+          const recommendedByMe = request.recommended_by_user_id === staffUser.id;
+          return assignedToStudio || recommendedByMe || (!isManager && recommendedByMe);
+        }));
+      }
     }
     setLoading(false);
   };
 
   const getApprovalScope = (request: PromotionRow) => {
     const studio = request.target_batch?.studios;
-    const canManagerApprove = isAdmin || isManager || studio?.wingperson_id === staffUser?.id;
+    const canManagerApprove = isAdmin || studio?.wingperson_id === staffUser?.id;
     const canDreamcatcherApprove = isAdmin || studio?.dreamcatcher_id === staffUser?.id;
     return { canManagerApprove, canDreamcatcherApprove };
   };
@@ -90,6 +105,11 @@ export default function PromotionRequestsPage() {
 
   const reject = async () => {
     if (!staffUser || !rejecting) return;
+    const scope = getApprovalScope(rejecting);
+    if (!scope.canManagerApprove && !scope.canDreamcatcherApprove) {
+      toast.error("You are not assigned to reject this promotion.");
+      return;
+    }
     const now = new Date().toISOString();
     const { error } = await supabase.from("student_promotions").update({
       status: "rejected",
