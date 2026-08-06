@@ -11,13 +11,15 @@ import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ChevronDown, CalendarIcon } from "lucide-react";
+import { ChevronDown, CalendarIcon, ClipboardCopy } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { useScopedStudents } from "@/hooks/useScopedStudents";
 import BatchDetailsPopup from "@/components/dashboard/BatchDetailsPopup";
 import { useLongPress } from "@/hooks/useLongPress";
 import { filterEnrollmentsByCycle } from "@/lib/cycleUtils";
+import { getDisplayPhone } from "@/lib/studentUtils";
+import { toast } from "sonner";
 
 interface Studio { id: number; name: string; code: string | null; }
 interface Batch { id: number; name: string; batch_code: string | null; studio_id: number | null; capacity: number | null; style_base: string | null; level: string | null; }
@@ -36,6 +38,46 @@ function batchSortRank(b: { style_base?: string | null; level?: string | null })
 function compareBatches(a: { style_base?: string | null; level?: string | null; name: string }, b: { style_base?: string | null; level?: string | null; name: string }) {
   const ra = batchSortRank(a), rb = batchSortRank(b);
   return ra.group - rb.group || ra.style - rb.style || ra.level - rb.level || a.name.localeCompare(b.name);
+}
+
+function getIstDayBounds(date: string): { start: string; end: string } {
+  const start = new Date(`${date}T00:00:00+05:30`);
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 1);
+  return { start: start.toISOString(), end: end.toISOString() };
+}
+
+function cleanSheetCell(value: any): string {
+  if (value === null || value === undefined) return "";
+  return String(value).replace(/\t/g, " ").replace(/\r?\n/g, " ").trim();
+}
+
+function formatSheetDate(date: string | null | undefined): string {
+  if (!date) return "";
+  const dateOnly = date.includes("T") ? toISTDateString(date) : date;
+  const [year, month, day] = dateOnly.split("-");
+  return year && month && day ? `${day}/${month}/${year}` : dateOnly;
+}
+
+function formatSheetValidity(startDate: string | null | undefined, endDate: string | null | undefined): string {
+  if (!startDate && !endDate) return "";
+  if (!endDate) return formatSheetDate(startDate);
+  if (!startDate) return formatSheetDate(endDate);
+  return `${formatSheetDate(startDate)} - ${formatSheetDate(endDate)}`;
+}
+
+function getModeLabel(mode: string | null | undefined): string {
+  const normalized = (mode || "").toLowerCase();
+  if (normalized === "razorpay") return "Razorpay";
+  if (normalized === "cash") return "Cash";
+  return mode || "";
+}
+
+function getOnlineOffline(mode: string | null | undefined): string {
+  const normalized = (mode || "").toLowerCase();
+  if (normalized === "razorpay") return "Online";
+  if (normalized === "cash") return "Offline";
+  return "";
 }
 
 type PagedQuery<T> = {
@@ -116,6 +158,7 @@ const Dashboard = () => {
   const [attendanceRecords, setAttendanceRecords] = useState<{ student_id: number; batch_id: number }[]>([]);
   const [studentNames, setStudentNames] = useState<Map<number, { name: string; phone: string | null }>>(new Map());
   const [selectedBatch, setSelectedBatch] = useState<{ id: number; name: string; filter: BatchDetailFilter } | null>(null);
+  const [copyingSheet, setCopyingSheet] = useState<"registrations" | "dropIns" | null>(null);
 
   useEffect(() => {
     if (scopeLoading) return;
@@ -640,6 +683,237 @@ const Dashboard = () => {
       .map(e => ({ student_id: e.student_id, displayStatus: e.displayStatus }));
   }, [classifiedEnrollments, renewableRows, selectedBatch]);
 
+  const fetchPaidToNames = async (paymentsForCopy: any[]) => {
+    const staffIds = [...new Set(
+      paymentsForCopy
+        .map((p: any) => p?.confirmed_by_staff_id)
+        .filter((id: any) => id !== null && id !== undefined)
+    )] as number[];
+    if (staffIds.length === 0) return new Map<number, string>();
+    const { data } = await supabase.from("users").select("id, name").in("id", staffIds);
+    const nameMap = new Map<number, string>();
+    (data || []).forEach((u: any) => nameMap.set(u.id, u.name));
+    return nameMap;
+  };
+
+  const getPaidTo = (payment: any, paidToNames: Map<number, string>) => {
+    if (!payment) return "";
+    const staffName = payment.confirmed_by_staff_id ? paidToNames.get(payment.confirmed_by_staff_id) : "";
+    if (staffName) return staffName;
+    return payment.rzp_account || "";
+  };
+
+  const copyRowsToClipboard = async (rows: any[][], label: string) => {
+    const text = rows.map(row => row.map(cleanSheetCell).join("\t")).join("\n");
+    await navigator.clipboard.writeText(text);
+    toast.success(`Copied ${rows.length} ${label}${rows.length === 1 ? "" : "s"} for Google Sheets`);
+  };
+
+  const copyRegistrationsForSheets = async () => {
+    const targetBatchIds = batches.map(b => b.id);
+    if (targetBatchIds.length === 0) {
+      toast.info("No scoped batches available for this selection");
+      return;
+    }
+    setCopyingSheet("registrations");
+    try {
+      const { start, end } = getIstDayBounds(format(selectedDate, "yyyy-MM-dd"));
+      let query: any = supabase
+        .from("enrollments")
+        .select(`
+          id, created_at, status_type, start_date, end_date, payment_id, batch_id, student_id,
+          students(name, phone, email, users(phone, email)),
+          batches(name, batch_code, studio_id, studios(name, code)),
+          payments!inner(id, amount, gst, final_amount, payment_mode, status, created_at, rzp_account, gateway_payment_id, confirmed_by_staff_id)
+        `)
+        .eq("organization_id", 1)
+        .in("batch_id", targetBatchIds)
+        .gte("payments.created_at", start)
+        .lt("payments.created_at", end)
+        .order("created_at", { ascending: true });
+      if (!scopeUnrestricted) query = query.in("student_id", scope.studentIds);
+
+      const { data, error } = await query;
+      if (error) throw error;
+      const registrationRows = ((data || []) as any[]).filter(row => row.payment_id && row.payments);
+      if (registrationRows.length === 0) {
+        toast.info("No registrations found for the selected date and studio");
+        return;
+      }
+
+      const paymentIds = [...new Set(registrationRows.map(row => row.payment_id))] as number[];
+      const [allocationRes, adjustedDropInRes] = await Promise.all([
+        supabase
+          .from("payment_allocations")
+          .select("payment_id, batch_id, allocated_amount")
+          .in("payment_id", paymentIds)
+          .in("batch_id", targetBatchIds),
+        supabase
+          .from("drop_ins")
+          .select("adjusted_payment_id, adjusted_amount, amount, payment:payments!drop_ins_payment_id_fkey(gst, final_amount)")
+          .eq("organization_id", 1)
+          .eq("is_adjusted", true)
+          .in("adjusted_payment_id", paymentIds),
+      ]);
+      if (allocationRes.error) throw allocationRes.error;
+      if (adjustedDropInRes.error) throw adjustedDropInRes.error;
+
+      const allocationsByPayment = new Map<number, number>();
+      ((allocationRes.data || []) as any[]).forEach(allocation => {
+        allocationsByPayment.set(
+          allocation.payment_id,
+          (allocationsByPayment.get(allocation.payment_id) || 0) + Number(allocation.allocated_amount || 0)
+        );
+      });
+
+      const adjustmentsByPayment = new Map<number, { total: number; gst: number }>();
+      ((adjustedDropInRes.data || []) as any[]).forEach(dropIn => {
+        const payment = dropIn.payment || {};
+        const total = Number(dropIn.adjusted_amount || payment.final_amount || 0);
+        const fallbackBase = Number(dropIn.amount || 0);
+        const finalTotal = total > 0 ? total : Math.round(fallbackBase * 1.18);
+        if (finalTotal <= 0 || !dropIn.adjusted_payment_id) return;
+        const gst = Number(payment.gst || Math.round(finalTotal - finalTotal / 1.18));
+        const current = adjustmentsByPayment.get(dropIn.adjusted_payment_id) || { total: 0, gst: 0 };
+        adjustmentsByPayment.set(dropIn.adjusted_payment_id, { total: current.total + finalTotal, gst: current.gst + gst });
+      });
+
+      const grouped = new Map<number, any[]>();
+      registrationRows.forEach(row => {
+        if (!grouped.has(row.payment_id)) grouped.set(row.payment_id, []);
+        grouped.get(row.payment_id)!.push(row);
+      });
+
+      const paidToNames = await fetchPaidToNames(Array.from(grouped.values()).map(rows => rows[0]?.payments).filter(Boolean));
+      const sheetRows = Array.from(grouped.entries())
+        .sort((a, b) => (a[1][0]?.payments?.created_at || "").localeCompare(b[1][0]?.payments?.created_at || ""))
+        .map(([paymentId, rows], index) => {
+          const payment = rows[0]?.payments || {};
+          const student = rows[0]?.students || {};
+          const startDates = rows.map(r => r.start_date).filter(Boolean).sort();
+          const endDates = rows.map(r => r.end_date).filter(Boolean).sort();
+          const batchNames = [...new Set(rows.map(r => r.batches?.batch_code || r.batches?.name).filter(Boolean))].join(", ");
+          const statuses = [...new Set(rows.map(r => r.status_type).filter(Boolean))].join(" + ");
+          const paymentBase = Number(payment.amount || 0);
+          const paymentTotal = Number(payment.final_amount ?? (paymentBase + Number(payment.gst || 0)));
+          const paymentGst = payment.gst != null
+            ? Number(payment.gst)
+            : paymentTotal > paymentBase
+              ? paymentTotal - paymentBase
+              : Math.round(paymentBase * 0.18);
+          const adjustment = adjustmentsByPayment.get(paymentId);
+          const reportedTotal = paymentTotal + Number(adjustment?.total || 0);
+          const reportedGst = paymentGst + Number(adjustment?.gst || 0);
+          const allocatedTotal = allocationsByPayment.get(paymentId);
+          const amountPaid = allocatedTotal && paymentTotal > 0 && reportedTotal > paymentTotal
+            ? Math.round((allocatedTotal / paymentTotal) * reportedTotal)
+            : allocatedTotal || reportedTotal;
+          const gst = reportedTotal > 0 ? Math.round((reportedGst / reportedTotal) * amountPaid) : 0;
+          const gross = Math.max(0, amountPaid - gst);
+
+          return [
+            "",
+            index + 1,
+            formatSheetDate(payment.created_at || rows[0]?.created_at),
+            student.name || "",
+            student ? getDisplayPhone(student) || "" : "",
+            student.email || student.users?.email || "",
+            "",
+            statuses,
+            formatSheetValidity(startDates[0], endDates[endDates.length - 1]),
+            getOnlineOffline(payment.payment_mode),
+            batchNames,
+            rows.length,
+            gross,
+            gst,
+            amountPaid,
+            getModeLabel(payment.payment_mode),
+            getPaidTo(payment, paidToNames),
+          ];
+        });
+
+      await copyRowsToClipboard(sheetRows, "registration row");
+    } catch (err: any) {
+      console.error("copyRegistrationsForSheets failed", err);
+      toast.error(`Could not copy registrations: ${err?.message || "unknown error"}`);
+    } finally {
+      setCopyingSheet(null);
+    }
+  };
+
+  const copyDropInsForSheets = async () => {
+    const targetBatchIds = batches.map(b => b.id);
+    if (targetBatchIds.length === 0) {
+      toast.info("No scoped batches available for this selection");
+      return;
+    }
+    setCopyingSheet("dropIns");
+    try {
+      const { start, end } = getIstDayBounds(format(selectedDate, "yyyy-MM-dd"));
+      let query: any = supabase
+        .from("drop_ins")
+        .select(`
+          id, amount, is_adjusted, adjusted_payment_id, adjusted_amount, created_at, student_id,
+          students(name, phone, email, users(phone, email)),
+          payment:payments!drop_ins_payment_id_fkey(id, amount, gst, final_amount, payment_mode, status, created_at, rzp_account, confirmed_by_staff_id),
+          batch_sessions(session_date, batches(id, name, studio_id, studios(name, code)))
+        `)
+        .eq("organization_id", 1)
+        .gte("created_at", start)
+        .lt("created_at", end)
+        .order("created_at", { ascending: true });
+      if (!scopeUnrestricted) query = query.in("student_id", scope.studentIds);
+
+      const { data, error } = await query;
+      if (error) throw error;
+      const dropInRows = ((data || []) as any[]).filter(row => targetBatchIds.includes(row.batch_sessions?.batches?.id));
+      if (dropInRows.length === 0) {
+        toast.info("No drop-ins found for the selected date and studio");
+        return;
+      }
+
+      const paidToNames = await fetchPaidToNames(dropInRows.map(row => row.payment).filter(Boolean));
+      const sheetRows = dropInRows.map(row => {
+        const student = row.students || {};
+        const payment = row.payment || {};
+        const batch = row.batch_sessions?.batches || {};
+        const isAdjusted = !!row.is_adjusted;
+        const base = isAdjusted ? 0 : Number(payment.amount ?? row.amount ?? 0);
+        const gst = isAdjusted ? 0 : Number(payment.gst ?? Math.round(base * 0.18));
+        const paid = isAdjusted ? 0 : Number(payment.final_amount ?? base + gst);
+        return [
+          formatSheetDate(row.batch_sessions?.session_date || row.created_at),
+          student.name || "",
+          student ? getDisplayPhone(student) || "" : "",
+          student.email || student.users?.email || "",
+          batch.name || "",
+          batch.studios?.name || "",
+          base,
+          gst,
+          paid,
+          getModeLabel(payment.payment_mode),
+          getPaidTo(payment, paidToNames),
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          isAdjusted ? `Adjusted to registration${row.adjusted_payment_id ? ` #${row.adjusted_payment_id}` : ""}` : "",
+        ];
+      });
+
+      await copyRowsToClipboard(sheetRows, "drop-in row");
+    } catch (err: any) {
+      console.error("copyDropInsForSheets failed", err);
+      toast.error(`Could not copy drop-ins: ${err?.message || "unknown error"}`);
+    } finally {
+      setCopyingSheet(null);
+    }
+  };
+
   return (
     <AdminLayout title="Dashboard">
       {/* Filters */}
@@ -765,7 +1039,7 @@ const Dashboard = () => {
 
           {/* Row 4: Date-wise Breakdown with date picker */}
           <div>
-            <div className="flex items-center gap-3 mb-3">
+            <div className="flex flex-wrap items-center gap-3 mb-3">
               <h3 className="text-sm font-semibold text-foreground">Date-wise Breakdown</h3>
               <Popover>
                 <PopoverTrigger asChild>
@@ -784,6 +1058,24 @@ const Dashboard = () => {
                   />
                 </PopoverContent>
               </Popover>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={copyRegistrationsForSheets}
+                disabled={copyingSheet !== null || batches.length === 0}
+              >
+                <ClipboardCopy className="h-4 w-4" />
+                Copy Registrations
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={copyDropInsForSheets}
+                disabled={copyingSheet !== null || batches.length === 0}
+              >
+                <ClipboardCopy className="h-4 w-4" />
+                Copy Drop-ins
+              </Button>
             </div>
             {(() => {
               const dateStr = format(selectedDate, "yyyy-MM-dd");
