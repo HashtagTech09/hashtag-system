@@ -88,7 +88,7 @@ const ACCENT = "#ff007f";
 
 const Dashboard = () => {
   const scope = useScopedStudents();
-  const { loading: scopeLoading, unrestricted: scopeUnrestricted, batchIds: scopeBatchIds } = scope;
+  const { loading: scopeLoading, unrestricted: scopeUnrestricted, batchIds: scopeBatchIds, studioIds: scopeStudioIds } = scope;
   const [studios, setStudios] = useState<Studio[]>([]);
   const [selectedStudio, setSelectedStudio] = useState<string>("all");
   const [batches, setBatches] = useState<Batch[]>([]);
@@ -118,20 +118,28 @@ const Dashboard = () => {
   const [selectedBatch, setSelectedBatch] = useState<{ id: number; name: string; filter: BatchDetailFilter } | null>(null);
 
   useEffect(() => {
+    if (scopeLoading) return;
     const init = async () => {
       const [studioRes, cycleRes] = await Promise.all([
         supabase.from("studios").select("id, name, code").eq("organization_id", 1).order("name"),
         supabase.from("plan_cycles").select("*").eq("organization_id", 1).order("start_date", { ascending: false }),
       ]);
-      setStudios(studioRes.data || []);
+      const studioList = (studioRes.data || []) as Studio[];
+      const visibleStudios = scopeUnrestricted
+        ? studioList
+        : studioList.filter(s => scopeStudioIds.includes(s.id));
+      setStudios(visibleStudios);
+      setSelectedStudio(prev => {
+        if (prev === "all") return prev;
+        return visibleStudios.some(s => String(s.id) === prev) ? prev : "all";
+      });
       const cycles = (cycleRes.data || []) as PlanCycle[];
       setAllCycles(cycles);
       const active = cycles.find(c => c.is_active);
-      if (active) setSelectedCycleId(String(active.id));
-      else if (cycles.length > 0) setSelectedCycleId(String(cycles[0].id));
+      setSelectedCycleId(prev => prev || (active ? String(active.id) : cycles.length > 0 ? String(cycles[0].id) : ""));
     };
     init();
-  }, []);
+  }, [scopeLoading, scopeUnrestricted, scopeStudioIds]);
 
   const selectedCycle = useMemo(() => allCycles.find(c => String(c.id) === selectedCycleId) || null, [allCycles, selectedCycleId]);
 
@@ -251,10 +259,7 @@ const Dashboard = () => {
           .lte("date", selectedCycle.end_date || "2099-12-31")
       );
       
-      // Filter by studio batches if needed
-      const filteredAbsences = batchIds.length > 0 && selectedStudio !== "all"
-        ? absences.filter(a => batchIds.includes(a.batch_id))
-        : absences;
+      const filteredAbsences = absences.filter(a => batchIds.includes(a.batch_id));
       setAttendanceRecords(filteredAbsences);
 
       // Fetch student names for absent students

@@ -38,16 +38,20 @@ export function useScopedStudents(): ScopedAccess {
         .from("studios")
         .select("id")
         .or(`dreamcatcher_id.eq.${uid},wingperson_id.eq.${uid}`);
-      const studioIds = (studios || []).map((s: any) => s.id as number);
+      const assignedStudioIds = (studios || []).map((s: any) => s.id as number);
 
       // Batches at those studios OR where manager is instructor
       const orParts: string[] = [`instructor_id.eq.${uid}`, `instructor_2_id.eq.${uid}`];
-      if (studioIds.length) orParts.push(`studio_id.in.(${studioIds.join(",")})`);
+      if (assignedStudioIds.length) orParts.push(`studio_id.in.(${assignedStudioIds.join(",")})`);
       const { data: batches } = await supabase
         .from("batches")
-        .select("id")
+        .select("id, studio_id")
         .or(orParts.join(","));
       const batchIds = (batches || []).map((b: any) => b.id as number);
+      const studioIds = Array.from(new Set([
+        ...assignedStudioIds,
+        ...(batches || []).map((b: any) => b.studio_id as number | null).filter(Boolean) as number[],
+      ]));
 
       // Students enrolled in those batches
       const studentSet = new Set<number>();
