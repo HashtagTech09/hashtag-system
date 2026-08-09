@@ -6,7 +6,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { CheckCircle, XCircle, Loader2 } from "lucide-react";
 import hashtagLogo from "@/assets/hashtag-pink.png";
-import { canStudentSelectBatch, isBatchPromotionLocked, type ApprovedPromotionLike } from "@/lib/promotionUtils";
 
 const ConfirmCashPage = () => {
   const [searchParams] = useSearchParams();
@@ -99,148 +98,15 @@ const ConfirmCashPage = () => {
     if (!request) return;
     setConfirming(true);
     try {
-      if (request.expires_at && new Date(request.expires_at).getTime() <= Date.now()) {
-        await supabase.from("cash_payment_requests")
-          .update({ status: "expired" })
-          .eq("id", request.id)
-          .eq("status", "pending");
-        setError("This confirmation link has expired.");
-        return;
+      const { data, error: functionErr } = await supabase.functions.invoke("confirm-cash-payment", {
+        body: { token },
+      });
+      if (functionErr || data?.error) {
+        throw new Error(data?.error || functionErr?.message || "Could not confirm cash payment");
       }
-
-      const { data: claimed, error: claimErr } = await supabase
-        .from("cash_payment_requests")
-        .update({ status: "processing", confirmed_at: new Date().toISOString() })
-        .eq("id", request.id)
-        .eq("status", "pending")
-        .gt("expires_at", new Date().toISOString())
-        .select()
-        .single();
-      if (claimErr || !claimed) {
-        setError("This request has already been handled or has expired.");
-        return;
-      }
-
-      const enrollmentData = request.enrollment_data as any;
-      const enrolledBatchIds = [
-        ...(enrollmentData.enrollments || []).map((enrollment: any) => enrollment.batch_id),
-        ...(enrollmentData.existing_extensions || []).map((extension: any) => extension.batch_id),
-      ].filter(Boolean);
-      if (enrolledBatchIds.length > 0) {
-        const [{ data: selectedBatches }, { data: promotions }, { data: existingEnrollments }] = await Promise.all([
-          supabase.from("batches").select("id, name, style_base, level, promotion_required").in("id", enrolledBatchIds),
-          supabase
-            .from("student_promotions")
-            .select("student_id, style_base, to_level, target_batch_id, status")
-            .eq("student_id", request.student_id)
-            .eq("status", "approved"),
-          supabase
-            .from("enrollments")
-            .select("batch_id, batches(style_base, level)")
-            .eq("student_id", request.student_id),
-        ]);
-
-        const hasExistingAccess = (batch: any) => (existingEnrollments || []).some((enrollment: any) => (
-          enrollment.batch_id === batch.id
-          || (enrollment.batches?.style_base === batch.style_base && enrollment.batches?.level === batch.level)
-        ));
-        const lockedWithoutApproval = (selectedBatches || []).filter((batch: any) => (
-          isBatchPromotionLocked(batch)
-          && !hasExistingAccess(batch)
-          && !canStudentSelectBatch(batch, (promotions || []) as ApprovedPromotionLike[])
-        ));
-        if (lockedWithoutApproval.length > 0) {
-          throw new Error(`Promotion approval is required for: ${lockedWithoutApproval.map((batch: any) => batch.name).join(", ")}`);
-        }
-      }
-
-      // Create payment
-      const { data: payment, error: payErr } = await supabase.from("payments").insert({
-        organization_id: request.organization_id,
-        student_id: request.student_id,
-        amount: request.amount,
-        gst: request.gst,
-        final_amount: request.final_amount,
-        payment_mode: "cash",
-        status: "success",
-        confirmed_by_staff_id: request.staff_user_id,
-      }).select().single();
-      if (payErr) throw payErr;
-
-      // Create enrollments
-      let insertedEnrollments: any[] = [];
-      if (enrollmentData.enrollments && enrollmentData.enrollments.length > 0) {
-        const records = enrollmentData.enrollments.map((r: any) => ({
-          ...r,
-          payment_id: payment.id,
-        }));
-        const { data: inserted, error: enrErr } = await supabase.from("enrollments").insert(records).select();
-        if (enrErr) throw enrErr;
-        insertedEnrollments = inserted || [];
-      }
-
-      // Create enrollment_cycles for each new enrollment
-      const cyclesTemplate = enrollmentData.enrollment_cycles_template || [];
-      if (insertedEnrollments.length > 0 && cyclesTemplate.length > 0) {
-        const cycleRows = insertedEnrollments.flatMap((e: any) =>
-          cyclesTemplate.map((c: any) => ({
-            enrollment_id: e.id,
-            student_id: e.student_id,
-            batch_id: e.batch_id,
-            cycle_id: c.cycle_id,
-            cycle_type: c.cycle_type || "regular",
-          }))
-        );
-        const { error: ecErr } = await supabase.from("enrollment_cycles").insert(cycleRows);
-        if (ecErr) throw ecErr;
-      }
-
-      // Extend existing enrollments for Add Batch requests.
-      const existingExtensions = enrollmentData.existing_extensions || [];
-      for (const extension of existingExtensions) {
-        if (extension.missing_cycles?.length) {
-          const missingRows = extension.missing_cycles.map((cycle: any) => ({
-            enrollment_id: extension.enrollment_id,
-            student_id: request.student_id,
-            batch_id: extension.batch_id,
-            cycle_id: cycle.cycle_id,
-            cycle_type: cycle.cycle_type || "regular",
-          }));
-          const { error: missingErr } = await supabase.from("enrollment_cycles").insert(missingRows);
-          if (missingErr) throw missingErr;
-        }
-
-        const update: Record<string, unknown> = {};
-        if (extension.end_date) update.end_date = extension.end_date;
-        if (extension.end_cycle_id) update.end_cycle_id = extension.end_cycle_id;
-        if (Object.keys(update).length > 0) {
-          const { error: updateErr } = await supabase
-            .from("enrollments")
-            .update(update)
-            .eq("id", extension.enrollment_id);
-          if (updateErr) throw updateErr;
-        }
-      }
-
-      // Create payment allocations
-      if (enrollmentData.payment_allocations && enrollmentData.payment_allocations.length > 0) {
-        await supabase.from("payment_allocations").insert(
-          enrollmentData.payment_allocations.map((a: any) => ({ ...a, payment_id: payment.id }))
-        );
-      }
-
-      // Mark cash request as confirmed
-      await supabase.from("cash_payment_requests")
-        .update({ status: "confirmed" })
-        .eq("id", request.id);
-
       setConfirmed(true);
-      toast.success("Payment confirmed successfully!");
+      toast.success(data?.already_confirmed ? "Payment was already confirmed." : "Payment confirmed successfully!");
     } catch (e: any) {
-      await supabase.from("cash_payment_requests")
-        .update({ status: "pending", confirmed_at: null })
-        .eq("id", request.id)
-        .eq("status", "processing");
       toast.error("Failed to confirm: " + e.message);
     } finally {
       setConfirming(false);
