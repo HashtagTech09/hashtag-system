@@ -7,6 +7,21 @@ import { toast } from "sonner";
 import { CheckCircle, XCircle, Loader2 } from "lucide-react";
 import hashtagLogo from "@/assets/hashtag-pink.png";
 
+const EXPIRED_MESSAGE = "This confirmation link has expired. Please create a new cash request.";
+
+const getFunctionErrorMessage = async (functionErr: any) => {
+  const context = functionErr?.context;
+  if (context && typeof context.json === "function") {
+    try {
+      const body = await context.json();
+      if (body?.error) return body.error;
+    } catch (_) {
+      // Fall through to the generic function error message.
+    }
+  }
+  return functionErr?.message || "Could not confirm cash payment";
+};
+
 const ConfirmCashPage = () => {
   const [searchParams] = useSearchParams();
   const token = searchParams.get("token");
@@ -67,11 +82,7 @@ const ConfirmCashPage = () => {
       }
 
       if (data.expires_at && new Date(data.expires_at).getTime() <= Date.now()) {
-        await supabase.from("cash_payment_requests")
-          .update({ status: "expired" })
-          .eq("id", data.id)
-          .eq("status", "pending");
-        setError("This confirmation link has expired.");
+        setError(EXPIRED_MESSAGE);
         setLoading(false);
         return;
       }
@@ -94,19 +105,44 @@ const ConfirmCashPage = () => {
     fetchRequest();
   }, [token]);
 
+  useEffect(() => {
+    if (!request?.expires_at || confirmed || error) return;
+
+    const expiresAt = new Date(request.expires_at).getTime();
+    const remainingMs = expiresAt - Date.now();
+
+    if (remainingMs <= 0) {
+      setError(EXPIRED_MESSAGE);
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setError(EXPIRED_MESSAGE);
+    }, remainingMs);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [request?.expires_at, confirmed, error]);
+
   const handleConfirm = async () => {
     if (!request) return;
     setConfirming(true);
     try {
+      if (request.expires_at && new Date(request.expires_at).getTime() <= Date.now()) {
+        setError(EXPIRED_MESSAGE);
+        toast.error(EXPIRED_MESSAGE);
+        return;
+      }
+
       const { data, error: functionErr } = await supabase.functions.invoke("confirm-cash-payment", {
         body: { token },
       });
       if (functionErr || data?.error) {
-        throw new Error(data?.error || functionErr?.message || "Could not confirm cash payment");
+        throw new Error(data?.error || await getFunctionErrorMessage(functionErr));
       }
       setConfirmed(true);
       toast.success(data?.already_confirmed ? "Payment was already confirmed." : "Payment confirmed successfully!");
     } catch (e: any) {
+      setError(e.message);
       toast.error("Failed to confirm: " + e.message);
     } finally {
       setConfirming(false);
