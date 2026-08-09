@@ -29,6 +29,14 @@ function getWebhookSecret(account: string | null): string {
   return secret;
 }
 
+function getCycleId(cycle: any) {
+  return cycle?.cycle_id ?? cycle?.cycleId ?? null;
+}
+
+function getCycleType(cycle: any) {
+  return cycle?.cycle_type ?? cycle?.cycleType ?? "regular";
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -121,10 +129,10 @@ Deno.serve(async (req) => {
               enrollment_id: enrollment.id,
               student_id: enrollment.student_id,
               batch_id: enrollment.batch_id,
-              cycle_id: c.cycle_id,
-              cycle_type: c.cycle_type || "regular",
-            }));
-            await supabase.from("enrollment_cycles").insert(cycles);
+              cycle_id: getCycleId(c),
+              cycle_type: getCycleType(c),
+            })).filter((cycle: any) => cycle.cycle_id);
+            if (cycles.length > 0) await supabase.from("enrollment_cycles").insert(cycles);
           }
         }
       }
@@ -137,10 +145,10 @@ Deno.serve(async (req) => {
               enrollment_id: extension.enrollment_id,
               student_id: payment.student_id,
               batch_id: extension.batch_id,
-              cycle_id: cycle.cycle_id,
-              cycle_type: cycle.cycle_type || "regular",
-            }));
-            await supabase.from("enrollment_cycles").insert(missingRows);
+              cycle_id: getCycleId(cycle),
+              cycle_type: getCycleType(cycle),
+            })).filter((cycle: any) => cycle.cycle_id);
+            if (missingRows.length > 0) await supabase.from("enrollment_cycles").insert(missingRows);
           }
 
           const update: Record<string, unknown> = {};

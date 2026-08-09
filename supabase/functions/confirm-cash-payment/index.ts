@@ -31,6 +31,14 @@ function promotionUnlocksBatch(batch: any, promotion: any) {
     && normalize(promotion.to_level) === normalize(batch.level);
 }
 
+function getCycleId(cycle: any) {
+  return cycle?.cycle_id ?? cycle?.cycleId ?? null;
+}
+
+function getCycleType(cycle: any) {
+  return cycle?.cycle_type ?? cycle?.cycleType ?? "regular";
+}
+
 async function assertPromotionAccess(supabase: any, request: any, enrollmentData: any) {
   const enrolledBatchIds = [
     ...(enrollmentData.enrollments || []).map((enrollment: any) => enrollment.batch_id),
@@ -158,10 +166,10 @@ Deno.serve(async (req) => {
           enrollment_id: enrollment.id,
           student_id: enrollment.student_id,
           batch_id: enrollment.batch_id,
-          cycle_id: cycle.cycle_id,
-          cycle_type: cycle.cycle_type || "regular",
+          cycle_id: getCycleId(cycle),
+          cycle_type: getCycleType(cycle),
         }))
-      );
+      ).filter((cycle: any) => cycle.cycle_id);
       const { error: cycleErr } = await supabase.from("enrollment_cycles").insert(cycleRows);
       if (cycleErr) throw cycleErr;
     }
@@ -172,9 +180,9 @@ Deno.serve(async (req) => {
           enrollment_id: extension.enrollment_id,
           student_id: claimed.student_id,
           batch_id: extension.batch_id,
-          cycle_id: cycle.cycle_id,
-          cycle_type: cycle.cycle_type || "regular",
-        }));
+          cycle_id: getCycleId(cycle),
+          cycle_type: getCycleType(cycle),
+        })).filter((cycle: any) => cycle.cycle_id);
         const { error: missingErr } = await supabase.from("enrollment_cycles").insert(missingRows);
         if (missingErr) throw missingErr;
       }
