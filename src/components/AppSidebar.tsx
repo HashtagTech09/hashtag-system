@@ -15,6 +15,7 @@ import {
   FileWarning,
   ClipboardCheck,
   BadgeCheck,
+  ClipboardPlus,
 } from "lucide-react";
 import { useApplicationCasesCount } from "@/hooks/useApplicationCasesCount";
 import { NavLink } from "@/components/NavLink";
@@ -45,6 +46,7 @@ const allMainItems = [
 ];
 
 const allOperationItems = [
+  { title: "Registration Portal", url: "/portal/register", icon: ClipboardPlus, roles: ["admin", "manager", "frontdesk"] },
   { title: "Enrollments", url: "/enrollments", icon: ClipboardList, roles: ["admin", "manager", "frontdesk"] },
   { title: "Application Cases", url: "/application-cases", icon: FileWarning, roles: ["admin", "manager"] },
   { title: "Promotion Requests", url: "/promotion-requests", icon: BadgeCheck, roles: ["admin", "manager", "instructor"] },

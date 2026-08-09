@@ -71,7 +71,11 @@ function TestDateBanner() {
   );
 }
 
-const RegisterPage = () => {
+interface RegisterPageProps {
+  embedded?: boolean;
+}
+
+const RegisterPage = ({ embedded = false }: RegisterPageProps) => {
   const [tab, setTab] = useState("join");
   const tabHelp =
     tab === "join"
@@ -81,19 +85,28 @@ const RegisterPage = () => {
         : "Renew your current batch or add another batch under the same account.";
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="border-b border-border bg-card/50 backdrop-blur-xl sticky top-0 z-50">
-        <div className="max-w-2xl mx-auto px-4 py-4 flex items-center gap-3">
-          <img src={hashtagLogo} alt="Hashtag" className="h-10 w-10 rounded-lg" />
-          <div>
-            <h1 className="font-display font-bold text-foreground text-lg">Hashtag</h1>
-            <p className="text-xs text-muted-foreground">Student Registration Portal</p>
+    <div className={embedded ? "bg-background" : "min-h-screen bg-background"}>
+      {!embedded && (
+        <div className="border-b border-border bg-card/50 backdrop-blur-xl sticky top-0 z-50">
+          <div className="max-w-2xl mx-auto px-4 py-4 flex items-center gap-3">
+            <img src={hashtagLogo} alt="Hashtag" className="h-10 w-10 rounded-lg" />
+            <div>
+              <h1 className="font-display font-bold text-foreground text-lg">Hashtag</h1>
+              <p className="text-xs text-muted-foreground">Student Registration Portal</p>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
+      <div className={cn("max-w-2xl mx-auto space-y-4", embedded ? "px-0 py-0" : "px-4 py-6")}>
+        {embedded && (
+          <div className="flex items-center gap-3 rounded-lg border border-border bg-card/50 p-3">
+            <img src={hashtagLogo} alt="Hashtag" className="h-9 w-9 rounded-lg" />
+            <div>
+              <h2 className="font-display font-semibold text-foreground">Student Registration Portal</h2>
+            </div>
+          </div>
+        )}
         <TestDateBanner />
 
         <Tabs value={tab} onValueChange={setTab}>

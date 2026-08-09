@@ -47,6 +47,13 @@ function getIstDayBounds(date: string): { start: string; end: string } {
   return { start: start.toISOString(), end: end.toISOString() };
 }
 
+function getIstRangeBounds(startDate: string, endDate: string): { start: string; end: string } {
+  const start = new Date(`${startDate}T00:00:00+05:30`);
+  const end = new Date(`${endDate}T00:00:00+05:30`);
+  end.setUTCDate(end.getUTCDate() + 1);
+  return { start: start.toISOString(), end: end.toISOString() };
+}
+
 function cleanSheetCell(value: any): string {
   if (value === null || value === undefined) return "";
   return String(value).replace(/\t/g, " ").replace(/\r?\n/g, " ").trim();
@@ -154,11 +161,13 @@ const Dashboard = () => {
   const [renDreamsOpen, setRenDreamsOpen] = useState(false);
   const [headCountOpen, setHeadCountOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date>(nowIST());
+  const [copyStartDate, setCopyStartDate] = useState(format(nowIST(), "yyyy-MM-dd"));
+  const [copyEndDate, setCopyEndDate] = useState(format(nowIST(), "yyyy-MM-dd"));
   const [missedThreshold, setMissedThreshold] = useState(3);
   const [attendanceRecords, setAttendanceRecords] = useState<{ student_id: number; batch_id: number }[]>([]);
   const [studentNames, setStudentNames] = useState<Map<number, { name: string; phone: string | null }>>(new Map());
   const [selectedBatch, setSelectedBatch] = useState<{ id: number; name: string; filter: BatchDetailFilter } | null>(null);
-  const [copyingSheet, setCopyingSheet] = useState<"registrations" | "dropIns" | null>(null);
+  const [copyingSheet, setCopyingSheet] = useState<"registrations" | "dropIns" | "dateWise" | null>(null);
 
   useEffect(() => {
     if (scopeLoading) return;
@@ -185,6 +194,12 @@ const Dashboard = () => {
   }, [scopeLoading, scopeUnrestricted, scopeStudioIds]);
 
   const selectedCycle = useMemo(() => allCycles.find(c => String(c.id) === selectedCycleId) || null, [allCycles, selectedCycleId]);
+
+  useEffect(() => {
+    if (!selectedCycle) return;
+    setCopyStartDate(selectedCycle.start_date);
+    setCopyEndDate(selectedCycle.end_date || selectedCycle.start_date);
+  }, [selectedCycle?.id]);
 
   useEffect(() => {
     if (!selectedCycle || scopeLoading) return;
@@ -709,15 +724,21 @@ const Dashboard = () => {
     toast.success(`Copied ${rows.length} ${label}${rows.length === 1 ? "" : "s"} for Google Sheets`);
   };
 
-  const copyRegistrationsForSheets = async () => {
+  const copyRegistrationsForSheets = async (range?: { startDate: string; endDate: string }) => {
     const targetBatchIds = batches.map(b => b.id);
     if (targetBatchIds.length === 0) {
       toast.info("No scoped batches available for this selection");
       return;
     }
+    if (range && range.endDate < range.startDate) {
+      toast.error("End date cannot be before start date");
+      return;
+    }
     setCopyingSheet("registrations");
     try {
-      const { start, end } = getIstDayBounds(format(selectedDate, "yyyy-MM-dd"));
+      const { start, end } = range
+        ? getIstRangeBounds(range.startDate, range.endDate)
+        : getIstDayBounds(format(selectedDate, "yyyy-MM-dd"));
       let query: any = supabase
         .from("enrollments")
         .select(`
@@ -841,15 +862,21 @@ const Dashboard = () => {
     }
   };
 
-  const copyDropInsForSheets = async () => {
+  const copyDropInsForSheets = async (range?: { startDate: string; endDate: string }) => {
     const targetBatchIds = batches.map(b => b.id);
     if (targetBatchIds.length === 0) {
       toast.info("No scoped batches available for this selection");
       return;
     }
+    if (range && range.endDate < range.startDate) {
+      toast.error("End date cannot be before start date");
+      return;
+    }
     setCopyingSheet("dropIns");
     try {
-      const { start, end } = getIstDayBounds(format(selectedDate, "yyyy-MM-dd"));
+      const { start, end } = range
+        ? getIstRangeBounds(range.startDate, range.endDate)
+        : getIstDayBounds(format(selectedDate, "yyyy-MM-dd"));
       let query: any = supabase
         .from("drop_ins")
         .select(`
@@ -909,6 +936,45 @@ const Dashboard = () => {
     } catch (err: any) {
       console.error("copyDropInsForSheets failed", err);
       toast.error(`Could not copy drop-ins: ${err?.message || "unknown error"}`);
+    } finally {
+      setCopyingSheet(null);
+    }
+  };
+
+  const copyDateWiseForSheets = async () => {
+    if (copyEndDate < copyStartDate) {
+      toast.error("End date cannot be before start date");
+      return;
+    }
+    setCopyingSheet("dateWise");
+    try {
+      const rows = dateWise
+        .filter(row => row.date >= copyStartDate && row.date <= copyEndDate)
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .map(row => [
+          formatSheetDate(row.date),
+          row.NEW,
+          row.REN,
+          row.REV,
+          row.dropIn,
+          row.diAdjusted,
+          row.gross,
+          row.gst,
+          row.total,
+          row.cash,
+          row.razorpay,
+        ]);
+      if (rows.length === 0) {
+        toast.info("No date-wise rows found for the selected range");
+        return;
+      }
+      await copyRowsToClipboard([
+        ["Date", "NEW", "REN", "REV", "Drop-ins", "Adjusted Drop-ins", "Gross", "GST", "Total", "Cash", "Razorpay"],
+        ...rows,
+      ], "date-wise row");
+    } catch (err: any) {
+      console.error("copyDateWiseForSheets failed", err);
+      toast.error(`Could not copy date-wise summary: ${err?.message || "unknown error"}`);
     } finally {
       setCopyingSheet(null);
     }
@@ -1061,21 +1127,62 @@ const Dashboard = () => {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={copyRegistrationsForSheets}
+                onClick={() => copyRegistrationsForSheets()}
                 disabled={copyingSheet !== null || batches.length === 0}
               >
                 <ClipboardCopy className="h-4 w-4" />
-                Copy Registrations
+                Copy Day Reg
               </Button>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={copyDropInsForSheets}
+                onClick={() => copyDropInsForSheets()}
                 disabled={copyingSheet !== null || batches.length === 0}
               >
                 <ClipboardCopy className="h-4 w-4" />
-                Copy Drop-ins
+                Copy Day Drop-ins
               </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                <Input
+                  type="date"
+                  value={copyStartDate}
+                  onChange={(e) => setCopyStartDate(e.target.value)}
+                  className="h-9 w-[150px]"
+                />
+                <Input
+                  type="date"
+                  value={copyEndDate}
+                  onChange={(e) => setCopyEndDate(e.target.value)}
+                  className="h-9 w-[150px]"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => copyRegistrationsForSheets({ startDate: copyStartDate, endDate: copyEndDate })}
+                  disabled={copyingSheet !== null || batches.length === 0}
+                >
+                  <ClipboardCopy className="h-4 w-4" />
+                  Copy All Reg
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => copyDropInsForSheets({ startDate: copyStartDate, endDate: copyEndDate })}
+                  disabled={copyingSheet !== null || batches.length === 0}
+                >
+                  <ClipboardCopy className="h-4 w-4" />
+                  Copy All Drop-ins
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={copyDateWiseForSheets}
+                  disabled={copyingSheet !== null || batches.length === 0}
+                >
+                  <ClipboardCopy className="h-4 w-4" />
+                  Copy Date-wise
+                </Button>
+              </div>
             </div>
             {(() => {
               const dateStr = format(selectedDate, "yyyy-MM-dd");

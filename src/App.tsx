@@ -22,6 +22,7 @@ import PlanCyclesPage from "./pages/PlanCycles";
 import DropInsPage from "./pages/DropIns";
 import ImportPage from "./pages/Import";
 import RegisterPage from "./pages/Register";
+import InternalRegisterPage from "./pages/InternalRegister";
 import ConfirmCashPage from "./pages/ConfirmCash";
 import ResetPasswordPage from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
@@ -70,6 +71,7 @@ const AppRoutes = () => (
     <Route path="/batches" element={<ProtectedRoute><BatchesPage /></ProtectedRoute>} />
     <Route path="/plan-cycles" element={<GlobalAdminRoute><PlanCyclesPage /></GlobalAdminRoute>} />
     <Route path="/enrollments" element={<ProtectedRoute><EnrollmentsPage /></ProtectedRoute>} />
+    <Route path="/portal/register" element={<ProtectedRoute><InternalRegisterPage /></ProtectedRoute>} />
     <Route path="/application-cases" element={<ProtectedRoute><ApplicationCasesPage /></ProtectedRoute>} />
     <Route path="/promotion-requests" element={<ProtectedRoute><PromotionRequestsPage /></ProtectedRoute>} />
     <Route path="/drop-ins" element={<ProtectedRoute><DropInsPage /></ProtectedRoute>} />
