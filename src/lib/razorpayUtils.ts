@@ -36,15 +36,38 @@ interface RazorpayOrderParams {
   student_phone: string;
   batch_names: string;
   plan_name: string;
+  description?: string;
+  date?: string;
 }
 
 interface RazorpayCheckoutOptions {
   orderParams: RazorpayOrderParams;
-  onSuccess: () => void;
+  waitForWebhook?: boolean;
+  onSuccess: (details?: { paymentId?: number; orderId?: string; gatewayPaymentId?: string }) => void;
   onFailure: (error: string) => void;
 }
 
-export async function initiateRazorpayPayment({ orderParams, onSuccess, onFailure }: RazorpayCheckoutOptions) {
+async function waitForWebhookCompletion(paymentId: number, timeoutMs = 90000) {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    const { data, error } = await supabase
+      .from("pending_enrollments")
+      .select("status")
+      .eq("payment_id", paymentId)
+      .maybeSingle();
+
+    if (error) throw new Error(error.message || "Could not check payment confirmation");
+    if (data?.status === "completed") return;
+    if (data?.status === "failed") throw new Error("Payment confirmation failed");
+
+    await new Promise(resolve => setTimeout(resolve, 2000));
+  }
+
+  throw new Error("Payment was received, but webhook confirmation is still pending. Please refresh in a minute.");
+}
+
+export async function initiateRazorpayPayment({ orderParams, waitForWebhook = false, onSuccess, onFailure }: RazorpayCheckoutOptions) {
   try {
     await loadRazorpayScript();
 
@@ -60,14 +83,14 @@ export async function initiateRazorpayPayment({ orderParams, onSuccess, onFailur
       throw new Error(data.error);
     }
 
-    const { order_id, razorpay_key_id, amount } = data;
+    const { order_id, razorpay_key_id, amount, payment_id } = data;
 
     const options = {
       key: razorpay_key_id,
       amount,
       currency: "INR",
       name: "Hashtag",
-      description: `Registration - ${orderParams.plan_name}`,
+      description: orderParams.description || `Registration - ${orderParams.plan_name}`,
       order_id,
       prefill: {
         name: orderParams.student_name,
@@ -77,9 +100,19 @@ export async function initiateRazorpayPayment({ orderParams, onSuccess, onFailur
         batches: orderParams.batch_names,
         plan: orderParams.plan_name,
       },
-      handler: function () {
-        // Payment successful on client side — webhook will finalize
-        onSuccess();
+      handler: async function (response: any) {
+        try {
+          if (waitForWebhook && payment_id) {
+            await waitForWebhookCompletion(Number(payment_id));
+          }
+          onSuccess({
+            paymentId: payment_id,
+            orderId: order_id,
+            gatewayPaymentId: response?.razorpay_payment_id,
+          });
+        } catch (e: any) {
+          onFailure(e.message || "Payment confirmation is pending");
+        }
       },
       modal: {
         ondismiss: function () {

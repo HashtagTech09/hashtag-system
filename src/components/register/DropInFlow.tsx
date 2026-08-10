@@ -19,6 +19,7 @@ import type { ReceiptData } from "@/lib/receiptTemplate";
 import { needsAccountSetup, type AccountOwnerType } from "@/lib/accountOwner";
 import StudioSelection from "./StudioSelection";
 import { DEFAULT_DROP_IN_TOTAL, DEFAULT_LONG_DROP_IN_TOTAL, getDropInPricingForSession } from "@/lib/dropInPricing";
+import { initiateRazorpayPayment } from "@/lib/razorpayUtils";
 
 type Step = "studio" | "browse" | "phone" | "setup" | "hub" | "details" | "confirm";
 type UserRow = Database["public"]["Tables"]["users"]["Row"];
@@ -127,6 +128,55 @@ export default function DropInFlow() {
     setSubmitting(true);
     try {
       const { baseAmount, gst, inclusiveTotal } = dropInPricing;
+      const sessionLabel = `${selectedSession.session_date} • ${selectedSession.start_time}–${selectedSession.end_time}`;
+
+      const showReceipt = (mode: string, transactionId: string) => {
+        setReceiptData({
+          student_name: student.name,
+          plan_name: "Drop-In",
+          batches: sessionLabel,
+          amount: inclusiveTotal.toLocaleString("en-IN"),
+          payment_mode: mode,
+          transaction_id: transactionId,
+          date: simulatedToday,
+        });
+        setReceiptOpen(true);
+      };
+
+      if (paymentMode === "razorpay") {
+        await initiateRazorpayPayment({
+          waitForWebhook: true,
+          orderParams: {
+            student_id: student.id,
+            organization_id: 1,
+            batch_ids: [selectedSession.batch_id],
+            amount: baseAmount,
+            gst,
+            final_amount: inclusiveTotal,
+            enrollment_data: {
+              drop_in: {
+                organization_id: 1,
+                student_id: student.id,
+                batch_session_id: selectedSession.id,
+                amount: baseAmount,
+              },
+            },
+            student_name: student.name,
+            student_phone: student.phone || student.users?.phone || user?.phone || "",
+            batch_names: sessionLabel,
+            plan_name: "Drop-In",
+            description: `Drop-in - ${sessionLabel}`,
+            date: simulatedToday,
+          },
+          onSuccess: (details) => {
+            toast.success("Payment confirmed. Drop-in booked!");
+            showReceipt("Razorpay", details?.gatewayPaymentId || "Webhook confirmed");
+          },
+          onFailure: (err) => toast.error(err),
+        });
+        return;
+      }
+
       const { data: payment, error: payErr } = await supabase.from("payments").insert({
         organization_id: 1, student_id: student.id, amount: baseAmount,
         gst, final_amount: inclusiveTotal, payment_mode: paymentMode, status: "success",
@@ -140,16 +190,7 @@ export default function DropInFlow() {
       if (error) throw error;
 
       toast.success(`Drop-in booked! Amount: ₹${inclusiveTotal.toLocaleString("en-IN")}`);
-      setReceiptData({
-        student_name: student.name,
-        plan_name: "Drop-In",
-        batches: `${selectedSession?.session_date} • ${selectedSession?.start_time}–${selectedSession?.end_time}`,
-        amount: inclusiveTotal.toLocaleString("en-IN"),
-        payment_mode: paymentMode === "razorpay" ? "Razorpay" : "Cash",
-        transaction_id: `DROP-${payment.id}`,
-        date: simulatedToday,
-      });
-      setReceiptOpen(true);
+      showReceipt("Cash", `DROP-${payment.id}`);
     } catch {
       toast.error("Booking failed. Please try again.");
     } finally {

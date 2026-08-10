@@ -111,6 +111,7 @@ Deno.serve(async (req) => {
       batch_names,
       plan_name,
     } = body;
+    const orderType = enrollment_data?.drop_in ? "drop_in" : "registration";
 
     if (!student_id || !batch_ids?.length || !final_amount || !enrollment_data) {
       return new Response(JSON.stringify({ error: "Missing required fields" }), {
@@ -189,6 +190,7 @@ Deno.serve(async (req) => {
         currency: "INR",
         receipt: `pay_${payment.id}`,
         notes: {
+          order_type: orderType,
           student_name: student_name || "",
           student_phone: student_phone || "",
           batches: batch_names || "",

@@ -114,6 +114,18 @@ Deno.serve(async (req) => {
     if (pending?.enrollment_data) {
       const data = pending.enrollment_data as any;
 
+      if (data.drop_in) {
+        const dropIn = data.drop_in;
+        const { error: dropInErr } = await supabase.from("drop_ins").insert({
+          organization_id: dropIn.organization_id || payment.organization_id,
+          student_id: dropIn.student_id || payment.student_id,
+          batch_session_id: dropIn.batch_session_id,
+          amount: dropIn.amount ?? payment.amount,
+          payment_id: payment.id,
+        });
+        if (dropInErr) throw dropInErr;
+      }
+
       // Insert enrollments
       if (data.enrollments?.length) {
         const enrollments = data.enrollments.map((e: any) => ({
