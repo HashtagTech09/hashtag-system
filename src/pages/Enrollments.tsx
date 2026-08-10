@@ -11,7 +11,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, PackagePlus, Download, FileWarning, MoreVertical, CalendarCog, Trash2, ArrowRightLeft, ClipboardCopy } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Plus, Search, PackagePlus, Download, FileWarning, MoreVertical, CalendarCog, Trash2, ArrowRightLeft, ClipboardCopy, Phone } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { getDisplayPhone } from "@/lib/studentUtils";
@@ -62,6 +63,12 @@ function cleanSheetCell(value: any): string {
   return String(value).replace(/\t/g, " ").replace(/\r?\n/g, " ").trim();
 }
 
+function normalizePhoneForSave(value: string): string | null {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length < 10) return null;
+  return digits.slice(-10);
+}
+
 const EnrollmentsPage = () => {
 
   const { staffUser, isAdminOrManager } = useAuth();
@@ -76,6 +83,10 @@ const EnrollmentsPage = () => {
   const [deleteFor, setDeleteFor] = useState<any>(null);
   const [changeBatchFor, setChangeBatchFor] = useState<any>(null);
   const [changeBatchToId, setChangeBatchToId] = useState<string>("");
+  const [editPhoneFor, setEditPhoneFor] = useState<any>(null);
+  const [editPhoneValue, setEditPhoneValue] = useState("");
+  const [updateLinkedUserPhone, setUpdateLinkedUserPhone] = useState(false);
+  const [savingPhone, setSavingPhone] = useState(false);
   const [overlapWarning, setOverlapWarning] = useState<{ message: string; onConfirm: () => void } | null>(null);
   const [enrollOverlap, setEnrollOverlap] = useState<{
     studentName: string;
@@ -135,7 +146,7 @@ const EnrollmentsPage = () => {
     }
 
     const buildEnrollQ = () => {
-      let q: any = supabase.from("enrollments").select("*, students(name, phone, users(phone)), batches(name, batch_code, studio_id, studios(name, code)), subscription_plans(name), start_cycle:plan_cycles!enrollments_start_cycle_id_fkey(name), end_cycle:plan_cycles!enrollments_end_cycle_id_fkey(name)").eq("organization_id", 1).eq("is_active", true).order("created_at", { ascending: false });
+      let q: any = supabase.from("enrollments").select("*, students(id, name, phone, user_id, users(id, phone)), batches(name, batch_code, studio_id, studios(name, code)), subscription_plans(name), start_cycle:plan_cycles!enrollments_start_cycle_id_fkey(name), end_cycle:plan_cycles!enrollments_end_cycle_id_fkey(name)").eq("organization_id", 1).eq("is_active", true).order("created_at", { ascending: false });
       if (!scope.unrestricted) q = q.in("student_id", scope.studentIds);
       return q;
     };
@@ -201,6 +212,51 @@ const EnrollmentsPage = () => {
     setCaseEnrollment(null);
     setCaseReason("");
     fetchData();
+  };
+
+  const openEditPhone = (enrollment: any) => {
+    setEditPhoneFor(enrollment);
+    setEditPhoneValue(enrollment.students ? getDisplayPhone(enrollment.students).replace("—", "") : "");
+    setUpdateLinkedUserPhone(!enrollment.students?.phone && Boolean(enrollment.students?.users?.id));
+  };
+
+  const handleSavePhone = async () => {
+    if (!editPhoneFor?.student_id) return;
+    const phone = normalizePhoneForSave(editPhoneValue);
+    if (!phone) {
+      toast.error("Enter a valid 10-digit phone number");
+      return;
+    }
+
+    setSavingPhone(true);
+    try {
+      const { error: studentErr } = await supabase
+        .from("students")
+        .update({ phone })
+        .eq("id", editPhoneFor.student_id);
+      if (studentErr) throw studentErr;
+
+      if (updateLinkedUserPhone) {
+        const linkedUserId = editPhoneFor.students?.users?.id || editPhoneFor.students?.user_id;
+        if (!linkedUserId) throw new Error("No linked login account found for this student");
+        const { error: userErr } = await supabase
+          .from("users")
+          .update({ phone })
+          .eq("id", linkedUserId);
+        if (userErr) throw userErr;
+      }
+
+      toast.success(updateLinkedUserPhone ? "Student and login phone updated" : "Student phone updated");
+      setEditPhoneFor(null);
+      setEditPhoneValue("");
+      setUpdateLinkedUserPhone(false);
+      fetchData();
+    } catch (err: any) {
+      console.error("handleSavePhone failed", err);
+      toast.error(`Could not update phone: ${err?.message || "unknown error"}`);
+    } finally {
+      setSavingPhone(false);
+    }
   };
 
   const handleSaveValidity = async () => {
@@ -1431,6 +1487,10 @@ const EnrollmentsPage = () => {
                                 Request Application Case
                               </DropdownMenuItem>
                             )}
+                            <DropdownMenuItem onClick={() => openEditPhone(e)}>
+                              <Phone className="h-4 w-4 mr-2" />
+                              Edit Phone
+                            </DropdownMenuItem>
                             {isTestMode && (
                               <>
                                 <DropdownMenuSeparator />
@@ -1513,6 +1573,59 @@ const EnrollmentsPage = () => {
             <Button variant="outline" onClick={() => setCaseDialogOpen(false)}>Cancel</Button>
             <Button className="gradient-primary" onClick={requestApplicationCase}>Submit Request</Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!editPhoneFor} onOpenChange={(open) => {
+        if (!open) {
+          setEditPhoneFor(null);
+          setEditPhoneValue("");
+          setUpdateLinkedUserPhone(false);
+        }
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Edit Phone Number</DialogTitle></DialogHeader>
+          {editPhoneFor && (
+            <div className="space-y-4">
+              <div className="p-3 rounded border border-border text-sm space-y-1">
+                <p><span className="text-muted-foreground">Student:</span> <span className="font-medium">{editPhoneFor.students?.name}</span></p>
+                <p><span className="text-muted-foreground">Batch:</span> {editPhoneFor.batches?.name}</p>
+                <p><span className="text-muted-foreground">Current student phone:</span> {editPhoneFor.students?.phone || "Not set"}</p>
+                <p><span className="text-muted-foreground">Linked login phone:</span> {editPhoneFor.students?.users?.phone || "Not linked"}</p>
+              </div>
+              <div>
+                <Label>New phone number</Label>
+                <Input
+                  value={editPhoneValue}
+                  onChange={(e) => setEditPhoneValue(e.target.value)}
+                  placeholder="10-digit phone number"
+                  className="mt-1.5"
+                />
+                <p className="text-xs text-muted-foreground mt-1">Only digits are saved; +91 or spaces are okay.</p>
+              </div>
+              {editPhoneFor.students?.users?.id && (
+                <label className="flex items-start gap-3 rounded-lg border border-border p-3 text-sm">
+                  <Checkbox
+                    checked={updateLinkedUserPhone}
+                    onCheckedChange={(checked) => setUpdateLinkedUserPhone(Boolean(checked))}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    <span className="font-medium text-foreground">Also update login phone</span>
+                    <span className="block text-xs text-muted-foreground mt-1">
+                      Use this when the student or parent should log in with the new number. If this login owns multiple students, all of them will use the new login number.
+                    </span>
+                  </span>
+                </label>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setEditPhoneFor(null); setEditPhoneValue(""); setUpdateLinkedUserPhone(false); }}>Cancel</Button>
+            <Button className="gradient-primary" onClick={handleSavePhone} disabled={savingPhone || !editPhoneValue.trim()}>
+              {savingPhone ? "Saving..." : "Save Phone"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
