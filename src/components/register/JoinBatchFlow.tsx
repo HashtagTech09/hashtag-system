@@ -336,6 +336,7 @@ export default function JoinBatchFlow() {
       setTestConfirmationUrl(emailData?.test_mode ? confirmUrl : null);
 
       toast.success("Cash approval request sent. Enrollment will happen after manager/instructor approval.");
+      showReceipt("Cash", `CASH-${cashReq.id} pending approval`);
       setStep("waiting");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Please try again.";

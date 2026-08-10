@@ -6,6 +6,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { CheckCircle, XCircle, Loader2 } from "lucide-react";
 import hashtagLogo from "@/assets/hashtag-pink.png";
+import ReceiptPreviewDialog from "@/components/register/ReceiptPreviewDialog";
+import type { ReceiptData } from "@/lib/receiptTemplate";
 
 const EXPIRED_MESSAGE = "This confirmation link has expired. Please create a new cash request.";
 
@@ -33,6 +35,8 @@ const ConfirmCashPage = () => {
   const [studentName, setStudentName] = useState("");
   const [staffName, setStaffName] = useState("");
   const [batchNames, setBatchNames] = useState<string[]>([]);
+  const [receiptOpen, setReceiptOpen] = useState(false);
+  const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
 
   useEffect(() => {
     if (!token) { setError("Invalid link — no token provided."); setLoading(false); return; }
@@ -140,6 +144,16 @@ const ConfirmCashPage = () => {
         throw new Error(data?.error || await getFunctionErrorMessage(functionErr));
       }
       setConfirmed(true);
+      setReceiptData({
+        student_name: studentName,
+        plan_name: "Registration",
+        batches: batchNames.join(", "),
+        amount: Number(request.final_amount || 0).toLocaleString("en-IN"),
+        payment_mode: "Cash",
+        transaction_id: data?.payment_id ? `PAY-${data.payment_id}` : `CASH-${request.id}`,
+        date: new Date().toLocaleDateString("en-IN"),
+      });
+      setReceiptOpen(true);
       toast.success(data?.already_confirmed ? "Payment was already confirmed." : "Payment confirmed successfully!");
     } catch (e: any) {
       setError(e.message);
@@ -239,6 +253,11 @@ const ConfirmCashPage = () => {
           </Card>
         )}
       </div>
+      <ReceiptPreviewDialog
+        open={receiptOpen}
+        onClose={() => setReceiptOpen(false)}
+        data={receiptData || {}}
+      />
     </div>
   );
 };

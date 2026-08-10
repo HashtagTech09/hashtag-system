@@ -16,6 +16,8 @@ import { MapPin, ChevronRight, ShoppingCart, X, Check, ArrowLeft, Trash2, Lock }
 import { useSimulatedToday } from "@/contexts/TestDateContext";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { canStudentSelectBatch, getLockedBatchNames, isBatchPromotionLocked, type ApprovedPromotionLike } from "@/lib/promotionUtils";
+import ReceiptPreviewDialog from "./ReceiptPreviewDialog";
+import type { ReceiptData } from "@/lib/receiptTemplate";
 
 type UserRow = Database["public"]["Tables"]["users"]["Row"];
 type CashRecipient = Pick<UserRow, "id" | "name" | "email">;
@@ -66,6 +68,8 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
   const [testConfirmationUrl, setTestConfirmationUrl] = useState<string | null>(null);
   const [promotionAccess, setPromotionAccess] = useState<ApprovedPromotionLike[]>([]);
   const [pendingPromotions, setPendingPromotions] = useState<any[]>([]);
+  const [receiptOpen, setReceiptOpen] = useState(false);
+  const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
   const contextToday = useSimulatedToday();
   const simulatedToday = simulatedTodayProp || contextToday;
 
@@ -398,6 +402,25 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
     return allocateCyclesForPlan(plan, planCycles, startIdx !== -1 ? startIdx : 0);
   };
 
+  const showReceipt = (params: {
+    planName: string;
+    batchNames: string;
+    amount: number;
+    paymentMode: string;
+    transactionId: string;
+  }) => {
+    setReceiptData({
+      student_name: student.name,
+      plan_name: params.planName,
+      batches: params.batchNames,
+      amount: params.amount.toLocaleString("en-IN"),
+      payment_mode: params.paymentMode,
+      transaction_id: params.transactionId,
+      date: simulatedToday,
+    });
+    setReceiptOpen(true);
+  };
+
   const onRenewSuccess = async () => {
     await markCartConverted();
     toast.success(`Payment initiated! Enrollment will be confirmed once payment is captured.`);
@@ -448,7 +471,16 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
             plan_name: planName,
             date: simulatedToday,
           },
-          onSuccess: onRenewSuccess,
+          onSuccess: () => {
+            showReceipt({
+              planName,
+              batchNames,
+              amount: breakdown.total,
+              paymentMode: "Razorpay",
+              transactionId: "Pending capture",
+            });
+            onRenewSuccess();
+          },
           onFailure: (err) => toast.error(err),
         });
         setSubmitting(false);
@@ -472,6 +504,13 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
       setTestConfirmationUrl(cashApproval.testMode ? cashApproval.confirmUrl : null);
       await markCartConverted();
       toast.success("Cash approval request sent to the batch manager and instructor. Enrollment will happen after confirmation.");
+      showReceipt({
+        planName: subPlans.find(p => p.id === Number(selectedPlanId))?.name || "",
+        batchNames: selectedBatchIds.map(id => batches.find(b => b.id === Number(id))?.name).filter(Boolean).join(", "),
+        amount: breakdown.total,
+        paymentMode: "Cash",
+        transactionId: `CASH-${cashApproval.cashReq?.id || "pending"} pending approval`,
+      });
       setMode("view");
       setSubStep("studio");
       setSelectedBatchIds([]);
@@ -626,7 +665,16 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
             plan_name: addPlan.name,
             date: simulatedToday,
           },
-          onSuccess: onRenewSuccess,
+          onSuccess: () => {
+            showReceipt({
+              planName: addPlan.name,
+              batchNames,
+              amount: addBatchBreakdown.total,
+              paymentMode: "Razorpay",
+              transactionId: "Pending capture",
+            });
+            onRenewSuccess();
+          },
           onFailure: (err) => toast.error(err),
         });
         setSubmitting(false);
@@ -650,6 +698,13 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
 
       await markCartConverted();
       toast.success("Cash approval request sent to the batch manager and instructor. Batch changes will happen after confirmation.");
+      showReceipt({
+        planName: addPlan.name,
+        batchNames: selectedBatchIds.map(id => batches.find(b => b.id === Number(id))?.name).filter(Boolean).join(", "),
+        amount: addBatchBreakdown.total,
+        paymentMode: "Cash",
+        transactionId: `CASH-${cashApproval.cashReq?.id || "pending"} pending approval`,
+      });
       setMode("view");
       setSubStep("studio");
       setSelectedBatchIds([]);
@@ -1250,6 +1305,14 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
           )}
         </div>
       )}
+
+      <ReceiptPreviewDialog
+        open={receiptOpen}
+        onClose={() => setReceiptOpen(false)}
+        data={receiptData || {}}
+        recipientEmail={student?.email || user?.email}
+        recipientPhone={student?.phone || user?.phone}
+      />
     </div>
   );
 }
