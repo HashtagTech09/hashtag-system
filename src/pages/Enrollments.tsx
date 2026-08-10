@@ -87,6 +87,7 @@ const EnrollmentsPage = () => {
   const [editPhoneValue, setEditPhoneValue] = useState("");
   const [updateLinkedUserPhone, setUpdateLinkedUserPhone] = useState(false);
   const [savingPhone, setSavingPhone] = useState(false);
+  const [duplicatePhoneMatch, setDuplicatePhoneMatch] = useState<{ student: any; phone: string } | null>(null);
   const [overlapWarning, setOverlapWarning] = useState<{ message: string; onConfirm: () => void } | null>(null);
   const [enrollOverlap, setEnrollOverlap] = useState<{
     studentName: string;
@@ -218,6 +219,7 @@ const EnrollmentsPage = () => {
     setEditPhoneFor(enrollment);
     setEditPhoneValue(enrollment.students ? getDisplayPhone(enrollment.students).replace("—", "") : "");
     setUpdateLinkedUserPhone(!enrollment.students?.phone && Boolean(enrollment.students?.users?.id));
+    setDuplicatePhoneMatch(null);
   };
 
   const handleSavePhone = async () => {
@@ -230,6 +232,21 @@ const EnrollmentsPage = () => {
 
     setSavingPhone(true);
     try {
+      const studentName = (editPhoneFor.students?.name || "").trim();
+      const { data: matchingStudents, error: matchErr } = await supabase
+        .from("students")
+        .select("id, name, phone, user_id")
+        .eq("organization_id", 1)
+        .eq("phone", phone)
+        .ilike("name", studentName);
+      if (matchErr) throw matchErr;
+
+      const duplicateStudent = (matchingStudents || []).find((s: any) => s.id !== editPhoneFor.student_id);
+      if (duplicateStudent) {
+        setDuplicatePhoneMatch({ student: duplicateStudent, phone });
+        return;
+      }
+
       const { error: studentErr } = await supabase
         .from("students")
         .update({ phone })
@@ -254,6 +271,44 @@ const EnrollmentsPage = () => {
     } catch (err: any) {
       console.error("handleSavePhone failed", err);
       toast.error(`Could not update phone: ${err?.message || "unknown error"}`);
+    } finally {
+      setSavingPhone(false);
+    }
+  };
+
+  const handleLinkDuplicateStudent = async () => {
+    if (!editPhoneFor || !duplicatePhoneMatch) return;
+    setSavingPhone(true);
+    try {
+      const duplicateStudentId = duplicatePhoneMatch.student.id;
+
+      const { error: enrollmentErr } = await supabase
+        .from("enrollments")
+        .update({ student_id: duplicateStudentId })
+        .eq("id", editPhoneFor.id);
+      if (enrollmentErr) throw enrollmentErr;
+
+      const { error: cyclesErr } = await supabase
+        .from("enrollment_cycles")
+        .update({ student_id: duplicateStudentId })
+        .eq("enrollment_id", editPhoneFor.id);
+      if (cyclesErr) throw cyclesErr;
+
+      const { error: casesErr } = await supabase
+        .from("application_cases")
+        .update({ student_id: duplicateStudentId })
+        .eq("enrollment_id", editPhoneFor.id);
+      if (casesErr) throw casesErr;
+
+      toast.success("Enrollment linked to the existing student with this phone");
+      setDuplicatePhoneMatch(null);
+      setEditPhoneFor(null);
+      setEditPhoneValue("");
+      setUpdateLinkedUserPhone(false);
+      fetchData();
+    } catch (err: any) {
+      console.error("handleLinkDuplicateStudent failed", err);
+      toast.error(`Could not link enrollment: ${err?.message || "unknown error"}`);
     } finally {
       setSavingPhone(false);
     }
@@ -1581,6 +1636,7 @@ const EnrollmentsPage = () => {
           setEditPhoneFor(null);
           setEditPhoneValue("");
           setUpdateLinkedUserPhone(false);
+          setDuplicatePhoneMatch(null);
         }
       }}>
         <DialogContent className="max-w-md">
@@ -1597,7 +1653,7 @@ const EnrollmentsPage = () => {
                 <Label>New phone number</Label>
                 <Input
                   value={editPhoneValue}
-                  onChange={(e) => setEditPhoneValue(e.target.value)}
+                  onChange={(e) => { setEditPhoneValue(e.target.value); setDuplicatePhoneMatch(null); }}
                   placeholder="10-digit phone number"
                   className="mt-1.5"
                 />
@@ -1621,13 +1677,30 @@ const EnrollmentsPage = () => {
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setEditPhoneFor(null); setEditPhoneValue(""); setUpdateLinkedUserPhone(false); }}>Cancel</Button>
+            <Button variant="outline" onClick={() => { setEditPhoneFor(null); setEditPhoneValue(""); setUpdateLinkedUserPhone(false); setDuplicatePhoneMatch(null); }}>Cancel</Button>
             <Button className="gradient-primary" onClick={handleSavePhone} disabled={savingPhone || !editPhoneValue.trim()}>
               {savingPhone ? "Saving..." : "Save Phone"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!duplicatePhoneMatch} onOpenChange={(open) => { if (!open) setDuplicatePhoneMatch(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Use existing student record?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Another student record already exists for <span className="font-medium">{editPhoneFor?.students?.name}</span> with phone <span className="font-medium">{duplicatePhoneMatch?.phone}</span>. To avoid duplicates, this will link only this enrollment and its cycle/case records to that existing student record.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={savingPhone}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleLinkDuplicateStudent} disabled={savingPhone}>
+              {savingPhone ? "Linking..." : "Link Enrollment"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog open={!!editValidityFor} onOpenChange={(o) => { if (!o) { setEditValidityFor(null); setEditValidityDate(""); setEditValidityCycleId(""); setValidityMode("cycle"); } }}>
         <DialogContent className="max-w-md">
