@@ -9,11 +9,13 @@ import { useSimulatedToday, useTestDate } from "@/contexts/TestDateContext";
 import { todayIST } from "@/lib/dateUtils";
 
 interface SessionBrowserProps {
+  studioId: number;
   selectedSessionId: number | null;
+  onBack?: () => void;
   onSelectSession: (session: any) => void;
 }
 
-export default function SessionBrowser({ selectedSessionId, onSelectSession }: SessionBrowserProps) {
+export default function SessionBrowser({ studioId, selectedSessionId, onBack, onSelectSession }: SessionBrowserProps) {
   const [sessions, setSessions] = useState<any[]>([]);
   const [batches, setBatches] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -22,10 +24,28 @@ export default function SessionBrowser({ selectedSessionId, onSelectSession }: S
 
   useEffect(() => {
     const fetch = async () => {
+      setLoading(true);
+      const { data: studioBatches } = await supabase
+        .from("batches")
+        .select("id, name, style")
+        .eq("organization_id", 1)
+        .eq("studio_id", studioId);
+
+      const batchRows = studioBatches || [];
+      const batchIds = batchRows.map((batch) => batch.id);
+      setBatches(batchRows);
+
+      if (batchIds.length === 0) {
+        setSessions([]);
+        setLoading(false);
+        return;
+      }
+
       const browseFromDate = isTestMode ? simulatedToday : todayIST();
       let sessionQuery = supabase.from("batch_sessions")
         .select("*")
         .eq("organization_id", 1)
+        .in("batch_id", batchIds)
         .gte("session_date", browseFromDate)
         .order("session_date")
         .order("start_time")
@@ -37,16 +57,12 @@ export default function SessionBrowser({ selectedSessionId, onSelectSession }: S
         sessionQuery = sessionQuery.eq("status", "scheduled");
       }
 
-      const [sessRes, batchRes] = await Promise.all([
-        sessionQuery,
-        supabase.from("batches").select("id, name, style").eq("organization_id", 1),
-      ]);
+      const sessRes = await sessionQuery;
       setSessions(sessRes.data || []);
-      setBatches(batchRes.data || []);
       setLoading(false);
     };
     fetch();
-  }, [isTestMode, simulatedToday]);
+  }, [studioId, isTestMode, simulatedToday]);
 
   const getBatchName = (id: number) => batches.find(b => b.id === id)?.name || `Batch ${id}`;
 
@@ -68,7 +84,14 @@ export default function SessionBrowser({ selectedSessionId, onSelectSession }: S
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">Pick a session to drop in</p>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">Pick a session to drop in</p>
+        {onBack && (
+          <button type="button" className="text-xs text-primary hover:underline" onClick={onBack}>
+            Change studio
+          </button>
+        )}
+      </div>
       {Object.entries(grouped).map(([date, dateSessions]) => (
         <div key={date} className="space-y-2">
           <h3 className="text-sm font-medium text-foreground flex items-center gap-2">

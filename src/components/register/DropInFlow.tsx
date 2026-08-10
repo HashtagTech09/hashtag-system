@@ -17,8 +17,9 @@ import ReceiptPreviewDialog from "./ReceiptPreviewDialog";
 import { useSimulatedToday } from "@/contexts/TestDateContext";
 import type { ReceiptData } from "@/lib/receiptTemplate";
 import { needsAccountSetup, type AccountOwnerType } from "@/lib/accountOwner";
+import StudioSelection from "./StudioSelection";
 
-type Step = "browse" | "phone" | "setup" | "hub" | "details" | "confirm";
+type Step = "studio" | "browse" | "phone" | "setup" | "hub" | "details" | "confirm";
 type UserRow = Database["public"]["Tables"]["users"]["Row"];
 type StudentRow = Database["public"]["Tables"]["students"]["Row"] & {
   users?: UserRow | null;
@@ -26,7 +27,8 @@ type StudentRow = Database["public"]["Tables"]["students"]["Row"] & {
 type BatchSessionRow = Database["public"]["Tables"]["batch_sessions"]["Row"];
 
 export default function DropInFlow() {
-  const [step, setStep] = useState<Step>("browse");
+  const [step, setStep] = useState<Step>("studio");
+  const [selectedStudioId, setSelectedStudioId] = useState<number | null>(null);
   const [selectedSession, setSelectedSession] = useState<BatchSessionRow | null>(null);
   const [student, setStudent] = useState<StudentRow | null>(null);
   const [user, setUser] = useState<UserRow | null>(null);
@@ -147,7 +149,8 @@ export default function DropInFlow() {
   };
 
   const reset = () => {
-    setStep("browse");
+    setStep("studio");
+    setSelectedStudioId(null);
     setSelectedSession(null);
     setStudent(null);
     setUser(null);
@@ -166,14 +169,35 @@ export default function DropInFlow() {
         </p>
       </div>
 
-      {step === "browse" && (
-        <SessionBrowser selectedSessionId={selectedSession?.id ?? null} onSelectSession={s => { setSelectedSession(s); setStep("phone"); }} />
+      {step === "studio" && (
+        <StudioSelection
+          onSelectStudio={(studioId) => {
+            setSelectedStudioId(studioId);
+            setSelectedSession(null);
+            setStep("browse");
+          }}
+        />
+      )}
+
+      {step === "browse" && selectedStudioId && (
+        <SessionBrowser
+          studioId={selectedStudioId}
+          selectedSessionId={selectedSession?.id ?? null}
+          onBack={() => {
+            setSelectedSession(null);
+            setStep("studio");
+          }}
+          onSelectSession={s => { setSelectedSession(s); setStep("phone"); }}
+        />
       )}
 
       {step === "phone" && (
         <Card className="glass-card">
           <CardContent className="p-6">
-            <p className="text-sm text-muted-foreground mb-4">Selected: {selectedSession?.start_time} – {selectedSession?.end_time} on {selectedSession?.session_date}</p>
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <p className="text-sm text-muted-foreground">Selected: {selectedSession?.start_time} – {selectedSession?.end_time} on {selectedSession?.session_date}</p>
+              <Button variant="ghost" size="sm" onClick={() => setStep("browse")}>Change</Button>
+            </div>
             <PhoneEntry
               onUserResolved={handleUserResolved}
               onNewUser={phone => { setNewPhone(phone); setStep("details"); }}
