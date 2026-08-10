@@ -95,8 +95,14 @@ const SettingsPage = () => {
               <p className="text-xs text-muted-foreground mt-1">Use ₹590. This is added after class GST and rounding.</p>
             </div>
             <div>
-              <Label>Drop-in Fee (₹)</Label>
+              <Label>Drop-in Fee Including GST (₹)</Label>
               <Input type="number" value={settings.drop_in_fee || ""} onChange={(e) => setSettings({ ...settings, drop_in_fee: e.target.value })} />
+              <p className="text-xs text-muted-foreground mt-1">Use ₹760 for regular drop-ins.</p>
+            </div>
+            <div>
+              <Label>2.5-hour Drop-in Fee Including GST (₹)</Label>
+              <Input type="number" value={settings.drop_in_long_fee || ""} onChange={(e) => setSettings({ ...settings, drop_in_long_fee: e.target.value })} />
+              <p className="text-xs text-muted-foreground mt-1">Use ₹1540 for 150-minute sessions.</p>
             </div>
             <div>
               <Label>GST %</Label>

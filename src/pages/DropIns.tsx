@@ -17,6 +17,12 @@ import { buildEligibilityKey, STYLE_OPTIONS, LEVEL_OPTIONS } from "@/lib/styleHi
 import { useScopedStudents } from "@/hooks/useScopedStudents";
 import { useSimulatedToday, useTestDate } from "@/contexts/TestDateContext";
 import { todayIST } from "@/lib/dateUtils";
+import {
+  DEFAULT_DROP_IN_TOTAL,
+  DEFAULT_LONG_DROP_IN_TOTAL,
+  getDropInPricingForSession,
+  splitInclusiveGst,
+} from "@/lib/dropInPricing";
 
 const DropInsPage = () => {
   const scope = useScopedStudents();
@@ -29,6 +35,8 @@ const DropInsPage = () => {
   const [sessions, setSessions] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState("drop-ins");
+  const [regularDropInFee, setRegularDropInFee] = useState(DEFAULT_DROP_IN_TOTAL);
+  const [longDropInFee, setLongDropInFee] = useState(DEFAULT_LONG_DROP_IN_TOTAL);
 
   // Drop-in form
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -50,7 +58,7 @@ const DropInsPage = () => {
   });
 
   const fetchData = async () => {
-    let dropQ: any = supabase.from("drop_ins").select("*, students(name, phone, users(phone)), batch_sessions(session_date, start_time, end_time, style, batches(name))").eq("organization_id", 1).order("created_at", { ascending: false });
+    let dropQ: any = supabase.from("drop_ins").select("*, students(name, phone, users(phone)), batch_sessions(session_date, start_time, end_time, style, batches(name)), payments(final_amount, gst)").eq("organization_id", 1).order("created_at", { ascending: false });
     let studentQ: any = supabase.from("students").select("*").eq("organization_id", 1).order("name");
     let creditQ: any = supabase.from("drop_in_credits").select("*, students(name)").eq("organization_id", 1).order("created_at", { ascending: false });
     if (!scope.unrestricted) {
@@ -74,11 +82,21 @@ const DropInsPage = () => {
 
   useEffect(() => { if (!scope.loading) fetchData(); }, [scope.loading, scope.unrestricted, scope.studentIds.join(",")]);
 
-  // Load default drop-in fee from settings
+  // Load inclusive drop-in fees from settings
   useEffect(() => {
     const loadFee = async () => {
-      const { data } = await supabase.from("system_settings").select("value").eq("organization_id", 1).eq("key", "drop_in_fee").single();
-      if (data) setForm(f => ({ ...f, amount: data.value }));
+      const { data } = await supabase.from("system_settings").select("key,value").eq("organization_id", 1).in("key", ["drop_in_fee", "drop_in_long_fee"]);
+      let regular = DEFAULT_DROP_IN_TOTAL;
+      let long = DEFAULT_LONG_DROP_IN_TOTAL;
+      (data || []).forEach(setting => {
+        const value = Number(setting.value);
+        if (!Number.isFinite(value) || value <= 0) return;
+        if (setting.key === "drop_in_fee") regular = value;
+        if (setting.key === "drop_in_long_fee") long = value;
+      });
+      setRegularDropInFee(regular);
+      setLongDropInFee(long);
+      setForm(f => ({ ...f, amount: f.amount || String(regular) }));
     };
     loadFee();
   }, []);
@@ -106,16 +124,31 @@ const DropInsPage = () => {
     fetchSessions();
   }, [form.batch_id, isTestMode, simulatedToday]);
 
+  useEffect(() => {
+    if (!form.batch_session_id) return;
+    const session = sessions.find(s => String(s.id) === form.batch_session_id);
+    if (!session) return;
+    const pricing = getDropInPricingForSession(session, {
+      regularTotal: regularDropInFee,
+      longTotal: longDropInFee,
+    });
+    setForm(f => ({ ...f, amount: String(pricing.inclusiveTotal) }));
+  }, [form.batch_session_id, sessions, regularDropInFee, longDropInFee]);
+
   const handleSave = async () => {
     if (!form.student_id || !form.batch_session_id || !form.amount) {
       toast.error("Fill all required fields");
       return;
     }
 
+    const { baseAmount, gst, finalTotal } = splitInclusiveGst(Number(form.amount));
+
     const { data: payment, error: payErr } = await supabase.from("payments").insert({
       organization_id: 1,
       student_id: Number(form.student_id),
-      amount: Number(form.amount),
+      amount: baseAmount,
+      gst,
+      final_amount: finalTotal,
       payment_mode: form.payment_mode,
       status: "success",
     }).select().single();
@@ -126,7 +159,7 @@ const DropInsPage = () => {
       organization_id: 1,
       student_id: Number(form.student_id),
       batch_session_id: Number(form.batch_session_id),
-      amount: Number(form.amount),
+      amount: baseAmount,
       payment_id: payment.id,
     });
 
@@ -160,6 +193,11 @@ const DropInsPage = () => {
 
   const filteredDropIns = dropIns.filter(d => d.students?.name?.toLowerCase().includes(search.toLowerCase()));
   const filteredCredits = credits.filter(c => c.students?.name?.toLowerCase().includes(search.toLowerCase()));
+  const selectedSession = sessions.find(s => String(s.id) === form.batch_session_id);
+  const selectedSessionPricing = getDropInPricingForSession(selectedSession, {
+    regularTotal: regularDropInFee,
+    longTotal: longDropInFee,
+  });
 
   return (
     <AdminLayout title="Drop-ins">
@@ -247,8 +285,14 @@ const DropInsPage = () => {
                   </div>
                 )}
                 <div>
-                  <Label>Amount (₹)</Label>
+                  <Label>Amount incl. GST (₹)</Label>
                   <Input type="number" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} />
+                  {form.batch_session_id && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Default for this session: ₹{selectedSessionPricing.inclusiveTotal.toLocaleString("en-IN")}
+                      {selectedSessionPricing.isLongSlot ? " (2.5-hour slot)" : ""}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <Label>Payment Mode</Label>
@@ -294,7 +338,9 @@ const DropInsPage = () => {
                       <TableCell className="text-muted-foreground">{d.batch_sessions?.batches?.name || "—"}</TableCell>
                       <TableCell className="text-muted-foreground">{d.batch_sessions?.session_date || "—"}</TableCell>
                       <TableCell><Badge variant="outline">{d.batch_sessions?.style || "—"}</Badge></TableCell>
-                      <TableCell className="font-display">₹{Number(d.amount).toLocaleString()}</TableCell>
+                      <TableCell className="font-display">
+                        ₹{Number(d.payments?.final_amount ?? d.amount).toLocaleString("en-IN")}
+                      </TableCell>
                       <TableCell>
                         <Badge variant={d.is_adjusted ? "default" : "secondary"}>
                           {d.is_adjusted ? "Yes" : "No"}

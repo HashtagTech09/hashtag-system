@@ -18,6 +18,7 @@ import { useSimulatedToday } from "@/contexts/TestDateContext";
 import type { ReceiptData } from "@/lib/receiptTemplate";
 import { needsAccountSetup, type AccountOwnerType } from "@/lib/accountOwner";
 import StudioSelection from "./StudioSelection";
+import { DEFAULT_DROP_IN_TOTAL, DEFAULT_LONG_DROP_IN_TOTAL, getDropInPricingForSession } from "@/lib/dropInPricing";
 
 type Step = "studio" | "browse" | "phone" | "setup" | "hub" | "details" | "confirm";
 type UserRow = Database["public"]["Tables"]["users"]["Row"];
@@ -37,20 +38,29 @@ export default function DropInFlow() {
   const [ownerName, setOwnerName] = useState("");
   const [studentName, setStudentName] = useState("");
   const [accountOwnerType, setAccountOwnerType] = useState<AccountOwnerType>("self");
-  const [dropInFee, setDropInFee] = useState(700);
+  const [dropInFee, setDropInFee] = useState(DEFAULT_DROP_IN_TOTAL);
+  const [longDropInFee, setLongDropInFee] = useState(DEFAULT_LONG_DROP_IN_TOTAL);
   const [paymentMode, setPaymentMode] = useState("razorpay");
   const [submitting, setSubmitting] = useState(false);
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
   const simulatedToday = useSimulatedToday();
-  const dropInTotal = dropInFee + Math.round(dropInFee * 0.18);
+  const dropInPricing = getDropInPricingForSession(selectedSession, {
+    regularTotal: dropInFee,
+    longTotal: longDropInFee,
+  });
   const paymentActionLabel = paymentMode === "cash"
-    ? `Record Cash Drop-in ₹${dropInTotal.toLocaleString("en-IN")}`
-    : `Pay ₹${dropInTotal.toLocaleString("en-IN")} with Razorpay`;
+    ? `Record Cash Drop-in ₹${dropInPricing.inclusiveTotal.toLocaleString("en-IN")}`
+    : `Pay ₹${dropInPricing.inclusiveTotal.toLocaleString("en-IN")} with Razorpay`;
 
   useEffect(() => {
-    supabase.from("system_settings").select("*").eq("organization_id", 1).eq("key", "drop_in_fee").then(({ data }) => {
-      if (data && data.length > 0) setDropInFee(Number(data[0].value));
+    supabase.from("system_settings").select("*").eq("organization_id", 1).in("key", ["drop_in_fee", "drop_in_long_fee"]).then(({ data }) => {
+      (data || []).forEach(setting => {
+        const value = Number(setting.value);
+        if (!Number.isFinite(value) || value <= 0) return;
+        if (setting.key === "drop_in_fee") setDropInFee(value);
+        if (setting.key === "drop_in_long_fee") setLongDropInFee(value);
+      });
     });
   }, []);
 
@@ -116,26 +126,25 @@ export default function DropInFlow() {
     if (!student || !selectedSession) return;
     setSubmitting(true);
     try {
-      const gst = Math.round(dropInFee * 0.18);
-      const total = dropInFee + gst;
+      const { baseAmount, gst, inclusiveTotal } = dropInPricing;
       const { data: payment, error: payErr } = await supabase.from("payments").insert({
-        organization_id: 1, student_id: student.id, amount: dropInFee,
-        gst, final_amount: total, payment_mode: paymentMode, status: "success",
+        organization_id: 1, student_id: student.id, amount: baseAmount,
+        gst, final_amount: inclusiveTotal, payment_mode: paymentMode, status: "success",
       }).select().single();
       if (payErr) throw payErr;
 
       const { error } = await supabase.from("drop_ins").insert({
         organization_id: 1, student_id: student.id, batch_session_id: selectedSession.id,
-        amount: dropInFee, payment_id: payment.id,
+        amount: baseAmount, payment_id: payment.id,
       });
       if (error) throw error;
 
-      toast.success(`Drop-in booked! Amount: ₹${total.toLocaleString()}`);
+      toast.success(`Drop-in booked! Amount: ₹${inclusiveTotal.toLocaleString("en-IN")}`);
       setReceiptData({
         student_name: student.name,
         plan_name: "Drop-In",
         batches: `${selectedSession?.session_date} • ${selectedSession?.start_time}–${selectedSession?.end_time}`,
-        amount: total.toLocaleString("en-IN"),
+        amount: inclusiveTotal.toLocaleString("en-IN"),
         payment_mode: paymentMode === "razorpay" ? "Razorpay" : "Cash",
         transaction_id: `DROP-${payment.id}`,
         date: simulatedToday,
@@ -278,9 +287,13 @@ export default function DropInFlow() {
             </p>
             <div className="p-3 rounded-lg border border-border bg-muted/30 text-sm space-y-1">
               <div className="flex justify-between"><span className="text-muted-foreground">Session</span><span>{selectedSession?.session_date} • {selectedSession?.start_time}–{selectedSession?.end_time}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Drop-in fee</span><span>₹{dropInFee.toLocaleString()}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">GST (18%)</span><span>₹{Math.round(dropInFee * 0.18).toLocaleString()}</span></div>
-              <div className="flex justify-between font-semibold border-t border-border pt-1 mt-1"><span>Total</span><span>₹{dropInTotal.toLocaleString()}</span></div>
+              {dropInPricing.isLongSlot && (
+                <div className="flex justify-between"><span className="text-muted-foreground">Slot type</span><span>2.5-hour drop-in</span></div>
+              )}
+              <div className="flex justify-between"><span className="text-muted-foreground">Drop-in fee (incl. GST)</span><span>₹{dropInPricing.inclusiveTotal.toLocaleString("en-IN")}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Base amount</span><span>₹{dropInPricing.baseAmount.toLocaleString("en-IN")}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">GST (18%)</span><span>₹{dropInPricing.gst.toLocaleString("en-IN")}</span></div>
+              <div className="flex justify-between font-semibold border-t border-border pt-1 mt-1"><span>Total</span><span>₹{dropInPricing.inclusiveTotal.toLocaleString("en-IN")}</span></div>
             </div>
             <div>
               <Label>Payment Mode</Label>
