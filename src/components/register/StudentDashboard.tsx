@@ -18,6 +18,7 @@ import type { Database, Json } from "@/integrations/supabase/types";
 import { canStudentSelectBatch, getLockedBatchNames, isBatchPromotionLocked, type ApprovedPromotionLike } from "@/lib/promotionUtils";
 import ReceiptPreviewDialog from "./ReceiptPreviewDialog";
 import type { ReceiptData } from "@/lib/receiptTemplate";
+import { fetchConfirmedReceiptData } from "@/lib/receiptData";
 
 type UserRow = Database["public"]["Tables"]["users"]["Row"];
 type CashRecipient = Pick<UserRow, "id" | "name" | "email">;
@@ -402,28 +403,28 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
     return allocateCyclesForPlan(plan, planCycles, startIdx !== -1 ? startIdx : 0);
   };
 
-  const showReceipt = (params: {
-    planName: string;
-    batchNames: string;
-    amount: number;
-    paymentMode: string;
-    transactionId: string;
-  }) => {
-    setReceiptData({
-      student_name: student.name,
-      plan_name: params.planName,
-      batches: params.batchNames,
-      amount: params.amount.toLocaleString("en-IN"),
-      payment_mode: params.paymentMode,
-      transaction_id: params.transactionId,
-      date: simulatedToday,
-    });
-    setReceiptOpen(true);
+  const showConfirmedReceipt = async (details?: { paymentId?: number; orderId?: string; gatewayPaymentId?: string }) => {
+    const paymentId = details?.paymentId;
+    if (!paymentId) {
+      toast.error("Payment was confirmed, but the receipt payment id was missing.");
+      return;
+    }
+    try {
+      const receipt = await fetchConfirmedReceiptData(paymentId, student.id, {
+        gatewayPaymentId: details?.gatewayPaymentId,
+        orderId: details?.orderId,
+      });
+      setReceiptData(receipt);
+      setReceiptOpen(true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not load receipt";
+      toast.error("Payment confirmed, but receipt could not be loaded: " + message);
+    }
   };
 
-  const onRenewSuccess = async () => {
+  const onRenewSuccess = async (message = "Payment confirmed. Enrollment has been updated.") => {
     await markCartConverted();
-    toast.success(`Payment initiated! Enrollment will be confirmed once payment is captured.`);
+    toast.success(message);
     setMode("view");
     setSubStep("studio");
     setSelectedBatchIds([]);
@@ -453,6 +454,7 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
         const planName = subPlans.find(p => p.id === Number(selectedPlanId))?.name || "";
 
         await initiateRazorpayPayment({
+          waitForWebhook: true,
           orderParams: {
             student_id: student.id,
             organization_id: 1,
@@ -471,15 +473,9 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
             plan_name: planName,
             date: simulatedToday,
           },
-          onSuccess: () => {
-            showReceipt({
-              planName,
-              batchNames,
-              amount: breakdown.total,
-              paymentMode: "Razorpay",
-              transactionId: "Pending capture",
-            });
-            onRenewSuccess();
+          onSuccess: async (details) => {
+            await showConfirmedReceipt(details);
+            await onRenewSuccess();
           },
           onFailure: (err) => toast.error(err),
         });
@@ -504,13 +500,6 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
       setTestConfirmationUrl(cashApproval.testMode ? cashApproval.confirmUrl : null);
       await markCartConverted();
       toast.success("Cash approval request sent to the batch manager and instructor. Enrollment will happen after confirmation.");
-      showReceipt({
-        planName: subPlans.find(p => p.id === Number(selectedPlanId))?.name || "",
-        batchNames: selectedBatchIds.map(id => batches.find(b => b.id === Number(id))?.name).filter(Boolean).join(", "),
-        amount: breakdown.total,
-        paymentMode: "Cash",
-        transactionId: `CASH-${cashApproval.cashReq?.id || "pending"} pending approval`,
-      });
       setMode("view");
       setSubStep("studio");
       setSelectedBatchIds([]);
@@ -646,6 +635,7 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
       if (paymentMode === "razorpay") {
         const batchNames = selectedBatchIds.map(id => batches.find(b => b.id === Number(id))?.name).filter(Boolean).join(", ");
         await initiateRazorpayPayment({
+          waitForWebhook: true,
           orderParams: {
             student_id: student.id,
             organization_id: 1,
@@ -665,15 +655,9 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
             plan_name: addPlan.name,
             date: simulatedToday,
           },
-          onSuccess: () => {
-            showReceipt({
-              planName: addPlan.name,
-              batchNames,
-              amount: addBatchBreakdown.total,
-              paymentMode: "Razorpay",
-              transactionId: "Pending capture",
-            });
-            onRenewSuccess();
+          onSuccess: async (details) => {
+            await showConfirmedReceipt(details);
+            await onRenewSuccess();
           },
           onFailure: (err) => toast.error(err),
         });
@@ -698,13 +682,6 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
 
       await markCartConverted();
       toast.success("Cash approval request sent to the batch manager and instructor. Batch changes will happen after confirmation.");
-      showReceipt({
-        planName: addPlan.name,
-        batchNames: selectedBatchIds.map(id => batches.find(b => b.id === Number(id))?.name).filter(Boolean).join(", "),
-        amount: addBatchBreakdown.total,
-        paymentMode: "Cash",
-        transactionId: `CASH-${cashApproval.cashReq?.id || "pending"} pending approval`,
-      });
       setMode("view");
       setSubStep("studio");
       setSelectedBatchIds([]);

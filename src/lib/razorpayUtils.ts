@@ -43,8 +43,34 @@ interface RazorpayOrderParams {
 interface RazorpayCheckoutOptions {
   orderParams: RazorpayOrderParams;
   waitForWebhook?: boolean;
-  onSuccess: (details?: { paymentId?: number; orderId?: string; gatewayPaymentId?: string }) => void;
+  onSuccess: (details?: { paymentId?: number; orderId?: string; gatewayPaymentId?: string; gatewaySignature?: string }) => void | Promise<void>;
   onFailure: (error: string) => void;
+}
+
+async function confirmRazorpayPayment(
+  params: { paymentId: number; orderId: string; gatewayPaymentId: string; gatewaySignature: string },
+  timeoutMs = 90000,
+) {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    const { data, error } = await supabase.functions.invoke("confirm-razorpay-payment", {
+      body: {
+        payment_id: params.paymentId,
+        razorpay_order_id: params.orderId,
+        razorpay_payment_id: params.gatewayPaymentId,
+        razorpay_signature: params.gatewaySignature,
+      },
+    });
+
+    if (error) throw new Error(error.message || "Could not confirm Razorpay payment");
+    if (data?.success) return data;
+    if (!data?.pending) throw new Error(data?.error || "Could not confirm Razorpay payment");
+
+    await new Promise(resolve => setTimeout(resolve, 2000));
+  }
+
+  throw new Error("Payment was received, but Razorpay capture confirmation is still pending. Please refresh in a minute.");
 }
 
 async function waitForWebhookCompletion(paymentId: number, timeoutMs = 90000) {
@@ -102,13 +128,22 @@ export async function initiateRazorpayPayment({ orderParams, waitForWebhook = fa
       },
       handler: async function (response: any) {
         try {
+          if (payment_id && response?.razorpay_payment_id && response?.razorpay_signature) {
+            await confirmRazorpayPayment({
+              paymentId: Number(payment_id),
+              orderId: order_id,
+              gatewayPaymentId: response.razorpay_payment_id,
+              gatewaySignature: response.razorpay_signature,
+            });
+          }
           if (waitForWebhook && payment_id) {
             await waitForWebhookCompletion(Number(payment_id));
           }
-          onSuccess({
+          await onSuccess({
             paymentId: payment_id,
             orderId: order_id,
             gatewayPaymentId: response?.razorpay_payment_id,
+            gatewaySignature: response?.razorpay_signature,
           });
         } catch (e: any) {
           onFailure(e.message || "Payment confirmation is pending");

@@ -8,6 +8,7 @@ import { CheckCircle, XCircle, Loader2 } from "lucide-react";
 import hashtagLogo from "@/assets/hashtag-pink.png";
 import ReceiptPreviewDialog from "@/components/register/ReceiptPreviewDialog";
 import type { ReceiptData } from "@/lib/receiptTemplate";
+import { fetchConfirmedReceiptData } from "@/lib/receiptData";
 
 const EXPIRED_MESSAGE = "This confirmation link has expired. Please create a new cash request.";
 
@@ -144,16 +145,15 @@ const ConfirmCashPage = () => {
         throw new Error(data?.error || await getFunctionErrorMessage(functionErr));
       }
       setConfirmed(true);
-      setReceiptData({
-        student_name: studentName,
-        plan_name: "Registration",
-        batches: batchNames.join(", "),
-        amount: Number(request.final_amount || 0).toLocaleString("en-IN"),
-        payment_mode: "Cash",
-        transaction_id: data?.payment_id ? `PAY-${data.payment_id}` : `CASH-${request.id}`,
-        date: new Date().toLocaleDateString("en-IN"),
-      });
-      setReceiptOpen(true);
+      if (data?.payment_id) {
+        try {
+          const receipt = await fetchConfirmedReceiptData(data.payment_id, request.student_id, { cashToken: token || undefined });
+          setReceiptData(receipt);
+          setReceiptOpen(true);
+        } catch (receiptErr: any) {
+          toast.error("Cash confirmed, but receipt could not be loaded: " + (receiptErr?.message || "Please try from Payments."));
+        }
+      }
       toast.success(data?.already_confirmed ? "Payment was already confirmed." : "Payment confirmed successfully!");
     } catch (e: any) {
       setError(e.message);

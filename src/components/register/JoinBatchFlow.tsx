@@ -25,6 +25,7 @@ import FeeBreakdownDisplay from "./FeeBreakdown";
 import ReceiptPreviewDialog from "./ReceiptPreviewDialog";
 import { useSimulatedToday } from "@/contexts/TestDateContext";
 import type { ReceiptData } from "@/lib/receiptTemplate";
+import { fetchConfirmedReceiptData } from "@/lib/receiptData";
 import { needsAccountSetup, type AccountOwnerType } from "@/lib/accountOwner";
 import { getLockedBatchNames, type ApprovedPromotionLike } from "@/lib/promotionUtils";
 
@@ -275,30 +276,37 @@ export default function JoinBatchFlow() {
       const planName = subPlans.find(p => p.id === Number(selectedPlanId))?.name || "";
       const batchNames = sortedSelectedBatches.map(b => b.name).join(", ");
 
-      const showReceipt = (mode: string, txnId: string) => {
-        setReceiptData({
-          student_name: student.name,
-          plan_name: planName,
-          batches: batchNames,
-          amount: breakdown.total.toLocaleString("en-IN"),
-          payment_mode: mode,
-          transaction_id: txnId,
-          date: simulatedToday,
-        });
-        setReceiptOpen(true);
+      const showConfirmedReceipt = async (details?: { paymentId?: number; orderId?: string; gatewayPaymentId?: string }) => {
+        const paymentId = details?.paymentId;
+        if (!paymentId) {
+          toast.error("Payment was confirmed, but the receipt payment id was missing.");
+          return;
+        }
+        try {
+          const receipt = await fetchConfirmedReceiptData(paymentId, student.id, {
+            gatewayPaymentId: details?.gatewayPaymentId,
+            orderId: details?.orderId,
+          });
+          setReceiptData(receipt);
+          setReceiptOpen(true);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Could not load receipt";
+          toast.error("Payment confirmed, but receipt could not be loaded: " + message);
+        }
       };
 
       if (paymentMode === "razorpay") {
         await initiateRazorpayPayment({
+          waitForWebhook: true,
           orderParams: {
             student_id: student.id, organization_id: 1, batch_ids: selectedBatchIds.map(Number),
             amount: breakdown.subtotal, gst: breakdown.gst, final_amount: breakdown.total,
             enrollment_data: { enrollments: enrollmentRecords, enrollment_cycles_template: cyclesTemplate, payment_allocations: allocations },
             student_name: student.name, student_phone: student.phone || "", batch_names: batchNames, plan_name: planName,
           },
-          onSuccess: () => {
-            toast.success("Payment initiated! Enrollment will be confirmed once payment is captured.");
-            showReceipt("Razorpay", "Pending capture");
+          onSuccess: async (details) => {
+            toast.success("Payment confirmed. Enrollment is complete.");
+            await showConfirmedReceipt(details);
           },
           onFailure: (err) => toast.error(err),
         });
@@ -336,7 +344,6 @@ export default function JoinBatchFlow() {
       setTestConfirmationUrl(emailData?.test_mode ? confirmUrl : null);
 
       toast.success("Cash approval request sent. Enrollment will happen after manager/instructor approval.");
-      showReceipt("Cash", `CASH-${cashReq.id} pending approval`);
       setStep("waiting");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Please try again.";

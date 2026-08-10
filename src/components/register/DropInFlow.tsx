@@ -20,6 +20,7 @@ import { needsAccountSetup, type AccountOwnerType } from "@/lib/accountOwner";
 import StudioSelection from "./StudioSelection";
 import { DEFAULT_DROP_IN_TOTAL, DEFAULT_LONG_DROP_IN_TOTAL, getDropInPricingForSession } from "@/lib/dropInPricing";
 import { initiateRazorpayPayment } from "@/lib/razorpayUtils";
+import { fetchConfirmedReceiptData } from "@/lib/receiptData";
 
 type Step = "studio" | "browse" | "phone" | "setup" | "hub" | "details" | "confirm";
 type UserRow = Database["public"]["Tables"]["users"]["Row"];
@@ -130,17 +131,23 @@ export default function DropInFlow() {
       const { baseAmount, gst, inclusiveTotal } = dropInPricing;
       const sessionLabel = `${selectedSession.session_date} • ${selectedSession.start_time}–${selectedSession.end_time}`;
 
-      const showReceipt = (mode: string, transactionId: string) => {
-        setReceiptData({
-          student_name: student.name,
-          plan_name: "Drop-In",
-          batches: sessionLabel,
-          amount: inclusiveTotal.toLocaleString("en-IN"),
-          payment_mode: mode,
-          transaction_id: transactionId,
-          date: simulatedToday,
-        });
-        setReceiptOpen(true);
+      const showConfirmedReceipt = async (details?: { paymentId?: number; orderId?: string; gatewayPaymentId?: string }) => {
+        const paymentId = details?.paymentId;
+        if (!paymentId) {
+          toast.error("Payment was confirmed, but the receipt payment id was missing.");
+          return;
+        }
+        try {
+          const receipt = await fetchConfirmedReceiptData(paymentId, student.id, {
+            gatewayPaymentId: details?.gatewayPaymentId,
+            orderId: details?.orderId,
+          });
+          setReceiptData(receipt);
+          setReceiptOpen(true);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Could not load receipt";
+          toast.error("Payment confirmed, but receipt could not be loaded: " + message);
+        }
       };
 
       if (paymentMode === "razorpay") {
@@ -168,9 +175,9 @@ export default function DropInFlow() {
             description: `Drop-in - ${sessionLabel}`,
             date: simulatedToday,
           },
-          onSuccess: (details) => {
+          onSuccess: async (details) => {
             toast.success("Payment confirmed. Drop-in booked!");
-            showReceipt("Razorpay", details?.gatewayPaymentId || "Webhook confirmed");
+            await showConfirmedReceipt(details);
           },
           onFailure: (err) => toast.error(err),
         });
@@ -190,7 +197,29 @@ export default function DropInFlow() {
       if (error) throw error;
 
       toast.success(`Drop-in booked! Amount: ₹${inclusiveTotal.toLocaleString("en-IN")}`);
-      showReceipt("Cash", `DROP-${payment.id}`);
+      setReceiptData({
+        receipt_title: "Drop-in Receipt",
+        student_name: student.name,
+        student_phone: student.phone || student.users?.phone || user?.phone || "",
+        student_email: student.email || student.users?.email || "",
+        account_owner_name: user?.name || student.users?.name || "",
+        account_owner_phone: user?.phone || student.users?.phone || "",
+        plan_name: "Drop-In",
+        status_type: "Drop-In",
+        batches: sessionLabel,
+        validity: sessionLabel,
+        subtotal: baseAmount.toLocaleString("en-IN"),
+        gst: gst.toLocaleString("en-IN"),
+        total: inclusiveTotal.toLocaleString("en-IN"),
+        amount: inclusiveTotal.toLocaleString("en-IN"),
+        payment_mode: "Cash",
+        payment_status: "Confirmed",
+        payment_id: `PAY-${payment.id}`,
+        transaction_id: `PAY-${payment.id}`,
+        date: simulatedToday,
+        confirmed_at: new Date().toLocaleString("en-IN"),
+      });
+      setReceiptOpen(true);
     } catch {
       toast.error("Booking failed. Please try again.");
     } finally {
