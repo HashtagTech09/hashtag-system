@@ -12,13 +12,16 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, Search, Ticket } from "lucide-react";
 import { toast } from "sonner";
-import { format } from "date-fns";
 import { getDisplayPhone } from "@/lib/studentUtils";
 import { buildEligibilityKey, STYLE_OPTIONS, LEVEL_OPTIONS } from "@/lib/styleHierarchy";
 import { useScopedStudents } from "@/hooks/useScopedStudents";
+import { useSimulatedToday, useTestDate } from "@/contexts/TestDateContext";
+import { todayIST } from "@/lib/dateUtils";
 
 const DropInsPage = () => {
   const scope = useScopedStudents();
+  const { isTestMode } = useTestDate();
+  const simulatedToday = useSimulatedToday();
   const [dropIns, setDropIns] = useState<any[]>([]);
   const [credits, setCredits] = useState<any[]>([]);
   const [students, setStudents] = useState<any[]>([]);
@@ -84,16 +87,24 @@ const DropInsPage = () => {
   useEffect(() => {
     if (!form.batch_id) { setSessions([]); return; }
     const fetchSessions = async () => {
-      const today = format(new Date(), "yyyy-MM-dd");
-      const { data } = await supabase.from("batch_sessions").select("*")
+      const browseFromDate = isTestMode ? simulatedToday : todayIST();
+      let sessionQuery = supabase.from("batch_sessions").select("*")
         .eq("batch_id", Number(form.batch_id))
-        .eq("status", "scheduled")
-        .gte("session_date", today)
-        .order("session_date");
+        .gte("session_date", browseFromDate)
+        .order("session_date")
+        .order("start_time");
+
+      if (isTestMode) {
+        sessionQuery = sessionQuery.in("status", ["scheduled", "completed", "sold_out"]);
+      } else {
+        sessionQuery = sessionQuery.eq("status", "scheduled");
+      }
+
+      const { data } = await sessionQuery;
       setSessions(data || []);
     };
     fetchSessions();
-  }, [form.batch_id]);
+  }, [form.batch_id, isTestMode, simulatedToday]);
 
   const handleSave = async () => {
     if (!form.student_id || !form.batch_session_id || !form.amount) {

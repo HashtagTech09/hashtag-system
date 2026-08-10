@@ -5,6 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Calendar, Clock } from "lucide-react";
 import { format, parseISO } from "date-fns";
+import { useSimulatedToday, useTestDate } from "@/contexts/TestDateContext";
+import { todayIST } from "@/lib/dateUtils";
 
 interface SessionBrowserProps {
   selectedSessionId: number | null;
@@ -15,18 +17,28 @@ export default function SessionBrowser({ selectedSessionId, onSelectSession }: S
   const [sessions, setSessions] = useState<any[]>([]);
   const [batches, setBatches] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const { isTestMode } = useTestDate();
+  const simulatedToday = useSimulatedToday();
 
   useEffect(() => {
     const fetch = async () => {
-      const todayStr = new Date().toISOString().split("T")[0];
+      const browseFromDate = isTestMode ? simulatedToday : todayIST();
+      let sessionQuery = supabase.from("batch_sessions")
+        .select("*")
+        .eq("organization_id", 1)
+        .gte("session_date", browseFromDate)
+        .order("session_date")
+        .order("start_time")
+        .limit(50);
+
+      if (isTestMode) {
+        sessionQuery = sessionQuery.in("status", ["scheduled", "completed", "sold_out"]);
+      } else {
+        sessionQuery = sessionQuery.eq("status", "scheduled");
+      }
+
       const [sessRes, batchRes] = await Promise.all([
-        supabase.from("batch_sessions")
-          .select("*")
-          .eq("organization_id", 1)
-          .eq("status", "scheduled")
-          .gte("session_date", todayStr)
-          .order("session_date")
-          .limit(50),
+        sessionQuery,
         supabase.from("batches").select("id, name, style").eq("organization_id", 1),
       ]);
       setSessions(sessRes.data || []);
@@ -34,13 +46,19 @@ export default function SessionBrowser({ selectedSessionId, onSelectSession }: S
       setLoading(false);
     };
     fetch();
-  }, []);
+  }, [isTestMode, simulatedToday]);
 
   const getBatchName = (id: number) => batches.find(b => b.id === id)?.name || `Batch ${id}`;
 
   if (loading) return <div className="space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-20" />)}</div>;
 
-  if (sessions.length === 0) return <p className="text-muted-foreground text-center py-8">No upcoming sessions available</p>;
+  if (sessions.length === 0) {
+    return (
+      <p className="text-muted-foreground text-center py-8">
+        {isTestMode ? "No sessions available from the simulated date" : "No upcoming sessions available"}
+      </p>
+    );
+  }
 
   // Group by date
   const grouped = sessions.reduce((acc: Record<string, any[]>, s) => {
@@ -80,6 +98,11 @@ export default function SessionBrowser({ selectedSessionId, onSelectSession }: S
                     {s.available_slots != null && (
                       <Badge variant={s.available_slots > 0 ? "secondary" : "destructive"} className="text-xs">
                         {s.available_slots > 0 ? `${s.available_slots} slots` : "Full"}
+                      </Badge>
+                    )}
+                    {isTestMode && s.status !== "scheduled" && (
+                      <Badge variant="outline" className="text-xs capitalize">
+                        {s.status.replace("_", " ")}
                       </Badge>
                     )}
                   </CardContent>
