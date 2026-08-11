@@ -115,6 +115,28 @@ async function insertMissingCycles(supabase: any, rows: any[]) {
   }
 }
 
+async function ensureDropInBooked(supabase: any, payment: any, data: any) {
+  if (!data?.drop_in) return;
+
+  const { data: existingDropIn, error: existingErr } = await supabase
+    .from("drop_ins")
+    .select("id")
+    .eq("payment_id", payment.id)
+    .maybeSingle();
+  if (existingErr) throw existingErr;
+  if (existingDropIn) return;
+
+  const dropIn = data.drop_in;
+  const { error: dropInErr } = await supabase.from("drop_ins").insert({
+    organization_id: dropIn.organization_id || payment.organization_id,
+    student_id: dropIn.student_id || payment.student_id,
+    batch_session_id: dropIn.batch_session_id,
+    amount: dropIn.amount ?? payment.amount,
+    payment_id: payment.id,
+  });
+  if (dropInErr) throw dropInErr;
+}
+
 async function applyDropInAdjustment(supabase: any, payment: any, data: any) {
   const adjustment = data?.drop_in_adjustment;
   if (!adjustment?.drop_in_id) return;
@@ -165,34 +187,21 @@ async function completePendingEnrollment(supabase: any, payment: any, rzpPayment
     if (!claimed) {
       const { data: currentPending } = await supabase
         .from("pending_enrollments")
-        .select("status")
+        .select("status, enrollment_data")
         .eq("payment_id", payment.id)
         .maybeSingle();
-      if (currentPending?.status === "completed") return { already_completed: true };
+      if (currentPending?.status === "completed") {
+        await ensureDropInBooked(supabase, payment, currentPending.enrollment_data || {});
+        await applyDropInAdjustment(supabase, payment, currentPending.enrollment_data || {});
+        return { already_completed: true, repaired_side_effects: true };
+      }
       return { pending: true, error: "Payment confirmation is already being processed" };
   }
 
   try {
     const data = claimed.enrollment_data || {};
 
-    if (data.drop_in) {
-      const { data: existingDropIn } = await supabase
-        .from("drop_ins")
-        .select("id")
-        .eq("payment_id", payment.id)
-        .maybeSingle();
-      if (!existingDropIn) {
-        const dropIn = data.drop_in;
-        const { error: dropInErr } = await supabase.from("drop_ins").insert({
-          organization_id: dropIn.organization_id || payment.organization_id,
-          student_id: dropIn.student_id || payment.student_id,
-          batch_session_id: dropIn.batch_session_id,
-          amount: dropIn.amount ?? payment.amount,
-          payment_id: payment.id,
-        });
-        if (dropInErr) throw dropInErr;
-      }
-    }
+    await ensureDropInBooked(supabase, payment, data);
 
     let insertedEnrollments: any[] = [];
     const { data: existingEnrollments } = await supabase
@@ -317,10 +326,16 @@ Deno.serve(async (req) => {
     if (payment.status === "success" && payment.gateway_payment_id === razorpay_payment_id) {
       const { data: pending } = await supabase
         .from("pending_enrollments")
-        .select("status")
+        .select("status, enrollment_data")
         .eq("payment_id", payment.id)
         .maybeSingle();
-      if (!pending || pending.status === "completed") return json({ success: true, payment_id: payment.id, already_completed: true });
+      if (!pending || pending.status === "completed") {
+        if (pending?.enrollment_data) {
+          await ensureDropInBooked(supabase, payment, pending.enrollment_data);
+          await applyDropInAdjustment(supabase, payment, pending.enrollment_data);
+        }
+        return json({ success: true, payment_id: payment.id, already_completed: true, repaired_side_effects: Boolean(pending?.enrollment_data) });
+      }
     }
 
     const { keyId, keySecret } = getRazorpayCredentials(payment.rzp_account);

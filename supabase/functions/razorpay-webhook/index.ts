@@ -69,6 +69,28 @@ async function fillMissingPreviousBatchIds(supabase: any, records: any[]) {
   return resolved;
 }
 
+async function ensureDropInBooked(supabase: any, payment: any, data: any) {
+  if (!data?.drop_in) return;
+
+  const { data: existingDropIn, error: existingErr } = await supabase
+    .from("drop_ins")
+    .select("id")
+    .eq("payment_id", payment.id)
+    .maybeSingle();
+  if (existingErr) throw existingErr;
+  if (existingDropIn) return;
+
+  const dropIn = data.drop_in;
+  const { error: dropInErr } = await supabase.from("drop_ins").insert({
+    organization_id: dropIn.organization_id || payment.organization_id,
+    student_id: dropIn.student_id || payment.student_id,
+    batch_session_id: dropIn.batch_session_id,
+    amount: dropIn.amount ?? payment.amount,
+    payment_id: payment.id,
+  });
+  if (dropInErr) throw dropInErr;
+}
+
 async function applyDropInAdjustment(supabase: any, payment: any, data: any) {
   const adjustment = data?.drop_in_adjustment;
   if (!adjustment?.drop_in_id) return;
@@ -162,23 +184,20 @@ Deno.serve(async (req) => {
       .from("pending_enrollments")
       .select("*")
       .eq("payment_id", payment.id)
-      .eq("status", "pending")
-      .single();
+      .maybeSingle();
 
-    if (pending?.enrollment_data) {
+    if (pending?.status === "completed") {
+      await ensureDropInBooked(supabase, payment, pending.enrollment_data || {});
+      await applyDropInAdjustment(supabase, payment, pending.enrollment_data || {});
+      return new Response(JSON.stringify({ status: "ok", already_completed: true, repaired_side_effects: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (pending?.status === "pending" && pending?.enrollment_data) {
       const data = pending.enrollment_data as any;
 
-      if (data.drop_in) {
-        const dropIn = data.drop_in;
-        const { error: dropInErr } = await supabase.from("drop_ins").insert({
-          organization_id: dropIn.organization_id || payment.organization_id,
-          student_id: dropIn.student_id || payment.student_id,
-          batch_session_id: dropIn.batch_session_id,
-          amount: dropIn.amount ?? payment.amount,
-          payment_id: payment.id,
-        });
-        if (dropInErr) throw dropInErr;
-      }
+      await ensureDropInBooked(supabase, payment, data);
 
       // Insert enrollments
       if (data.enrollments?.length) {
