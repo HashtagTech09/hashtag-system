@@ -58,7 +58,11 @@ const DropInsPage = () => {
   });
 
   const fetchData = async () => {
-    let dropQ: any = supabase.from("drop_ins").select("*, students(name, phone, users(phone)), batch_sessions(session_date, start_time, end_time, style, batches(name)), payments(final_amount, gst)").eq("organization_id", 1).order("created_at", { ascending: false });
+    let dropQ: any = supabase
+      .from("drop_ins")
+      .select("*, students(name, phone, users(phone)), batch_sessions(session_date, start_time, end_time, style, batches(name)), payment:payments!drop_ins_payment_id_fkey(final_amount, gst)")
+      .eq("organization_id", 1)
+      .order("created_at", { ascending: false });
     let studentQ: any = supabase.from("students").select("*").eq("organization_id", 1).order("name");
     let creditQ: any = supabase.from("drop_in_credits").select("*, students(name)").eq("organization_id", 1).order("created_at", { ascending: false });
     if (!scope.unrestricted) {
@@ -74,7 +78,12 @@ const DropInsPage = () => {
       supabase.from("batches").select("*").eq("organization_id", 1).order("name"),
       creditQ,
     ]);
-    setDropIns(dropInRes.data || []);
+    if (dropInRes.error) {
+      toast.error(`Could not load drop-ins: ${dropInRes.error.message}`);
+      setDropIns([]);
+    } else {
+      setDropIns(dropInRes.data || []);
+    }
     setStudents(studentRes.data || []);
     setBatches(batchRes.data || []);
     setCredits(creditRes.data || []);
@@ -191,7 +200,11 @@ const DropInsPage = () => {
     fetchData();
   };
 
-  const filteredDropIns = dropIns.filter(d => d.students?.name?.toLowerCase().includes(search.toLowerCase()));
+  const filteredDropIns = dropIns.filter(d => {
+    const term = search.trim().toLowerCase();
+    if (!term) return true;
+    return d.students?.name?.toLowerCase().includes(term);
+  });
   const filteredCredits = credits.filter(c => c.students?.name?.toLowerCase().includes(search.toLowerCase()));
   const selectedSession = sessions.find(s => String(s.id) === form.batch_session_id);
   const selectedSessionPricing = getDropInPricingForSession(selectedSession, {
@@ -339,7 +352,7 @@ const DropInsPage = () => {
                       <TableCell className="text-muted-foreground">{d.batch_sessions?.session_date || "—"}</TableCell>
                       <TableCell><Badge variant="outline">{d.batch_sessions?.style || "—"}</Badge></TableCell>
                       <TableCell className="font-display">
-                        ₹{Number(d.payments?.final_amount ?? d.amount).toLocaleString("en-IN")}
+                        ₹{Number(d.payment?.final_amount ?? d.amount).toLocaleString("en-IN")}
                       </TableCell>
                       <TableCell>
                         <Badge variant={d.is_adjusted ? "default" : "secondary"}>

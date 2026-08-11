@@ -180,6 +180,25 @@ Deno.serve(async (req) => {
     }).select().single();
     if (payErr) throw payErr;
 
+    if (enrollmentData.drop_in) {
+      const dropIn = enrollmentData.drop_in;
+      const { data: existingDropIn } = await supabase
+        .from("drop_ins")
+        .select("id")
+        .eq("payment_id", payment.id)
+        .maybeSingle();
+      if (!existingDropIn) {
+        const { error: dropInErr } = await supabase.from("drop_ins").insert({
+          organization_id: dropIn.organization_id || payment.organization_id,
+          student_id: dropIn.student_id || payment.student_id,
+          batch_session_id: dropIn.batch_session_id,
+          amount: dropIn.amount ?? payment.amount,
+          payment_id: payment.id,
+        });
+        if (dropInErr) throw dropInErr;
+      }
+    }
+
     let insertedEnrollments: any[] = [];
     if (enrollmentData.enrollments?.length) {
       const records = await fillMissingPreviousBatchIds(supabase, enrollmentData.enrollments.map((record: any) => ({
