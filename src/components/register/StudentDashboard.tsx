@@ -239,11 +239,15 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
         return;
       }
 
-      setEligibleDropIn(findEligibleDropInForRegistration((data || []) as DropInLike[], selectedBatches, simulatedToday));
+      setEligibleDropIn(findEligibleDropInForRegistration(
+        (data || []) as DropInLike[],
+        selectedBatches,
+        [planCycles[startCycleIdx]?.start_date, simulatedToday],
+      ));
     };
 
     checkEligibleDropIn();
-  }, [mode, student?.id, selectedBatchIds, batches, simulatedToday]);
+  }, [mode, student?.id, selectedBatchIds, batches, simulatedToday, planCycles, startCycleIdx]);
 
   const hasExistingAccessToBatch = (batch: any) => {
     return enrollments.some((enrollment) => {

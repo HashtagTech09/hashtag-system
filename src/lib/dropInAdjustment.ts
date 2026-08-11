@@ -54,13 +54,17 @@ export function getDropInAdjustmentAmount(dropIn: DropInLike | null | undefined)
 export function findEligibleDropInForRegistration(
   dropIns: DropInLike[],
   selectedBatches: BatchLike[],
-  registrationDate: string,
+  registrationDate: string | string[],
 ): DropInLike | null {
-  if (!registrationDate || selectedBatches.length === 0) return null;
+  const registrationDates = Array.isArray(registrationDate)
+    ? registrationDate.filter(Boolean)
+    : [registrationDate].filter(Boolean);
+  if (registrationDates.length === 0 || selectedBatches.length === 0) return null;
+  const dateSet = new Set(registrationDates);
 
   return dropIns.find((dropIn) => {
     const session = dropIn.batch_sessions;
-    if (!session?.session_date || session.session_date !== registrationDate) return false;
+    if (!session?.session_date || !dateSet.has(session.session_date)) return false;
     return selectedBatches.some((batch) => styleMatchesDropIn(dropIn, batch));
   }) || null;
 }

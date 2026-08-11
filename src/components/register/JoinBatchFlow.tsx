@@ -126,11 +126,15 @@ export default function JoinBatchFlow() {
         return;
       }
 
-      setEligibleDropIn(findEligibleDropInForRegistration((data || []) as DropInLike[], selectedBatches, simulatedToday));
+      setEligibleDropIn(findEligibleDropInForRegistration(
+        (data || []) as DropInLike[],
+        selectedBatches,
+        [assignment?.startCycle.start_date, simulatedToday],
+      ));
     };
 
     checkEligibleDropIn();
-  }, [student?.id, selectedBatchIds, allBatches, simulatedToday]);
+  }, [student?.id, selectedBatchIds, allBatches, simulatedToday, assignment?.startCycle.start_date]);
 
   const getCashApprovalRecipients = async (): Promise<CashRecipient[]> => {
     const batchIds = selectedBatchIds.map(Number);
