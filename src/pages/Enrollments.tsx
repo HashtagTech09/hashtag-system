@@ -945,7 +945,7 @@ const EnrollmentsPage = () => {
 
     const enrollmentRecords = addBatchForm.new_batch_ids.map(batchId => ({
       organization_id: 1, student_id: Number(addBatchForm.student_id), batch_id: Number(batchId),
-      payment_id: payment.id, status_type: "REN",
+      payment_id: payment.id, status_type: "NEW",
       registration_fee_applied: false, late_renewal: false,
       start_date: existingEnrollment.start_date, end_date: existingEnrollment.end_date,
       subscription_plan_id: existingEnrollment.subscription_plan_id,

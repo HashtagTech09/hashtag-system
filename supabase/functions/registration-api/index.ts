@@ -188,6 +188,26 @@ function detectStudentStatus(enrollments: { end_date: string }[], cycles: PlanCy
   return { status: "REV", latestEndDate: latest };
 }
 
+function getPreviousBatchIds(
+  enrollments: { end_date: string; batch_id?: number | null }[],
+  latestEndDate: string | null,
+) {
+  if (!latestEndDate) return [];
+  return enrollments
+    .filter((enrollment) => enrollment.end_date === latestEndDate && enrollment.batch_id)
+    .map((enrollment) => enrollment.batch_id as number);
+}
+
+function getPreviousBatchIdForEnrollment(
+  status: string,
+  batchId: number,
+  previousBatchIds: number[],
+) {
+  if (status !== "REN" && status !== "REV") return null;
+  if (previousBatchIds.includes(batchId)) return batchId;
+  return previousBatchIds[0] ?? null;
+}
+
 function computeFeeBreakdown(params: {
   batchCount: number; regularCycles: number; gridCycles: number;
   detectedStatus: string; latestEndDate: string | null; dropInAmount: number;
@@ -483,8 +503,9 @@ Deno.serve(async (req) => {
       if (!plan) return json({ error: "Plan not found" }, 404);
       await assertPromotionAccess(supabase, Number(student_id), batches);
 
-      const { data: enrollments } = await supabase.from("enrollments").select("end_date").eq("student_id", student_id).order("end_date", { ascending: false });
+      const { data: enrollments } = await supabase.from("enrollments").select("end_date, batch_id").eq("student_id", student_id).order("end_date", { ascending: false });
       const { status: detectedStatus, latestEndDate } = detectStudentStatus(enrollments || [], cycles);
+      const previousBatchIds = getPreviousBatchIds(enrollments || [], latestEndDate);
       const startIdx = detectedStatus === "REN" ? getRenewalStartCycleIndex(cycles, latestEndDate) : getStartCycleIndex(cycles);
       const assignment = computeCycleAssignment(plan, cycles, startIdx);
       if (!assignment) return json({ error: "Could not assign cycles" }, 400);
@@ -502,7 +523,7 @@ Deno.serve(async (req) => {
         status_type: detectedStatus, registration_fee_applied: breakdown.applyRegFee, late_renewal: breakdown.isLateRenewal,
         start_date: assignment.startCycle.start_date, end_date: assignment.endCycle.end_date || assignment.startCycle.start_date,
         subscription_plan_id: plan_id, start_cycle_id: assignment.startCycle.id, end_cycle_id: assignment.endCycle.id,
-        previous_batch_id: null,
+        previous_batch_id: getPreviousBatchIdForEnrollment(detectedStatus, batch.id, previousBatchIds),
       }));
 
       const allocations = computePaymentAllocations(

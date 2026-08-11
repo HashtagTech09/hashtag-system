@@ -37,6 +37,38 @@ function getCycleType(cycle: any) {
   return cycle?.cycle_type ?? cycle?.cycleType ?? "regular";
 }
 
+async function fillMissingPreviousBatchIds(supabase: any, records: any[]) {
+  const resolved: any[] = [];
+  for (const record of records) {
+    if (record.previous_batch_id || (record.status_type !== "REN" && record.status_type !== "REV")) {
+      resolved.push(record);
+      continue;
+    }
+
+    const { data: previousRows } = await supabase
+      .from("enrollments")
+      .select("batch_id, end_date")
+      .eq("student_id", record.student_id)
+      .lt("end_date", record.start_date)
+      .order("end_date", { ascending: false });
+
+    const latestEndDate = previousRows?.[0]?.end_date || null;
+    const previousBatchIds = latestEndDate
+      ? (previousRows || [])
+          .filter((row: any) => row.end_date === latestEndDate)
+          .map((row: any) => row.batch_id)
+      : [];
+
+    resolved.push({
+      ...record,
+      previous_batch_id: previousBatchIds.includes(record.batch_id)
+        ? record.batch_id
+        : previousBatchIds[0] ?? null,
+    });
+  }
+  return resolved;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -128,10 +160,10 @@ Deno.serve(async (req) => {
 
       // Insert enrollments
       if (data.enrollments?.length) {
-        const enrollments = data.enrollments.map((e: any) => ({
+        const enrollments = await fillMissingPreviousBatchIds(supabase, data.enrollments.map((e: any) => ({
           ...e,
           payment_id: payment.id,
-        }));
+        })));
         const { data: inserted } = await supabase.from("enrollments").insert(enrollments).select();
 
         // Insert enrollment_cycles

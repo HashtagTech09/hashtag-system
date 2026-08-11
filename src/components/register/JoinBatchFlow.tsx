@@ -58,6 +58,7 @@ export default function JoinBatchFlow() {
   const [allBatches, setAllBatches] = useState<BatchRow[]>([]);
   const [detectedStatus, setDetectedStatus] = useState<string>("NEW");
   const [latestEndDate, setLatestEndDate] = useState<string | null>(null);
+  const [previousBatchIds, setPreviousBatchIds] = useState<number[]>([]);
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
   const [testConfirmationUrl, setTestConfirmationUrl] = useState<string | null>(null);
@@ -134,12 +135,28 @@ export default function JoinBatchFlow() {
 
   useEffect(() => {
     const detectStatus = async () => {
-      if (!student) { setDetectedStatus("NEW"); setLatestEndDate(null); return; }
+      if (!student) {
+        setDetectedStatus("NEW");
+        setLatestEndDate(null);
+        setPreviousBatchIds([]);
+        return;
+      }
       const { data: enrollments } = await supabase
-        .from("enrollments").select("end_date").eq("student_id", student.id).order("end_date", { ascending: false });
+        .from("enrollments")
+        .select("end_date, batch_id")
+        .eq("student_id", student.id)
+        .order("end_date", { ascending: false });
       const result = detectStudentStatus(enrollments || [], planCycles, simulatedToday);
       setDetectedStatus(result.status);
       setLatestEndDate(result.latestEndDate);
+      setPreviousBatchIds(
+        result.latestEndDate
+          ? (enrollments || [])
+              .filter(enrollment => enrollment.end_date === result.latestEndDate)
+              .map(enrollment => enrollment.batch_id)
+              .filter(Boolean)
+          : []
+      );
     };
     detectStatus();
   }, [student, planCycles, simulatedToday]);
@@ -257,16 +274,24 @@ export default function JoinBatchFlow() {
       }
       const cyclesTemplate = allocated.map(c => ({ cycle_id: c.cycleId, cycle_type: c.cycleType }));
 
-      const enrollmentRecords = sortedSelectedBatches.map(batch => ({
-        organization_id: 1, student_id: student.id, batch_id: batch.id,
-        status_type: detectedStatus,
-        registration_fee_applied: breakdown.applyRegFee, late_renewal: breakdown.isLateRenewal,
-        start_date: assignment.startCycle.start_date,
-        end_date: assignment.endCycle.end_date || assignment.startCycle.start_date,
-        subscription_plan_id: Number(selectedPlanId),
-        start_cycle_id: assignment.startCycle.id, end_cycle_id: assignment.endCycle.id,
-        previous_batch_id: null,
-      }));
+      const enrollmentRecords = sortedSelectedBatches.map(batch => {
+        const shouldAttributePreviousBatch = detectedStatus === "REN" || detectedStatus === "REV";
+        const previousBatchId = shouldAttributePreviousBatch
+          ? previousBatchIds.includes(batch.id)
+            ? batch.id
+            : previousBatchIds[0] ?? null
+          : null;
+        return {
+          organization_id: 1, student_id: student.id, batch_id: batch.id,
+          status_type: detectedStatus,
+          registration_fee_applied: breakdown.applyRegFee, late_renewal: breakdown.isLateRenewal,
+          start_date: assignment.startCycle.start_date,
+          end_date: assignment.endCycle.end_date || assignment.startCycle.start_date,
+          subscription_plan_id: Number(selectedPlanId),
+          start_cycle_id: assignment.startCycle.id, end_cycle_id: assignment.endCycle.id,
+          previous_batch_id: previousBatchId,
+        };
+      });
 
       const allocations = computePaymentAllocations(
         sortedSelectedBatches.map(b => ({ id: b.id, studio_id: b.studio_id })),
