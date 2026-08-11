@@ -8,9 +8,10 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Search, Ticket } from "lucide-react";
+import { Plus, Search, Ticket, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { getDisplayPhone } from "@/lib/studentUtils";
 import { buildEligibilityKey, STYLE_OPTIONS, LEVEL_OPTIONS } from "@/lib/styleHierarchy";
@@ -37,6 +38,7 @@ const DropInsPage = () => {
   const [activeTab, setActiveTab] = useState("drop-ins");
   const [regularDropInFee, setRegularDropInFee] = useState(DEFAULT_DROP_IN_TOTAL);
   const [longDropInFee, setLongDropInFee] = useState(DEFAULT_LONG_DROP_IN_TOTAL);
+  const [deleteFor, setDeleteFor] = useState<any | null>(null);
 
   // Drop-in form
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -219,6 +221,22 @@ const DropInsPage = () => {
     fetchData();
   };
 
+  const handleDeleteDropIn = async () => {
+    if (!deleteFor) return;
+    const { error } = await supabase
+      .from("drop_ins")
+      .delete()
+      .eq("id", deleteFor.id)
+      .eq("organization_id", 1);
+    if (error) {
+      toast.error(`Could not delete drop-in: ${error.message}`);
+      return;
+    }
+    toast.success("Drop-in deleted");
+    setDeleteFor(null);
+    fetchData();
+  };
+
   const filteredDropIns = dropIns.filter(d => {
     const term = search.trim().toLowerCase();
     if (!term) return true;
@@ -361,6 +379,7 @@ const DropInsPage = () => {
                     <TableHead>Style</TableHead>
                     <TableHead>Amount</TableHead>
                     <TableHead>Adjusted</TableHead>
+                    <TableHead className="w-12"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -378,10 +397,20 @@ const DropInsPage = () => {
                           {d.is_adjusted ? "Yes" : "No"}
                         </Badge>
                       </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setDeleteFor(d)}
+                          aria-label="Delete drop-in"
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))}
                   {filteredDropIns.length === 0 && (
-                    <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No drop-ins found</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">No drop-ins found</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>
@@ -423,6 +452,23 @@ const DropInsPage = () => {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <AlertDialog open={!!deleteFor} onOpenChange={(open) => { if (!open) setDeleteFor(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this drop-in?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes the drop-in from reports and sheet copy. The linked payment record is kept for audit history.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={handleDeleteDropIn}>
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AdminLayout>
   );
 };
