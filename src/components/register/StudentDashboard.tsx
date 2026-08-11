@@ -375,13 +375,15 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
   };
 
   const buildEnrollmentRecords = (paymentId?: number) => {
+    const hasSelectedPreviousBatch = selectedBatchIds.some(batchId => previousBatchIds.includes(Number(batchId)));
     return selectedBatchIds.map(batchId => {
       let prevBatchId: number | null = null;
       const numBatchId = Number(batchId);
       const isPreviousBatch = previousBatchIds.includes(numBatchId);
-      const statusType = mode === "renew" && !isPreviousBatch ? "NEW" : detectedStatus;
-      if ((detectedStatus === "REN" || detectedStatus === "REV") && isPreviousBatch) {
-        prevBatchId = numBatchId;
+      const isShiftedRenewal = mode === "renew" && !hasSelectedPreviousBatch && !isPreviousBatch && previousBatchIds.length > 0;
+      const statusType = mode === "renew" && !isPreviousBatch && !isShiftedRenewal ? "NEW" : detectedStatus;
+      if ((detectedStatus === "REN" || detectedStatus === "REV") && (isPreviousBatch || isShiftedRenewal)) {
+        prevBatchId = isPreviousBatch ? numBatchId : previousBatchIds[0];
       }
       return {
         organization_id: 1, student_id: student.id, batch_id: Number(batchId),

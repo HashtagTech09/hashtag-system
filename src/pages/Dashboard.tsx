@@ -111,6 +111,11 @@ interface Enrollment {
   created_at: string; start_cycle_id: number | null; end_cycle_id: number | null;
   previous_batch_id: number | null;
 }
+interface ClassifiedEnrollment extends Enrollment {
+  displayStatus: string;
+  isShiftedRenewal: boolean;
+  renewalBatchId: number;
+}
 interface Payment {
   id: number; amount: number; gst: number | null; final_amount: number | null;
   payment_mode: string | null; created_at: string;
@@ -194,6 +199,7 @@ const Dashboard = () => {
   }, [scopeLoading, scopeUnrestricted, scopeStudioIds]);
 
   const selectedCycle = useMemo(() => allCycles.find(c => String(c.id) === selectedCycleId) || null, [allCycles, selectedCycleId]);
+  const visibleBatchIds = useMemo(() => new Set(batches.map(b => b.id)), [batches]);
 
   useEffect(() => {
     if (!selectedCycle) return;
@@ -227,12 +233,13 @@ const Dashboard = () => {
         return;
       }
 
+      const batchIdList = batchIds.join(",");
       const enrollRaw = await fetchAll<Enrollment>(() =>
         supabase.from("enrollments")
           .select("id, student_id, batch_id, status_type, start_date, end_date, payment_id, created_at, start_cycle_id, end_cycle_id, previous_batch_id")
           .eq("organization_id", 1)
           .eq("is_active", true)
-          .in("batch_id", batchIds)
+          .or(`batch_id.in.(${batchIdList}),previous_batch_id.in.(${batchIdList})`)
           .gte("end_date", selectedCycle.start_date)
           .lte("start_date", selectedCycle.end_date || "2099-12-31")
       );
@@ -337,13 +344,25 @@ const Dashboard = () => {
   }, [selectedCycle, selectedStudio, scopeLoading, scopeUnrestricted, scopeBatchIds]);
 
   // Classify enrollments: C/F (carry forward from prior cycle) vs current-cycle
-  const classifiedEnrollments = useMemo(() => {
-    if (!selectedCycle) return enrollments.map(e => ({ ...e, displayStatus: e.status_type }));
+  const classifiedEnrollments = useMemo<ClassifiedEnrollment[]>(() => {
+    if (!selectedCycle) {
+      return enrollments.map(e => ({
+        ...e,
+        displayStatus: e.status_type,
+        isShiftedRenewal: e.status_type === "REN" && !!e.previous_batch_id && e.previous_batch_id !== e.batch_id,
+        renewalBatchId: e.status_type === "REN" ? (e.previous_batch_id || e.batch_id) : e.batch_id,
+      }));
+    }
     return enrollments.map(e => {
       const isCarryForward = e.start_cycle_id
         ? e.start_cycle_id < selectedCycle.id
         : e.created_at < selectedCycle.start_date;
-      return { ...e, displayStatus: isCarryForward ? "C/F" : e.status_type };
+      return {
+        ...e,
+        displayStatus: isCarryForward ? "C/F" : e.status_type,
+        isShiftedRenewal: e.status_type === "REN" && !!e.previous_batch_id && e.previous_batch_id !== e.batch_id,
+        renewalBatchId: e.status_type === "REN" ? (e.previous_batch_id || e.batch_id) : e.batch_id,
+      };
     });
   }, [enrollments, selectedCycle]);
 
@@ -368,8 +387,7 @@ const Dashboard = () => {
       if (e.displayStatus === "NEW") newMap.set(e.batch_id, (newMap.get(e.batch_id) || 0) + 1);
       if (e.displayStatus === "REV") revMap.set(e.batch_id, (revMap.get(e.batch_id) || 0) + 1);
       if (e.displayStatus === "REN") {
-        const renewalBatchId = e.previous_batch_id || e.batch_id;
-        renMap.set(renewalBatchId, (renMap.get(renewalBatchId) || 0) + 1);
+        renMap.set(e.renewalBatchId, (renMap.get(e.renewalBatchId) || 0) + 1);
       }
     });
     return batches
@@ -462,8 +480,9 @@ const Dashboard = () => {
       else if (e.displayStatus === "REN") row.REN++;
       else if (e.displayStatus === "REV") row.REV++;
     });
+    const revenueEnrollments = classifiedEnrollments.filter(e => visibleBatchIds.has(e.batch_id));
     const countedPaymentIds = new Set(
-      classifiedEnrollments
+      revenueEnrollments
         .filter(e => e.displayStatus !== "C/F" && e.payment_id)
         .map(e => e.payment_id as number)
     );
@@ -526,7 +545,7 @@ const Dashboard = () => {
       }
     });
     return Array.from(map.values()).sort((a, b) => b.date.localeCompare(a.date));
-  }, [adjustedDropInByPayment, classifiedEnrollments, dropIns, paymentAllocations, paymentMap]);
+  }, [adjustedDropInByPayment, classifiedEnrollments, dropIns, paymentAllocations, paymentMap, visibleBatchIds]);
 
   const dateTotals = useMemo(() => {
     return dateWise.reduce((acc, r) => ({
@@ -690,12 +709,16 @@ const Dashboard = () => {
     return classifiedEnrollments
       .filter(e => {
         if (selectedBatch.filter === "REN") {
-          return (e.previous_batch_id || e.batch_id) === selectedBatch.id;
+          return e.renewalBatchId === selectedBatch.id;
         }
         return e.batch_id === selectedBatch.id;
       })
       .filter(e => selectedBatch.filter === "total" || e.displayStatus === selectedBatch.filter)
-      .map(e => ({ student_id: e.student_id, displayStatus: e.displayStatus }));
+      .map(e => ({
+        student_id: e.student_id,
+        displayStatus: e.displayStatus,
+        isShiftedRenewal: e.isShiftedRenewal,
+      }));
   }, [classifiedEnrollments, renewableRows, selectedBatch]);
 
   const fetchPaidToNames = async (paymentsForCopy: any[]) => {

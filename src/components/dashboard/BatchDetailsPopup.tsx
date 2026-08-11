@@ -16,6 +16,7 @@ import { getDisplayPhone } from "@/lib/studentUtils";
 export interface BatchPopupEnrollment {
   student_id: number;
   displayStatus: string;
+  isShiftedRenewal?: boolean;
 }
 
 export interface BatchPopupBatch {
@@ -37,11 +38,12 @@ interface StudentRow {
   email: string | null;
   users?: { phone: string | null; email: string | null; name: string | null } | null;
   status: string;
+  isShiftedRenewal: boolean;
 }
 
 const statusVariant = (s: string): "default" | "secondary" | "outline" => {
   if (s === "NEW") return "default";
-  if (s === "REN" || s === "REV") return "secondary";
+  if (s === "REN" || s === "REV" || s === "Shifted REN") return "secondary";
   return "outline";
 };
 
@@ -54,18 +56,28 @@ export default function BatchDetailsPopup({ batch, enrollments, open, onOpenChan
 
   // Per-student status (first enrollment wins). Stable input regardless of array identity.
   const statusByStudent = useMemo(() => {
-    const m = new Map<number, string>();
+    const m = new Map<number, { status: string; isShiftedRenewal: boolean }>();
     enrollments.forEach(e => {
-      if (!m.has(e.student_id)) m.set(e.student_id, e.displayStatus);
+      if (!m.has(e.student_id)) {
+        m.set(e.student_id, {
+          status: e.displayStatus,
+          isShiftedRenewal: !!e.isShiftedRenewal,
+        });
+      }
     });
     return m;
   }, [enrollments]);
 
   const studentIds = useMemo(() => Array.from(statusByStudent.keys()).sort((a, b) => a - b), [statusByStudent]);
   const idKey = studentIds.join(",");
+  const statusKey = useMemo(() => {
+    return Array.from(statusByStudent.entries())
+      .map(([studentId, row]) => `${studentId}:${row.status}:${row.isShiftedRenewal ? "shifted" : "normal"}`)
+      .join("|");
+  }, [statusByStudent]);
 
   const { data: students, isLoading } = useQuery({
-    queryKey: ["batch-popup-students", batch?.id, idKey],
+    queryKey: ["batch-popup-students", batch?.id, idKey, statusKey],
     enabled: open && !!batch && studentIds.length > 0,
     queryFn: async (): Promise<StudentRow[]> => {
       const { data, error } = await supabase
@@ -75,7 +87,8 @@ export default function BatchDetailsPopup({ batch, enrollments, open, onOpenChan
       if (error) throw error;
       return (data || []).map((s: any) => ({
         ...s,
-        status: statusByStudent.get(s.id) || "",
+        status: statusByStudent.get(s.id)?.status || "",
+        isShiftedRenewal: statusByStudent.get(s.id)?.isShiftedRenewal || false,
       }));
     },
   });
@@ -138,8 +151,8 @@ export default function BatchDetailsPopup({ batch, enrollments, open, onOpenChan
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-sm truncate">{s.name}</span>
                       {s.status && (
-                        <Badge variant={statusVariant(s.status)} className="text-[10px] px-1.5 py-0">
-                          {s.status}
+                        <Badge variant={statusVariant(s.isShiftedRenewal ? "Shifted REN" : s.status)} className="text-[10px] px-1.5 py-0">
+                          {s.isShiftedRenewal ? "Shifted REN" : s.status}
                         </Badge>
                       )}
                     </div>
