@@ -241,12 +241,12 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
       setEligibleDropIn(findEligibleDropInForRegistration(
         (data || []) as DropInLike[],
         selectedBatches,
-        [planCycles[startCycleIdx]?.start_date, simulatedToday],
+        simulatedToday,
       ));
     };
 
     checkEligibleDropIn();
-  }, [mode, student?.id, selectedBatchIds, batches, simulatedToday, planCycles, startCycleIdx]);
+  }, [mode, student?.id, selectedBatchIds, batches, simulatedToday]);
 
   const hasExistingAccessToBatch = (batch: any) => {
     return enrollments.some((enrollment) => {

@@ -128,12 +128,12 @@ export default function JoinBatchFlow() {
       setEligibleDropIn(findEligibleDropInForRegistration(
         (data || []) as DropInLike[],
         selectedBatches,
-        [assignment?.startCycle.start_date, simulatedToday],
+        simulatedToday,
       ));
     };
 
     checkEligibleDropIn();
-  }, [student?.id, selectedBatchIds, allBatches, simulatedToday, assignment?.startCycle.start_date]);
+  }, [student?.id, selectedBatchIds, allBatches, simulatedToday]);
 
   const getCashApprovalRecipients = async (): Promise<CashRecipient[]> => {
     const batchIds = selectedBatchIds.map(Number);

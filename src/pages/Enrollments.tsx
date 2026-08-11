@@ -524,10 +524,10 @@ const EnrollmentsPage = () => {
 
       if (!data || data.length === 0) { setEligibleDropIn(null); return; }
 
-      setEligibleDropIn(findEligibleDropInForRegistration(data || [], selectedBatches, [form.computed_start, simulatedToday]));
+      setEligibleDropIn(findEligibleDropInForRegistration(data || [], selectedBatches, simulatedToday));
     };
     checkDropIns();
-  }, [form.student_id, form.batch_ids, form.computed_start, batches, simulatedToday]);
+  }, [form.student_id, form.batch_ids, batches, simulatedToday]);
   // Find the first cycle with open registration (or next upcoming)
   const getRegistrationDeadline = (cycle: any): string => {
     if (cycle.registration_deadline) return cycle.registration_deadline;
@@ -864,13 +864,10 @@ const EnrollmentsPage = () => {
         .eq("organization_id", 1)
         .order("created_at", { ascending: false });
       if (!data || data.length === 0) { setAddBatchDropIn(null); return; }
-      setAddBatchDropIn(findEligibleDropInForRegistration(data || [], selectedBatches, [
-        existingEnrollment?.start_date,
-        simulatedToday,
-      ]));
+      setAddBatchDropIn(findEligibleDropInForRegistration(data || [], selectedBatches, simulatedToday));
     };
     checkAddBatchDropIns();
-  }, [addBatchForm.student_id, addBatchForm.new_batch_ids, existingEnrollment?.start_date, batches, simulatedToday]);
+  }, [addBatchForm.student_id, addBatchForm.new_batch_ids, batches, simulatedToday]);
 
   const computeAddBatchFee = () => {
     if (!existingEnrollment || addBatchForm.new_batch_ids.length === 0) return null;
