@@ -69,6 +69,28 @@ async function fillMissingPreviousBatchIds(supabase: any, records: any[]) {
   return resolved;
 }
 
+async function applyDropInAdjustment(supabase: any, payment: any, data: any) {
+  const adjustment = data?.drop_in_adjustment;
+  if (!adjustment?.drop_in_id) return;
+
+  const update: Record<string, unknown> = {
+    is_adjusted: true,
+    adjusted_at: new Date().toISOString(),
+    adjusted_payment_id: payment.id,
+  };
+  if (adjustment.adjusted_amount !== undefined && adjustment.adjusted_amount !== null) {
+    update.adjusted_amount = adjustment.adjusted_amount;
+  }
+
+  const { error } = await supabase
+    .from("drop_ins")
+    .update(update)
+    .eq("id", adjustment.drop_in_id)
+    .eq("student_id", payment.student_id)
+    .eq("is_adjusted", false);
+  if (error) throw error;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -215,6 +237,8 @@ Deno.serve(async (req) => {
         }));
         await supabase.from("payment_allocations").insert(allocs);
       }
+
+      await applyDropInAdjustment(supabase, payment, data);
 
       // Mark pending as completed
       await supabase.from("pending_enrollments").update({ status: "completed" }).eq("id", pending.id);

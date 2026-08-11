@@ -19,6 +19,7 @@ import { canStudentSelectBatch, getLockedBatchNames, isBatchPromotionLocked, typ
 import ReceiptPreviewDialog from "./ReceiptPreviewDialog";
 import type { ReceiptData } from "@/lib/receiptTemplate";
 import { fetchConfirmedReceiptData } from "@/lib/receiptData";
+import { buildDropInAdjustmentPayload, findEligibleDropInForRegistration, getDropInAdjustmentAmount, type DropInLike } from "@/lib/dropInAdjustment";
 
 type UserRow = Database["public"]["Tables"]["users"]["Row"];
 type CashRecipient = Pick<UserRow, "id" | "name" | "email">;
@@ -71,6 +72,7 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
   const [pendingPromotions, setPendingPromotions] = useState<any[]>([]);
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
+  const [eligibleDropIn, setEligibleDropIn] = useState<DropInLike | null>(null);
   const contextToday = useSimulatedToday();
   const simulatedToday = simulatedTodayProp || contextToday;
 
@@ -208,6 +210,41 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
   const selectedBatchObjects = selectedBatchIds.map(id => batches.find(b => b.id === Number(id))).filter(Boolean);
   const sortedSelectedBatches = sortBatchesByHierarchy(selectedBatchObjects);
 
+  useEffect(() => {
+    const checkEligibleDropIn = async () => {
+      if ((mode !== "renew" && mode !== "add") || !student?.id || selectedBatchIds.length === 0) {
+        setEligibleDropIn(null);
+        return;
+      }
+
+      const selectedBatches = selectedBatchIds
+        .map(id => batches.find(b => b.id === Number(id)))
+        .filter(Boolean);
+      if (selectedBatches.length === 0) {
+        setEligibleDropIn(null);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("drop_ins")
+        .select("*, payment:payments!drop_ins_payment_id_fkey(final_amount, gst), batch_sessions(session_date, style, start_time, end_time, batches(name, style, style_base))")
+        .eq("student_id", student.id)
+        .eq("is_adjusted", false)
+        .eq("organization_id", 1)
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error("Could not load drop-in adjustment candidates", error);
+        setEligibleDropIn(null);
+        return;
+      }
+
+      setEligibleDropIn(findEligibleDropInForRegistration((data || []) as DropInLike[], selectedBatches, simulatedToday));
+    };
+
+    checkEligibleDropIn();
+  }, [mode, student?.id, selectedBatchIds, batches, simulatedToday]);
+
   const hasExistingAccessToBatch = (batch: any) => {
     return enrollments.some((enrollment) => {
       const enrolledBatch = enrollment.batches;
@@ -315,10 +352,11 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
     gridCycles: assignment.gridCount,
     detectedStatus,
     latestEndDate,
-    dropInAmount: 0,
+    dropInAmount: eligibleDropIn ? getDropInAdjustmentAmount(eligibleDropIn) : 0,
     sortedBatches: sortedSelectedBatches.map(b => ({ id: b.id, name: b.name, style_base: b.style_base })),
     today: simulatedToday,
   }) : null;
+  const dropInAdjustmentPayload = buildDropInAdjustmentPayload(eligibleDropIn);
 
   // Auto-select first valid plan
   useEffect(() => {
@@ -468,6 +506,7 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
               enrollments: enrollmentRecords,
               enrollment_cycles_template: cyclesTemplate,
               payment_allocations: allocations,
+              ...(dropInAdjustmentPayload ? { drop_in_adjustment: dropInAdjustmentPayload } : {}),
             },
             student_name: student.name,
             student_phone: user?.phone || student.phone || "",
@@ -497,6 +536,7 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
           enrollments: enrollmentRecords,
           enrollment_cycles_template: cyclesTemplate,
           payment_allocations: allocations,
+          ...(dropInAdjustmentPayload ? { drop_in_adjustment: dropInAdjustmentPayload } : {}),
         } as unknown as Json,
       });
       setTestConfirmationUrl(cashApproval.testMode ? cashApproval.confirmUrl : null);
@@ -567,6 +607,7 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
       plan: addPlan,
       planCycles,
       startCycleIndex: startCycleIdx,
+      dropInAmount: eligibleDropIn ? getDropInAdjustmentAmount(eligibleDropIn) : 0,
     });
   })();
   const renewPaymentActionLabel = breakdown
@@ -650,6 +691,7 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
               enrollment_cycles_template: allocatedCycles,
               existing_extensions: existingExtensions,
               payment_allocations: collectedAllocations,
+              ...(dropInAdjustmentPayload ? { drop_in_adjustment: dropInAdjustmentPayload } : {}),
             },
             student_name: student.name,
             student_phone: user?.phone || student.phone || "",
@@ -678,6 +720,7 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
           enrollment_cycles_template: allocatedCycles,
           existing_extensions: existingExtensions,
           payment_allocations: collectedAllocations,
+          ...(dropInAdjustmentPayload ? { drop_in_adjustment: dropInAdjustmentPayload } : {}),
         } as unknown as Json,
       });
       setTestConfirmationUrl(cashApproval.testMode ? cashApproval.confirmUrl : null);
@@ -1129,6 +1172,15 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
                     </div>
                   )}
 
+                  {eligibleDropIn && (
+                    <div className="rounded-lg border border-success/30 bg-success/10 p-3 text-sm">
+                      <p className="font-medium text-success">Drop-in adjustment available</p>
+                      <p className="mt-1 text-muted-foreground">
+                        {eligibleDropIn.batch_sessions?.session_date} • {eligibleDropIn.batch_sessions?.style} • ₹{getDropInAdjustmentAmount(eligibleDropIn).toLocaleString("en-IN")} will be deducted after payment confirmation.
+                      </p>
+                    </div>
+                  )}
+
                   {breakdown && <FeeBreakdownDisplay breakdown={breakdown} regularCycles={assignment!.regularCount} gridCycles={assignment!.gridCount} detectedStatus={detectedStatus} />}
 
                   <Button className="w-full gradient-primary" onClick={handleRenew} disabled={submitting || selectedBatchIds.length === 0 || !assignment}>
@@ -1219,6 +1271,15 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
                     </div>
                   )}
 
+                  {eligibleDropIn && (
+                    <div className="rounded-lg border border-success/30 bg-success/10 p-3 text-sm">
+                      <p className="font-medium text-success">Drop-in adjustment available</p>
+                      <p className="mt-1 text-muted-foreground">
+                        {eligibleDropIn.batch_sessions?.session_date} • {eligibleDropIn.batch_sessions?.style} • ₹{getDropInAdjustmentAmount(eligibleDropIn).toLocaleString("en-IN")} will be deducted after payment confirmation.
+                      </p>
+                    </div>
+                  )}
+
                   {addBatchBreakdown && (
                     <div className="p-3 rounded-lg border border-border bg-muted/30 text-sm space-y-1">
                       <p className="font-medium text-foreground mb-2">Fee Breakdown</p>
@@ -1253,6 +1314,12 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
                         <span className="text-muted-foreground">Class fee after rounding</span>
                         <span>₹{addBatchBreakdown.roundedBatchTotal.toLocaleString()}</span>
                       </div>
+                      {addBatchBreakdown.dropInAdj > 0 && (
+                        <div className="flex justify-between text-success">
+                          <span>Drop-in adjustment</span>
+                          <span>-₹{addBatchBreakdown.dropInAdj.toLocaleString()}</span>
+                        </div>
+                      )}
                       <div className="flex justify-between font-semibold border-t border-border pt-1 mt-1">
                         <span>Total</span>
                         <span>₹{addBatchBreakdown.total.toLocaleString()}</span>

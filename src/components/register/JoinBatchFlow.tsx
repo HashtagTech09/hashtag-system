@@ -28,6 +28,7 @@ import type { ReceiptData } from "@/lib/receiptTemplate";
 import { fetchConfirmedReceiptData } from "@/lib/receiptData";
 import { needsAccountSetup, type AccountOwnerType } from "@/lib/accountOwner";
 import { getLockedBatchNames, type ApprovedPromotionLike } from "@/lib/promotionUtils";
+import { buildDropInAdjustmentPayload, findEligibleDropInForRegistration, getDropInAdjustmentAmount, type DropInLike } from "@/lib/dropInAdjustment";
 
 type Step = "studio" | "style" | "level" | "batch" | "phone" | "setup" | "hub" | "details" | "pay" | "waiting";
 type UserRow = Database["public"]["Tables"]["users"]["Row"];
@@ -63,6 +64,7 @@ export default function JoinBatchFlow() {
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
   const [testConfirmationUrl, setTestConfirmationUrl] = useState<string | null>(null);
   const [approvedPromotions, setApprovedPromotions] = useState<ApprovedPromotionLike[]>([]);
+  const [eligibleDropIn, setEligibleDropIn] = useState<DropInLike | null>(null);
   const simulatedToday = useSimulatedToday();
 
   useEffect(() => {
@@ -94,6 +96,41 @@ export default function JoinBatchFlow() {
 
   const selectedBatchObjects = selectedBatchIds.map(id => allBatches.find(b => b.id === Number(id))).filter(Boolean);
   const sortedSelectedBatches = sortBatchesByHierarchy(selectedBatchObjects);
+
+  useEffect(() => {
+    const checkEligibleDropIn = async () => {
+      if (!student?.id || selectedBatchIds.length === 0) {
+        setEligibleDropIn(null);
+        return;
+      }
+
+      const selectedBatches = selectedBatchIds
+        .map(id => allBatches.find(b => b.id === Number(id)))
+        .filter(Boolean);
+      if (selectedBatches.length === 0) {
+        setEligibleDropIn(null);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("drop_ins")
+        .select("*, payment:payments!drop_ins_payment_id_fkey(final_amount, gst), batch_sessions(session_date, style, start_time, end_time, batches(name, style, style_base))")
+        .eq("student_id", student.id)
+        .eq("is_adjusted", false)
+        .eq("organization_id", 1)
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error("Could not load drop-in adjustment candidates", error);
+        setEligibleDropIn(null);
+        return;
+      }
+
+      setEligibleDropIn(findEligibleDropInForRegistration((data || []) as DropInLike[], selectedBatches, simulatedToday));
+    };
+
+    checkEligibleDropIn();
+  }, [student?.id, selectedBatchIds, allBatches, simulatedToday]);
 
   const getCashApprovalRecipients = async (): Promise<CashRecipient[]> => {
     const batchIds = selectedBatchIds.map(Number);
@@ -180,10 +217,11 @@ export default function JoinBatchFlow() {
     gridCycles: assignment.gridCount,
     detectedStatus,
     latestEndDate,
-    dropInAmount: 0,
+    dropInAmount: eligibleDropIn ? getDropInAdjustmentAmount(eligibleDropIn) : 0,
     sortedBatches: sortedSelectedBatches.map(b => ({ id: b.id, name: b.name, style_base: b.style_base })),
     today: simulatedToday,
   }) : null;
+  const dropInAdjustmentPayload = buildDropInAdjustmentPayload(eligibleDropIn);
   const paymentActionLabel = breakdown
     ? paymentMode === "cash"
       ? `Send ₹${breakdown.total.toLocaleString("en-IN")} for Cash Approval`
@@ -326,7 +364,12 @@ export default function JoinBatchFlow() {
           orderParams: {
             student_id: student.id, organization_id: 1, batch_ids: selectedBatchIds.map(Number),
             amount: breakdown.subtotal, gst: breakdown.gst, final_amount: breakdown.total,
-            enrollment_data: { enrollments: enrollmentRecords, enrollment_cycles_template: cyclesTemplate, payment_allocations: allocations },
+            enrollment_data: {
+              enrollments: enrollmentRecords,
+              enrollment_cycles_template: cyclesTemplate,
+              payment_allocations: allocations,
+              ...(dropInAdjustmentPayload ? { drop_in_adjustment: dropInAdjustmentPayload } : {}),
+            },
             student_name: student.name, student_phone: student.phone || "", batch_names: batchNames, plan_name: planName,
           },
           onSuccess: async (details) => {
@@ -350,7 +393,12 @@ export default function JoinBatchFlow() {
       const { data: cashReq, error: cashErr } = await supabase.from("cash_payment_requests").insert({
         organization_id: 1, student_id: student.id, staff_user_id: primaryApprover.id,
         amount: breakdown.subtotal, gst: breakdown.gst, final_amount: breakdown.total,
-        enrollment_data: { enrollments: enrollmentRecords, enrollment_cycles_template: cyclesTemplate, payment_allocations: allocations } as unknown as Json,
+        enrollment_data: {
+          enrollments: enrollmentRecords,
+          enrollment_cycles_template: cyclesTemplate,
+          payment_allocations: allocations,
+          ...(dropInAdjustmentPayload ? { drop_in_adjustment: dropInAdjustmentPayload } : {}),
+        } as unknown as Json,
         batch_ids: selectedBatchIds.map(Number) as unknown as Json,
         expires_at: expiresAt,
         recipient_user_ids: cashRecipients.map((r) => r.id) as unknown as Json,
@@ -595,6 +643,15 @@ export default function JoinBatchFlow() {
                 <Label>Manager/Instructor Approval</Label>
                 <p className="text-xs text-muted-foreground mt-1">
                   Cash does not enroll immediately. The studio manager or instructor must confirm cash received within 10 minutes.
+                </p>
+              </div>
+            )}
+
+            {eligibleDropIn && (
+              <div className="rounded-lg border border-success/30 bg-success/10 p-3 text-sm">
+                <p className="font-medium text-success">Drop-in adjustment available</p>
+                <p className="mt-1 text-muted-foreground">
+                  {eligibleDropIn.batch_sessions?.session_date} • {eligibleDropIn.batch_sessions?.style} • ₹{getDropInAdjustmentAmount(eligibleDropIn).toLocaleString("en-IN")} will be deducted after payment confirmation.
                 </p>
               </div>
             )}

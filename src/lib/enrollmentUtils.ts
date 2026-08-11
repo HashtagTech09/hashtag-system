@@ -373,8 +373,9 @@ export function computeAddBatchBreakdown(params: {
   plan: SubPlan;
   planCycles: PlanCycle[];
   startCycleIndex: number;
+  dropInAmount?: number;
 }): AddBatchBreakdown | null {
-  const { existingBatches, newBatches, plan, planCycles: cycles, startCycleIndex } = params;
+  const { existingBatches, newBatches, plan, planCycles: cycles, startCycleIndex, dropInAmount = 0 } = params;
   const regularCycles = plan.total_regular_cycles ?? 0;
   const gridCycles = plan.total_grid_cycles ?? 0;
   const planKey = getPlanKey(regularCycles, gridCycles);
@@ -452,7 +453,7 @@ export function computeAddBatchBreakdown(params: {
   const batchTotalWithGst = subtotal + gst;
   const roundedBatchTotal = isFixedPricePlan ? batchTotalWithGst : roundToNearest100(batchTotalWithGst);
   const roundingAdjustment = roundedBatchTotal - batchTotalWithGst;
-  const total = roundedBatchTotal;
+  const total = Math.max(0, roundedBatchTotal - dropInAmount);
 
   return {
     batchCount: existingBatches.length + newBatches.length,
@@ -461,7 +462,7 @@ export function computeAddBatchBreakdown(params: {
     discountAmount: 0,
     totalBatchFee: totalFee,
     regFee: 0,
-    dropInAdj: 0,
+    dropInAdj: dropInAmount,
     subtotal,
     gst,
     batchTotalWithGst,

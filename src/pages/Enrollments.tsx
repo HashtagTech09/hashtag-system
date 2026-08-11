@@ -24,6 +24,7 @@ import { useSimulatedToday, useTestDate } from "@/contexts/TestDateContext";
 import { Textarea } from "@/components/ui/textarea";
 import { allocateCollectedAmount, sortBatchesByHierarchy } from "@/lib/styleHierarchy";
 import { computeFeeBreakdown as computeSharedFeeBreakdown, detectStudentStatus, roundToNearest100 } from "@/lib/enrollmentUtils";
+import { findEligibleDropInForRegistration, getDropInAdjustmentAmount } from "@/lib/dropInAdjustment";
 
 async function fetchAll<T>(buildQuery: () => any): Promise<T[]> {
   const pageSize = 1000;
@@ -38,17 +39,6 @@ async function fetchAll<T>(buildQuery: () => any): Promise<T[]> {
     from += pageSize;
   }
   return all;
-}
-
-function getDropInAdjustmentAmount(dropIn: any): number {
-  const finalAmount = Number(dropIn?.payments?.final_amount);
-  if (Number.isFinite(finalAmount) && finalAmount > 0) return finalAmount;
-
-  const amount = Number(dropIn?.amount) || 0;
-  const gst = Number(dropIn?.payments?.gst);
-  if (Number.isFinite(gst) && gst > 0) return amount + gst;
-
-  return amount;
 }
 
 function getIstDayBounds(date: string): { start: string; end: string } {
@@ -522,12 +512,11 @@ const EnrollmentsPage = () => {
   useEffect(() => {
     const checkDropIns = async () => {
       if (!form.student_id || form.batch_ids.length === 0) { setEligibleDropIn(null); return; }
-      const todayStr = new Date().toISOString().split("T")[0];
-      const selectedStyles = batches.filter(b => form.batch_ids.includes(String(b.id))).map(b => b.style).filter(Boolean);
-      if (selectedStyles.length === 0) { setEligibleDropIn(null); return; }
+      const selectedBatches = batches.filter(b => form.batch_ids.includes(String(b.id)));
+      if (selectedBatches.length === 0) { setEligibleDropIn(null); return; }
 
       const { data } = await supabase.from("drop_ins")
-        .select("*, payments(final_amount, gst), batch_sessions(session_date, style, start_time, end_time, batches(name))")
+        .select("*, payment:payments!drop_ins_payment_id_fkey(final_amount, gst), batch_sessions(session_date, style, start_time, end_time, batches(name, style, style_base))")
         .eq("student_id", Number(form.student_id))
         .eq("is_adjusted", false)
         .eq("organization_id", 1)
@@ -535,16 +524,10 @@ const EnrollmentsPage = () => {
 
       if (!data || data.length === 0) { setEligibleDropIn(null); return; }
 
-      // Find most recent eligible: session_date >= today AND style matches
-      const eligible = data.find(d => {
-        const sess = d.batch_sessions;
-        if (!sess) return false;
-        return sess.session_date >= todayStr && selectedStyles.includes(sess.style);
-      });
-      setEligibleDropIn(eligible || null);
+      setEligibleDropIn(findEligibleDropInForRegistration(data || [], selectedBatches, simulatedToday));
     };
     checkDropIns();
-  }, [form.student_id, form.batch_ids, batches]);
+  }, [form.student_id, form.batch_ids, batches, simulatedToday]);
   // Find the first cycle with open registration (or next upcoming)
   const getRegistrationDeadline = (cycle: any): string => {
     if (cycle.registration_deadline) return cycle.registration_deadline;
@@ -872,25 +855,19 @@ const EnrollmentsPage = () => {
   useEffect(() => {
     const checkAddBatchDropIns = async () => {
       if (!addBatchForm.student_id || addBatchForm.new_batch_ids.length === 0) { setAddBatchDropIn(null); return; }
-      const todayStr = new Date().toISOString().split("T")[0];
-      const selectedStyles = batches.filter(b => addBatchForm.new_batch_ids.includes(String(b.id))).map(b => b.style).filter(Boolean);
-      if (selectedStyles.length === 0) { setAddBatchDropIn(null); return; }
+      const selectedBatches = batches.filter(b => addBatchForm.new_batch_ids.includes(String(b.id)));
+      if (selectedBatches.length === 0) { setAddBatchDropIn(null); return; }
       const { data } = await supabase.from("drop_ins")
-        .select("*, payments(final_amount, gst), batch_sessions(session_date, style, start_time, end_time, batches(name))")
+        .select("*, payment:payments!drop_ins_payment_id_fkey(final_amount, gst), batch_sessions(session_date, style, start_time, end_time, batches(name, style, style_base))")
         .eq("student_id", Number(addBatchForm.student_id))
         .eq("is_adjusted", false)
         .eq("organization_id", 1)
         .order("created_at", { ascending: false });
       if (!data || data.length === 0) { setAddBatchDropIn(null); return; }
-      const eligible = data.find(d => {
-        const sess = d.batch_sessions;
-        if (!sess) return false;
-        return sess.session_date >= todayStr && selectedStyles.includes(sess.style);
-      });
-      setAddBatchDropIn(eligible || null);
+      setAddBatchDropIn(findEligibleDropInForRegistration(data || [], selectedBatches, simulatedToday));
     };
     checkAddBatchDropIns();
-  }, [addBatchForm.student_id, addBatchForm.new_batch_ids, batches]);
+  }, [addBatchForm.student_id, addBatchForm.new_batch_ids, batches, simulatedToday]);
 
   const computeAddBatchFee = () => {
     if (!existingEnrollment || addBatchForm.new_batch_ids.length === 0) return null;

@@ -115,6 +115,28 @@ async function insertMissingCycles(supabase: any, rows: any[]) {
   }
 }
 
+async function applyDropInAdjustment(supabase: any, payment: any, data: any) {
+  const adjustment = data?.drop_in_adjustment;
+  if (!adjustment?.drop_in_id) return;
+
+  const update: Record<string, unknown> = {
+    is_adjusted: true,
+    adjusted_at: new Date().toISOString(),
+    adjusted_payment_id: payment.id,
+  };
+  if (adjustment.adjusted_amount !== undefined && adjustment.adjusted_amount !== null) {
+    update.adjusted_amount = adjustment.adjusted_amount;
+  }
+
+  const { error } = await supabase
+    .from("drop_ins")
+    .update(update)
+    .eq("id", adjustment.drop_in_id)
+    .eq("student_id", payment.student_id)
+    .eq("is_adjusted", false);
+  if (error) throw error;
+}
+
 async function completePendingEnrollment(supabase: any, payment: any, rzpPayment: any) {
   const rzpFee = Number(rzpPayment.fee || 0) / 100;
   const rzpAmount = Number(rzpPayment.amount || 0) / 100;
@@ -245,6 +267,8 @@ async function completePendingEnrollment(supabase: any, payment: any, rzpPayment
         if (allocationErr) throw allocationErr;
       }
     }
+
+    await applyDropInAdjustment(supabase, payment, data);
 
     const { error: completeErr } = await supabase
       .from("pending_enrollments")
