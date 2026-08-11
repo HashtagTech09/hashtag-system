@@ -15,6 +15,10 @@ interface PhoneEntryProps {
   onNewUser: (phone: string) => void;
 }
 
+const phoneDigits = (value?: string | null) => (value || "").replace(/\D/g, "");
+const phoneKey = (value?: string | null) => phoneDigits(value).slice(-10);
+const phoneMatches = (value: string | null | undefined, searchPhone: string) => phoneKey(value) === searchPhone;
+
 export default function PhoneEntry({ onUserResolved, onNewUser }: PhoneEntryProps) {
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
@@ -90,46 +94,81 @@ export default function PhoneEntry({ onUserResolved, onNewUser }: PhoneEntryProp
   const lookupUser = async (searchPhone: string) => {
     setLookingUp(true);
     try {
+      const findUsersByPhone = async () => {
+        const { data: exactUsers, error: exactErr } = await supabase
+          .from("users")
+          .select("*")
+          .eq("organization_id", 1)
+          .ilike("phone", `%${searchPhone}`);
+        if (exactErr) throw exactErr;
+        const exactMatches = (exactUsers || []).filter((u) => phoneMatches(u.phone, searchPhone));
+        if (exactMatches.length > 0) return exactMatches;
+
+        const last4 = searchPhone.slice(-4);
+        const { data: candidateUsers, error: candidateErr } = await supabase
+          .from("users")
+          .select("*")
+          .eq("organization_id", 1)
+          .ilike("phone", `%${last4}`)
+          .limit(50);
+        if (candidateErr) throw candidateErr;
+        return (candidateUsers || []).filter((u) => phoneMatches(u.phone, searchPhone));
+      };
+
+      const findStudentsByPhone = async () => {
+        const { data: exactStudents, error: exactErr } = await supabase
+          .from("students")
+          .select("*, users(*)")
+          .eq("organization_id", 1)
+          .ilike("phone", `%${searchPhone}`);
+        if (exactErr) throw exactErr;
+        const exactMatches = (exactStudents || []).filter((s) => phoneMatches(s.phone, searchPhone));
+        if (exactMatches.length > 0) return exactMatches;
+
+        const last4 = searchPhone.slice(-4);
+        const { data: candidateStudents, error: candidateErr } = await supabase
+          .from("students")
+          .select("*, users(*)")
+          .eq("organization_id", 1)
+          .ilike("phone", `%${last4}`)
+          .limit(50);
+        if (candidateErr) throw candidateErr;
+        return (candidateStudents || []).filter((s) => phoneMatches(s.phone, searchPhone));
+      };
+
       // 1. user-first lookup (the account owner)
-      const { data: users } = await supabase
-        .from("users")
-        .select("*")
-        .eq("organization_id", 1)
-        .ilike("phone", `%${searchPhone}`);
+      const users = await findUsersByPhone();
 
       if (users && users.length > 0) {
         const user = users[0];
-        const { data: students } = await supabase
+        const { data: students, error: studentsErr } = await supabase
           .from("students")
           .select("*, users(*)")
           .eq("user_id", user.id)
           .order("created_at", { ascending: true });
+        if (studentsErr) throw studentsErr;
         if (students && students.length > 0) {
           onUserResolved(user, students);
           return;
         }
 
-        const { data: orphanStudents } = await supabase
-          .from("students")
-          .select("*, users(*)")
-          .eq("organization_id", 1)
-          .is("user_id", null)
-          .ilike("phone", `%${searchPhone}`)
-          .order("created_at", { ascending: true });
+        const orphanStudents = (await findStudentsByPhone())
+          .filter((s) => !s.user_id)
+          .sort((a, b) => String(a.created_at || "").localeCompare(String(b.created_at || "")));
         onUserResolved(user, orphanStudents || []);
         return;
       }
 
       // 2. fallback: phone lives only on a student row
-      const { data: studentsByPhone } = await supabase
-        .from("students")
-        .select("*, users(*)")
-        .eq("organization_id", 1)
-        .ilike("phone", `%${searchPhone}`);
+      const studentsByPhone = await findStudentsByPhone();
 
       if (studentsByPhone && studentsByPhone.length > 0) {
         const ownerUser = studentsByPhone[0].users;
         const ownerId = studentsByPhone[0].user_id;
+        if (!ownerUser || !ownerId) {
+          toast.error("This phone is on a student record but is not linked to a login user yet. Please ask the studio to relink the student phone.");
+          return;
+        }
         const { data: siblings } = await supabase
           .from("students")
           .select("*, users(*)")
@@ -140,8 +179,9 @@ export default function PhoneEntry({ onUserResolved, onNewUser }: PhoneEntryProp
       }
 
       onNewUser(searchPhone);
-    } catch {
-      toast.error("Lookup failed");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Please try again.";
+      toast.error("Lookup failed: " + message);
     } finally {
       setLookingUp(false);
     }
