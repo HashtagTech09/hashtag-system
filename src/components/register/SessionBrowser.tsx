@@ -54,7 +54,7 @@ export default function SessionBrowser({ studioId, selectedSessionId, onBack, on
       if (isTestMode) {
         sessionQuery = sessionQuery.in("status", ["scheduled", "completed", "sold_out"]);
       } else {
-        sessionQuery = sessionQuery.eq("status", "scheduled");
+        sessionQuery = sessionQuery.in("status", ["scheduled", "sold_out"]);
       }
 
       const sessRes = await sessionQuery;
@@ -101,11 +101,15 @@ export default function SessionBrowser({ studioId, selectedSessionId, onBack, on
           <div className="grid grid-cols-1 gap-2">
             {(dateSessions as any[]).map(s => {
               const selected = selectedSessionId === s.id;
+              const isFull = s.status === "sold_out" || s.available_slots === 0;
+              const isBookable = !isFull && (s.status === "scheduled" || isTestMode);
               return (
                 <Card
                   key={s.id}
-                  className={`cursor-pointer transition-all ${selected ? "ring-2 ring-primary glow-primary" : "hover:border-primary/50"}`}
-                  onClick={() => onSelectSession(s)}
+                  className={`transition-all ${isBookable ? "cursor-pointer hover:border-primary/50" : "cursor-not-allowed opacity-60"} ${selected ? "ring-2 ring-primary glow-primary" : ""}`}
+                  onClick={() => {
+                    if (isBookable) onSelectSession(s);
+                  }}
                 >
                   <CardContent className="p-3 flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -118,9 +122,13 @@ export default function SessionBrowser({ studioId, selectedSessionId, onBack, on
                         </div>
                       </div>
                     </div>
-                    {s.available_slots != null && (
+                    {isFull ? (
+                      <Badge variant="destructive" className="text-xs">
+                        Full
+                      </Badge>
+                    ) : s.available_slots != null && (
                       <Badge variant={s.available_slots > 0 ? "secondary" : "destructive"} className="text-xs">
-                        {s.available_slots > 0 ? `${s.available_slots} slots` : "Full"}
+                        {`${s.available_slots} slots`}
                       </Badge>
                     )}
                     {isTestMode && s.status !== "scheduled" && (
