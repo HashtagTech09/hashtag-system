@@ -60,36 +60,55 @@ const DropInsPage = () => {
   const fetchData = async () => {
     let dropQ: any = supabase
       .from("drop_ins")
-      .select("*, students(name, phone, users(phone)), batch_sessions(session_date, start_time, end_time, style, batches(name)), payment:payments!drop_ins_payment_id_fkey(final_amount, gst)")
+      .select("*, students(name, phone, users(phone)), batch_sessions(session_date, start_time, end_time, style, batches(id, name, studio_id)), payment:payments!drop_ins_payment_id_fkey(final_amount, gst)")
       .eq("organization_id", 1)
       .order("created_at", { ascending: false });
     let studentQ: any = supabase.from("students").select("*").eq("organization_id", 1).order("name");
+    let batchQ: any = supabase.from("batches").select("*").eq("organization_id", 1).order("name");
     let creditQ: any = supabase.from("drop_in_credits").select("*, students(name)").eq("organization_id", 1).order("created_at", { ascending: false });
     if (!scope.unrestricted) {
-      if (scope.studentIds.length === 0) {
+      if (scope.studentIds.length === 0 && scope.batchIds.length === 0) {
         setDropIns([]); setStudents([]); setBatches([]); setCredits([]); return;
       }
-      dropQ = dropQ.in("student_id", scope.studentIds);
-      studentQ = studentQ.in("id", scope.studentIds);
-      creditQ = creditQ.in("student_id", scope.studentIds);
+      if (scope.studentIds.length > 0) {
+        studentQ = studentQ.in("id", scope.studentIds);
+        creditQ = creditQ.in("student_id", scope.studentIds);
+      } else {
+        studentQ = studentQ.in("id", [-1]);
+        creditQ = creditQ.in("student_id", [-1]);
+      }
+      if (scope.batchIds.length > 0) {
+        batchQ = batchQ.in("id", scope.batchIds);
+      } else {
+        batchQ = batchQ.in("id", [-1]);
+      }
     }
     const [dropInRes, studentRes, batchRes, creditRes] = await Promise.all([
       dropQ, studentQ,
-      supabase.from("batches").select("*").eq("organization_id", 1).order("name"),
+      batchQ,
       creditQ,
     ]);
     if (dropInRes.error) {
       toast.error(`Could not load drop-ins: ${dropInRes.error.message}`);
       setDropIns([]);
     } else {
-      setDropIns(dropInRes.data || []);
+      const rows = dropInRes.data || [];
+      const visibleRows = scope.unrestricted
+        ? rows
+        : rows.filter((row: any) => {
+            const batch = row.batch_sessions?.batches;
+            return (batch?.id && scope.batchIds.includes(batch.id))
+              || (batch?.studio_id && scope.studioIds.includes(batch.studio_id))
+              || scope.studentIds.includes(row.student_id);
+          });
+      setDropIns(visibleRows);
     }
     setStudents(studentRes.data || []);
     setBatches(batchRes.data || []);
     setCredits(creditRes.data || []);
   };
 
-  useEffect(() => { if (!scope.loading) fetchData(); }, [scope.loading, scope.unrestricted, scope.studentIds.join(",")]);
+  useEffect(() => { if (!scope.loading) fetchData(); }, [scope.loading, scope.unrestricted, scope.studentIds.join(","), scope.batchIds.join(","), scope.studioIds.join(",")]);
 
   // Load inclusive drop-in fees from settings
   useEffect(() => {
