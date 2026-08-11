@@ -37,6 +37,9 @@ const ConfirmCashPage = () => {
   const [staffName, setStaffName] = useState("");
   const [batchNames, setBatchNames] = useState<string[]>([]);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
+  const isDropInRequest = Boolean((request?.enrollment_data as any)?.drop_in);
+  const itemLabel = isDropInRequest ? "Session" : "Batches";
+  const actionNoun = isDropInRequest ? "book the drop-in" : "enroll the student";
 
   useEffect(() => {
     if (!token) { setError("Invalid link — no token provided."); setLoading(false); return; }
@@ -196,7 +199,9 @@ const ConfirmCashPage = () => {
         {confirmed && receiptData && !confirming && (
           <ReceiptConfirmation
             title="Cash Confirmed"
-            message="Cash has been confirmed, the student has been enrolled, and the receipt is ready."
+            message={isDropInRequest
+              ? "Cash has been confirmed, the drop-in has been booked, and the receipt is ready."
+              : "Cash has been confirmed, the student has been enrolled, and the receipt is ready."}
             data={receiptData}
           />
         )}
@@ -206,7 +211,11 @@ const ConfirmCashPage = () => {
             <CardContent className="p-6 text-center space-y-4">
               <CheckCircle className="h-12 w-12 text-green-500 mx-auto" />
               <h2 className="text-lg font-display font-semibold text-foreground">Cash Confirmed</h2>
-              <p className="text-sm text-muted-foreground">The cash payment has been recorded and the student has been enrolled.</p>
+              <p className="text-sm text-muted-foreground">
+                {isDropInRequest
+                  ? "The cash payment has been recorded and the drop-in has been booked."
+                  : "The cash payment has been recorded and the student has been enrolled."}
+              </p>
             </CardContent>
           </Card>
         )}
@@ -216,7 +225,7 @@ const ConfirmCashPage = () => {
             <CardContent className="p-6 space-y-5">
               <h2 className="text-lg font-display font-semibold text-foreground">Confirm Cash Received</h2>
               <p className="text-sm text-muted-foreground">
-                You ({staffName}) are confirming cash received from <span className="text-foreground font-medium">{studentName}</span>. This will enroll the student immediately.
+                You ({staffName}) are confirming cash received from <span className="text-foreground font-medium">{studentName}</span>. This will {actionNoun} immediately.
               </p>
 
               <div className="p-4 rounded-lg border border-border bg-muted/30 space-y-2 text-sm">
@@ -225,7 +234,7 @@ const ConfirmCashPage = () => {
                   <span className="font-medium text-foreground">{studentName}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Batches</span>
+                  <span className="text-muted-foreground">{itemLabel}</span>
                   <span className="text-foreground text-right">{batchNames.join(", ") || "—"}</span>
                 </div>
                 <div className="flex justify-between">
@@ -256,7 +265,7 @@ const ConfirmCashPage = () => {
                 {confirming ? (
                   <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Confirming...</>
                 ) : (
-                  `Confirm Cash Received & Enroll`
+                  isDropInRequest ? "Confirm Cash Received & Book Drop-in" : "Confirm Cash Received & Enroll"
                 )}
               </Button>
             </CardContent>

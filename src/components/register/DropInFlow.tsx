@@ -6,8 +6,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import type { Database } from "@/integrations/supabase/types";
-import { Sparkles } from "lucide-react";
+import type { Database, Json } from "@/integrations/supabase/types";
+import { Music, Sparkles } from "lucide-react";
 import SessionBrowser from "./SessionBrowser";
 import PhoneEntry from "./PhoneEntry";
 import UserHub from "./UserHub";
@@ -22,12 +22,13 @@ import { initiateRazorpayPayment } from "@/lib/razorpayUtils";
 import { fetchConfirmedReceiptData } from "@/lib/receiptData";
 import ReceiptConfirmation, { ConfirmationLoading } from "./ReceiptConfirmation";
 
-type Step = "studio" | "browse" | "phone" | "setup" | "hub" | "details" | "confirm" | "confirming" | "confirmed";
+type Step = "studio" | "browse" | "phone" | "setup" | "hub" | "details" | "confirm" | "waiting" | "confirming" | "confirmed";
 type UserRow = Database["public"]["Tables"]["users"]["Row"];
 type StudentRow = Database["public"]["Tables"]["students"]["Row"] & {
   users?: UserRow | null;
 };
 type BatchSessionRow = Database["public"]["Tables"]["batch_sessions"]["Row"];
+type CashRecipient = Pick<UserRow, "id" | "name" | "email">;
 
 export default function DropInFlow() {
   const [step, setStep] = useState<Step>("studio");
@@ -45,13 +46,14 @@ export default function DropInFlow() {
   const [paymentMode, setPaymentMode] = useState("razorpay");
   const [submitting, setSubmitting] = useState(false);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
+  const [testConfirmationUrl, setTestConfirmationUrl] = useState<string | null>(null);
   const simulatedToday = useSimulatedToday();
   const dropInPricing = getDropInPricingForSession(selectedSession, {
     regularTotal: dropInFee,
     longTotal: longDropInFee,
   });
   const paymentActionLabel = paymentMode === "cash"
-    ? `Record Cash Drop-in ₹${dropInPricing.inclusiveTotal.toLocaleString("en-IN")}`
+    ? `Request cash confirmation ₹${dropInPricing.inclusiveTotal.toLocaleString("en-IN")}`
     : `Pay ₹${dropInPricing.inclusiveTotal.toLocaleString("en-IN")} with Razorpay`;
 
   useEffect(() => {
@@ -123,6 +125,41 @@ export default function DropInFlow() {
     }
   };
 
+  const getCashApprovalRecipients = async (batchId: number): Promise<CashRecipient[]> => {
+    const { data: batchRows } = await supabase
+      .from("batches")
+      .select("id, instructor_id, instructor_2_id, studios(dreamcatcher_id, wingperson_id)")
+      .eq("id", batchId);
+
+    const recipientIds = new Set<number>();
+    (batchRows || []).forEach((batch: any) => {
+      [batch.instructor_id, batch.instructor_2_id, batch.studios?.dreamcatcher_id, batch.studios?.wingperson_id]
+        .filter(Boolean)
+        .forEach((id: number) => recipientIds.add(id));
+    });
+
+    if (recipientIds.size === 0) {
+      const { data: managerRoles } = await supabase
+        .from("user_roles")
+        .select("user_id, roles!inner(name)")
+        .eq("organization_id", 1)
+        .eq("roles.name", "manager");
+      (managerRoles || []).forEach((row: any) => recipientIds.add(row.user_id));
+    }
+
+    if (recipientIds.size === 0) return [];
+    const { data: users } = await supabase
+      .from("users")
+      .select("id, name, email")
+      .in("id", Array.from(recipientIds));
+
+    const byEmail = new Map<string, CashRecipient>();
+    (users || []).forEach((recipient) => {
+      if (recipient.email) byEmail.set(recipient.email.toLowerCase(), recipient);
+    });
+    return Array.from(byEmail.values());
+  };
+
   const handleDropIn = async () => {
     if (!student || !selectedSession) return;
     setSubmitting(true);
@@ -185,44 +222,54 @@ export default function DropInFlow() {
         return;
       }
 
-      const { data: payment, error: payErr } = await supabase.from("payments").insert({
-        organization_id: 1, student_id: student.id, amount: baseAmount,
-        gst, final_amount: inclusiveTotal, payment_mode: paymentMode, status: "success",
+      const cashRecipients = await getCashApprovalRecipients(selectedSession.batch_id);
+      if (cashRecipients.length === 0) {
+        toast.error("No manager or instructor email is assigned to this batch. Please contact support.");
+        return;
+      }
+
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+      const primaryApprover = cashRecipients[0];
+      const { data: cashReq, error: cashErr } = await supabase.from("cash_payment_requests").insert({
+        organization_id: 1,
+        student_id: student.id,
+        staff_user_id: primaryApprover.id,
+        amount: baseAmount,
+        gst,
+        final_amount: inclusiveTotal,
+        enrollment_data: {
+          drop_in: {
+            organization_id: 1,
+            student_id: student.id,
+            batch_session_id: selectedSession.id,
+            amount: baseAmount,
+          },
+        } as unknown as Json,
+        batch_ids: [selectedSession.batch_id] as unknown as Json,
+        expires_at: expiresAt,
+        recipient_user_ids: cashRecipients.map((r) => r.id) as unknown as Json,
       }).select().single();
-      if (payErr) throw payErr;
+      if (cashErr) throw cashErr;
 
-      const { error } = await supabase.from("drop_ins").insert({
-        organization_id: 1, student_id: student.id, batch_session_id: selectedSession.id,
-        amount: baseAmount, payment_id: payment.id,
+      const confirmUrl = `${window.location.origin}/confirm-cash?token=${cashReq.token}`;
+      const { data: emailData, error: emailErr } = await supabase.functions.invoke("send-cash-confirmation", {
+        body: {
+          recipients: cashRecipients.map((r) => ({ email: r.email, name: r.name })),
+          student_name: student.name,
+          amount: inclusiveTotal.toLocaleString("en-IN"),
+          confirmation_url: confirmUrl,
+          expires_in_minutes: 10,
+          batch_names: sessionLabel,
+        },
       });
-      if (error) throw error;
+      if (emailErr) throw emailErr;
 
-      toast.success(`Drop-in booked! Amount: ₹${inclusiveTotal.toLocaleString("en-IN")}`);
-      setReceiptData({
-        receipt_title: "Drop-in Receipt",
-        student_name: student.name,
-        student_phone: student.phone || student.users?.phone || user?.phone || "",
-        student_email: student.email || student.users?.email || "",
-        account_owner_name: user?.name || student.users?.name || "",
-        account_owner_phone: user?.phone || student.users?.phone || "",
-        plan_name: "Drop-In",
-        status_type: "Drop-In",
-        batches: sessionLabel,
-        validity: sessionLabel,
-        subtotal: baseAmount.toLocaleString("en-IN"),
-        gst: gst.toLocaleString("en-IN"),
-        total: inclusiveTotal.toLocaleString("en-IN"),
-        amount: inclusiveTotal.toLocaleString("en-IN"),
-        payment_mode: "Cash",
-        payment_status: "Confirmed",
-        payment_id: `PAY-${payment.id}`,
-        transaction_id: `PAY-${payment.id}`,
-        date: simulatedToday,
-        confirmed_at: new Date().toLocaleString("en-IN"),
-      });
-      setStep("confirmed");
-    } catch {
-      toast.error("Booking failed. Please try again.");
+      setTestConfirmationUrl(emailData?.test_mode ? confirmUrl : null);
+      toast.success("Cash approval request sent. Drop-in will be booked after manager/instructor approval.");
+      setStep("waiting");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Please try again.";
+      toast.error("Booking failed: " + message);
     } finally {
       setSubmitting(false);
     }
@@ -239,6 +286,7 @@ export default function DropInFlow() {
     setStudentName("");
     setAccountOwnerType("self");
     setReceiptData(null);
+    setTestConfirmationUrl(null);
   };
 
   return (
@@ -376,10 +424,41 @@ export default function DropInFlow() {
                   <SelectItem value="cash">Cash</SelectItem>
                 </SelectContent>
               </Select>
+              {paymentMode === "cash" && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Cash does not book immediately. The studio manager or instructor must confirm cash received within 10 minutes.
+                </p>
+              )}
             </div>
             <Button className="w-full gradient-primary" onClick={handleDropIn} disabled={submitting}>
               {submitting ? "Processing..." : paymentActionLabel}
             </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {step === "waiting" && (
+        <Card className="glass-card">
+          <CardContent className="p-6 text-center space-y-4">
+            <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
+              <Music className="h-6 w-6 text-primary animate-pulse" />
+            </div>
+            <h3 className="font-display font-semibold text-foreground">Pending Manager/Instructor Approval</h3>
+            <p className="text-sm text-muted-foreground">
+              Cash approval has been sent to the batch manager and instructor. Once one of them confirms cash received within 10 minutes, the drop-in will be booked.
+            </p>
+            {testConfirmationUrl && (
+              <div className="rounded-lg border border-warning/30 bg-warning/10 p-3 space-y-3 text-left">
+                <div>
+                  <Label>Test mode confirmation link</Label>
+                  <p className="text-xs text-muted-foreground mt-1 break-all">{testConfirmationUrl}</p>
+                </div>
+                <Button className="w-full gradient-primary" onClick={() => window.open(testConfirmationUrl, "_blank", "noopener,noreferrer")}>
+                  Open confirmation link
+                </Button>
+              </div>
+            )}
+            <Button variant="outline" onClick={reset}>Book Another Drop-in</Button>
           </CardContent>
         </Card>
       )}
