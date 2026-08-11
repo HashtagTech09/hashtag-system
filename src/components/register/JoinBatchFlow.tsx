@@ -22,15 +22,15 @@ import UserHub from "./UserHub";
 import AccountSetup from "./AccountSetup";
 import AccountOwnerChoice from "./AccountOwnerChoice";
 import FeeBreakdownDisplay from "./FeeBreakdown";
-import ReceiptPreviewDialog from "./ReceiptPreviewDialog";
 import { useSimulatedToday } from "@/contexts/TestDateContext";
 import type { ReceiptData } from "@/lib/receiptTemplate";
 import { fetchConfirmedReceiptData } from "@/lib/receiptData";
 import { needsAccountSetup, type AccountOwnerType } from "@/lib/accountOwner";
 import { getLockedBatchNames, type ApprovedPromotionLike } from "@/lib/promotionUtils";
 import { buildDropInAdjustmentPayload, findEligibleDropInForRegistration, getDropInAdjustmentAmount, type DropInLike } from "@/lib/dropInAdjustment";
+import ReceiptConfirmation, { ConfirmationLoading } from "./ReceiptConfirmation";
 
-type Step = "studio" | "style" | "level" | "batch" | "phone" | "setup" | "hub" | "details" | "pay" | "waiting";
+type Step = "studio" | "style" | "level" | "batch" | "phone" | "setup" | "hub" | "details" | "pay" | "waiting" | "confirming" | "confirmed";
 type UserRow = Database["public"]["Tables"]["users"]["Row"];
 type StudentRow = Database["public"]["Tables"]["students"]["Row"] & {
   users?: UserRow | null;
@@ -60,7 +60,6 @@ export default function JoinBatchFlow() {
   const [detectedStatus, setDetectedStatus] = useState<string>("NEW");
   const [latestEndDate, setLatestEndDate] = useState<string | null>(null);
   const [previousBatchIds, setPreviousBatchIds] = useState<number[]>([]);
-  const [receiptOpen, setReceiptOpen] = useState(false);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
   const [testConfirmationUrl, setTestConfirmationUrl] = useState<string | null>(null);
   const [approvedPromotions, setApprovedPromotions] = useState<ApprovedPromotionLike[]>([]);
@@ -355,10 +354,11 @@ export default function JoinBatchFlow() {
             orderId: details?.orderId,
           });
           setReceiptData(receipt);
-          setReceiptOpen(true);
+          setStep("confirmed");
         } catch (error) {
           const message = error instanceof Error ? error.message : "Could not load receipt";
           toast.error("Payment confirmed, but receipt could not be loaded: " + message);
+          setStep("pay");
         }
       };
 
@@ -378,6 +378,7 @@ export default function JoinBatchFlow() {
           },
           onSuccess: async (details) => {
             toast.success("Payment confirmed. Enrollment is complete.");
+            setStep("confirming");
             await showConfirmedReceipt(details);
           },
           onFailure: (err) => toast.error(err),
@@ -445,10 +446,11 @@ export default function JoinBatchFlow() {
     setSelectedPlanId("");
     setTestConfirmationUrl(null);
     setApprovedPromotions([]);
+    setReceiptData(null);
   };
 
   const stepLabels = ["Studio", "Style", "Level", "Batch", "Verify", "Pay"];
-  const stepIdx = { studio: 0, style: 1, level: 2, batch: 3, phone: 4, setup: 4, hub: 4, details: 4, pay: 5, waiting: 5 }[step];
+  const stepIdx = { studio: 0, style: 1, level: 2, batch: 3, phone: 4, setup: 4, hub: 4, details: 4, pay: 5, waiting: 5, confirming: 5, confirmed: 5 }[step];
 
 
   const getPlanPerBatchFee = (p: SubPlan) => (p.total_regular_cycles || 0) * 3767 + (p.total_grid_cycles || 0) * 5300;
@@ -697,13 +699,21 @@ export default function JoinBatchFlow() {
         </Card>
       )}
 
-      <ReceiptPreviewDialog
-        open={receiptOpen}
-        onClose={() => { setReceiptOpen(false); resetFlow(); }}
-        data={receiptData || {}}
-        recipientEmail={student?.email || student?.users?.email}
-        recipientPhone={student?.phone || student?.users?.phone}
-      />
+      {step === "confirming" && (
+        <ConfirmationLoading label="Confirming enrollment..." />
+      )}
+
+      {step === "confirmed" && receiptData && (
+        <ReceiptConfirmation
+          title="Enrollment Confirmed"
+          message="The payment is confirmed, enrollment is complete, and the receipt is ready."
+          data={receiptData}
+          recipientEmail={student?.email || student?.users?.email}
+          recipientPhone={student?.phone || student?.users?.phone}
+          onAction={resetFlow}
+          actionLabel="Start new registration"
+        />
+      )}
     </div>
   );
 }

@@ -16,10 +16,10 @@ import { MapPin, ChevronRight, ShoppingCart, X, Check, ArrowLeft, Trash2, Lock }
 import { useSimulatedToday } from "@/contexts/TestDateContext";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { canStudentSelectBatch, getLockedBatchNames, isBatchPromotionLocked, type ApprovedPromotionLike } from "@/lib/promotionUtils";
-import ReceiptPreviewDialog from "./ReceiptPreviewDialog";
 import type { ReceiptData } from "@/lib/receiptTemplate";
 import { fetchConfirmedReceiptData } from "@/lib/receiptData";
 import { buildDropInAdjustmentPayload, findEligibleDropInForRegistration, getDropInAdjustmentAmount, type DropInLike } from "@/lib/dropInAdjustment";
+import ReceiptConfirmation, { ConfirmationLoading } from "./ReceiptConfirmation";
 
 type UserRow = Database["public"]["Tables"]["users"]["Row"];
 type CashRecipient = Pick<UserRow, "id" | "name" | "email">;
@@ -55,7 +55,7 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
   const [subPlans, setSubPlans] = useState<SubPlan[]>([]);
   const [planCycles, setPlanCycles] = useState<PlanCycle[]>([]);
   const [loading, setLoading] = useState(true);
-  const [mode, setMode] = useState<"view" | "renew" | "add">("view");
+  const [mode, setMode] = useState<"view" | "renew" | "add" | "confirming" | "confirmed">("view");
 
   // Sub-step for renew/add modes
   const [subStep, setSubStep] = useState<"studio" | "batches" | "checkout">("studio");
@@ -70,7 +70,6 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
   const [testConfirmationUrl, setTestConfirmationUrl] = useState<string | null>(null);
   const [promotionAccess, setPromotionAccess] = useState<ApprovedPromotionLike[]>([]);
   const [pendingPromotions, setPendingPromotions] = useState<any[]>([]);
-  const [receiptOpen, setReceiptOpen] = useState(false);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
   const [eligibleDropIn, setEligibleDropIn] = useState<DropInLike | null>(null);
   const contextToday = useSimulatedToday();
@@ -459,10 +458,11 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
         orderId: details?.orderId,
       });
       setReceiptData(receipt);
-      setReceiptOpen(true);
+      setMode("confirmed");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not load receipt";
       toast.error("Payment confirmed, but receipt could not be loaded: " + message);
+      setMode("view");
     }
   };
 
@@ -519,8 +519,9 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
             date: simulatedToday,
           },
           onSuccess: async (details) => {
-            await showConfirmedReceipt(details);
             await onRenewSuccess();
+            setMode("confirming");
+            await showConfirmedReceipt(details);
           },
           onFailure: (err) => toast.error(err),
         });
@@ -704,8 +705,9 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
             date: simulatedToday,
           },
           onSuccess: async (details) => {
-            await showConfirmedReceipt(details);
             await onRenewSuccess();
+            setMode("confirming");
+            await showConfirmedReceipt(details);
           },
           onFailure: (err) => toast.error(err),
         });
@@ -783,6 +785,28 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
   });
 
   if (loading) return <p className="text-muted-foreground text-center py-8">Loading your profile...</p>;
+
+  if (mode === "confirming") {
+    return <ConfirmationLoading label="Confirming enrollment..." />;
+  }
+
+  if (mode === "confirmed" && receiptData) {
+    return (
+      <ReceiptConfirmation
+        title="Enrollment Confirmed"
+        message="The payment is confirmed, the account has been updated, and the receipt is ready."
+        data={receiptData}
+        recipientEmail={student?.email || user?.email}
+        recipientPhone={student?.phone || user?.phone}
+        onAction={() => {
+          setReceiptData(null);
+          setMode("view");
+          fetchData();
+        }}
+        actionLabel="Back to account"
+      />
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -1356,13 +1380,6 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
         </div>
       )}
 
-      <ReceiptPreviewDialog
-        open={receiptOpen}
-        onClose={() => setReceiptOpen(false)}
-        data={receiptData || {}}
-        recipientEmail={student?.email || user?.email}
-        recipientPhone={student?.phone || user?.phone}
-      />
     </div>
   );
 }

@@ -6,9 +6,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { CheckCircle, XCircle, Loader2 } from "lucide-react";
 import hashtagLogo from "@/assets/hashtag-pink.png";
-import ReceiptPreviewDialog from "@/components/register/ReceiptPreviewDialog";
 import type { ReceiptData } from "@/lib/receiptTemplate";
 import { fetchConfirmedReceiptData } from "@/lib/receiptData";
+import ReceiptConfirmation, { ConfirmationLoading } from "@/components/register/ReceiptConfirmation";
 
 const EXPIRED_MESSAGE = "This confirmation link has expired. Please create a new cash request.";
 
@@ -36,7 +36,6 @@ const ConfirmCashPage = () => {
   const [studentName, setStudentName] = useState("");
   const [staffName, setStaffName] = useState("");
   const [batchNames, setBatchNames] = useState<string[]>([]);
-  const [receiptOpen, setReceiptOpen] = useState(false);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
 
   useEffect(() => {
@@ -149,7 +148,6 @@ const ConfirmCashPage = () => {
         try {
           const receipt = await fetchConfirmedReceiptData(data.payment_id, request.student_id, { cashToken: token || undefined });
           setReceiptData(receipt);
-          setReceiptOpen(true);
         } catch (receiptErr: any) {
           toast.error("Cash confirmed, but receipt could not be loaded: " + (receiptErr?.message || "Please try from Payments."));
         }
@@ -182,7 +180,7 @@ const ConfirmCashPage = () => {
           </div>
         )}
 
-        {error && (
+        {error && !confirming && (
           <Card className="glass-card">
             <CardContent className="p-6 text-center space-y-4">
               <XCircle className="h-12 w-12 text-destructive mx-auto" />
@@ -191,7 +189,19 @@ const ConfirmCashPage = () => {
           </Card>
         )}
 
-        {confirmed && (
+        {confirming && (
+          <ConfirmationLoading label="Confirming cash payment..." />
+        )}
+
+        {confirmed && receiptData && !confirming && (
+          <ReceiptConfirmation
+            title="Cash Confirmed"
+            message="Cash has been confirmed, the student has been enrolled, and the receipt is ready."
+            data={receiptData}
+          />
+        )}
+
+        {confirmed && !receiptData && !confirming && (
           <Card className="glass-card">
             <CardContent className="p-6 text-center space-y-4">
               <CheckCircle className="h-12 w-12 text-green-500 mx-auto" />
@@ -201,7 +211,7 @@ const ConfirmCashPage = () => {
           </Card>
         )}
 
-        {!loading && !error && !confirmed && request && (
+        {!loading && !error && !confirmed && !confirming && request && (
           <Card className="glass-card">
             <CardContent className="p-6 space-y-5">
               <h2 className="text-lg font-display font-semibold text-foreground">Confirm Cash Received</h2>
@@ -253,11 +263,6 @@ const ConfirmCashPage = () => {
           </Card>
         )}
       </div>
-      <ReceiptPreviewDialog
-        open={receiptOpen}
-        onClose={() => setReceiptOpen(false)}
-        data={receiptData || {}}
-      />
     </div>
   );
 };

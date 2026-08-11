@@ -13,7 +13,6 @@ import PhoneEntry from "./PhoneEntry";
 import UserHub from "./UserHub";
 import AccountSetup from "./AccountSetup";
 import AccountOwnerChoice from "./AccountOwnerChoice";
-import ReceiptPreviewDialog from "./ReceiptPreviewDialog";
 import { useSimulatedToday } from "@/contexts/TestDateContext";
 import type { ReceiptData } from "@/lib/receiptTemplate";
 import { needsAccountSetup, type AccountOwnerType } from "@/lib/accountOwner";
@@ -21,8 +20,9 @@ import StudioSelection from "./StudioSelection";
 import { DEFAULT_DROP_IN_TOTAL, DEFAULT_LONG_DROP_IN_TOTAL, getDropInPricingForSession } from "@/lib/dropInPricing";
 import { initiateRazorpayPayment } from "@/lib/razorpayUtils";
 import { fetchConfirmedReceiptData } from "@/lib/receiptData";
+import ReceiptConfirmation, { ConfirmationLoading } from "./ReceiptConfirmation";
 
-type Step = "studio" | "browse" | "phone" | "setup" | "hub" | "details" | "confirm";
+type Step = "studio" | "browse" | "phone" | "setup" | "hub" | "details" | "confirm" | "confirming" | "confirmed";
 type UserRow = Database["public"]["Tables"]["users"]["Row"];
 type StudentRow = Database["public"]["Tables"]["students"]["Row"] & {
   users?: UserRow | null;
@@ -44,7 +44,6 @@ export default function DropInFlow() {
   const [longDropInFee, setLongDropInFee] = useState(DEFAULT_LONG_DROP_IN_TOTAL);
   const [paymentMode, setPaymentMode] = useState("razorpay");
   const [submitting, setSubmitting] = useState(false);
-  const [receiptOpen, setReceiptOpen] = useState(false);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
   const simulatedToday = useSimulatedToday();
   const dropInPricing = getDropInPricingForSession(selectedSession, {
@@ -143,10 +142,11 @@ export default function DropInFlow() {
             orderId: details?.orderId,
           });
           setReceiptData(receipt);
-          setReceiptOpen(true);
+          setStep("confirmed");
         } catch (error) {
           const message = error instanceof Error ? error.message : "Could not load receipt";
           toast.error("Payment confirmed, but receipt could not be loaded: " + message);
+          setStep("confirm");
         }
       };
 
@@ -177,6 +177,7 @@ export default function DropInFlow() {
           },
           onSuccess: async (details) => {
             toast.success("Payment confirmed. Drop-in booked!");
+            setStep("confirming");
             await showConfirmedReceipt(details);
           },
           onFailure: (err) => toast.error(err),
@@ -219,7 +220,7 @@ export default function DropInFlow() {
         date: simulatedToday,
         confirmed_at: new Date().toLocaleString("en-IN"),
       });
-      setReceiptOpen(true);
+      setStep("confirmed");
     } catch {
       toast.error("Booking failed. Please try again.");
     } finally {
@@ -237,6 +238,7 @@ export default function DropInFlow() {
     setOwnerName("");
     setStudentName("");
     setAccountOwnerType("self");
+    setReceiptData(null);
   };
 
   return (
@@ -382,13 +384,21 @@ export default function DropInFlow() {
         </Card>
       )}
 
-      <ReceiptPreviewDialog
-        open={receiptOpen}
-        onClose={() => { setReceiptOpen(false); reset(); }}
-        data={receiptData || {}}
-        recipientEmail={student?.email || student?.users?.email}
-        recipientPhone={student?.phone || student?.users?.phone}
-      />
+      {step === "confirming" && (
+        <ConfirmationLoading label="Confirming drop-in..." />
+      )}
+
+      {step === "confirmed" && receiptData && (
+        <ReceiptConfirmation
+          title="Drop-in Confirmed"
+          message="The drop-in payment is confirmed and the receipt is ready."
+          data={receiptData}
+          recipientEmail={student?.email || student?.users?.email}
+          recipientPhone={student?.phone || student?.users?.phone}
+          onAction={reset}
+          actionLabel="Book another drop-in"
+        />
+      )}
     </div>
   );
 }
