@@ -56,10 +56,6 @@ export function TestDateProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     refresh();
 
-    const onFocus = () => refresh();
-    const onVisibility = () => {
-      if (document.visibilityState === "visible") refresh();
-    };
     const onCustom = () => refresh();
     const onStorage = (event: StorageEvent) => {
       if (event.key === TEST_DATE_STORAGE_KEY) {
@@ -67,8 +63,6 @@ export function TestDateProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    window.addEventListener("focus", onFocus);
-    document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("test-mode-changed", onCustom);
     window.addEventListener("storage", onStorage);
 
@@ -82,8 +76,6 @@ export function TestDateProvider({ children }: { children: ReactNode }) {
       .subscribe();
 
     return () => {
-      window.removeEventListener("focus", onFocus);
-      document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("test-mode-changed", onCustom);
       window.removeEventListener("storage", onStorage);
       supabase.removeChannel(channel);
