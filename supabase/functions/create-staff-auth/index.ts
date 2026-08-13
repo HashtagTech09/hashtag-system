@@ -5,6 +5,30 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+async function assertCanManageStaffAuth(supabase: any, req: Request) {
+  const authHeader = req.headers.get("Authorization");
+  const token = authHeader?.startsWith("Bearer ") ? authHeader.slice("Bearer ".length).trim() : "";
+  if (!token) throw new Error("Unauthorized");
+
+  const { data: authData, error: authError } = await supabase.auth.getUser(token);
+  if (authError || !authData?.user) throw new Error("Unauthorized");
+
+  const { data: caller } = await supabase
+    .from("users")
+    .select("id")
+    .eq("auth_id", authData.user.id)
+    .single();
+  if (!caller) throw new Error("Unauthorized");
+
+  const { data: adminRole } = await supabase
+    .from("user_roles")
+    .select("id, roles!inner(name)")
+    .eq("user_id", caller.id)
+    .eq("roles.name", "admin")
+    .maybeSingle();
+  if (!adminRole) throw new Error("Admin access required");
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -15,14 +39,7 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    // Verify caller is authenticated
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    await assertCanManageStaffAuth(supabase, req);
 
     const { user_id, email, password } = await req.json();
 
@@ -55,8 +72,23 @@ Deno.serve(async (req) => {
     }
 
     if (existingUser.auth_id) {
-      return new Response(JSON.stringify({ error: "This staff member already has a login account" }), {
-        status: 409,
+      const { error: updateAuthError } = await supabase.auth.admin.updateUserById(existingUser.auth_id, {
+        email,
+        password,
+        email_confirm: true,
+        user_metadata: { staff_user_id: user_id, name: existingUser.name },
+      });
+
+      if (updateAuthError) {
+        return new Response(JSON.stringify({ error: updateAuthError.message }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      await supabase.from("users").update({ email }).eq("id", user_id);
+
+      return new Response(JSON.stringify({ success: true, auth_id: existingUser.auth_id, updated: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

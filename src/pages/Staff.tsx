@@ -36,7 +36,7 @@ const UsersPage = () => {
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [authDialogOpen, setAuthDialogOpen] = useState(false);
-  const [authForm, setAuthForm] = useState({ userId: 0, userName: "", email: "", password: "" });
+  const [authForm, setAuthForm] = useState({ userId: 0, userName: "", email: "", password: "", hasLogin: false });
   const [authLoading, setAuthLoading] = useState(false);
   const [scopeRestricted, setScopeRestricted] = useState(false);
   const [extraStudentIds, setExtraStudentIds] = useState<number[]>([]);
@@ -335,14 +335,12 @@ const UsersPage = () => {
                     <TableCell className="hidden lg:table-cell text-muted-foreground">{s.source || "—"}</TableCell>
                     <TableCell>
                       <div className="flex gap-1">
-                        {!s.auth_id && (
-                          <Button variant="ghost" size="icon" title="Create Login" onClick={() => {
-                            setAuthForm({ userId: s.id, userName: s.name, email: s.email || "", password: "" });
-                            setAuthDialogOpen(true);
-                          }}>
-                            <KeyRound className="h-4 w-4 text-primary" />
-                          </Button>
-                        )}
+                        <Button variant="ghost" size="icon" title={s.auth_id ? "Reset Login Password" : "Create Login"} onClick={() => {
+                          setAuthForm({ userId: s.id, userName: s.name, email: s.email || "", password: "", hasLogin: Boolean(s.auth_id) });
+                          setAuthDialogOpen(true);
+                        }}>
+                          <KeyRound className={`h-4 w-4 ${s.auth_id ? "text-warning" : "text-primary"}`} />
+                        </Button>
                         <Button variant="ghost" size="icon" onClick={async () => {
                           setForm({ name: s.name, email: s.email || "", phone: s.phone || "", source: s.source || "" });
                           if (s.photo) setPhotoPreview(s.photo);
@@ -371,10 +369,10 @@ const UsersPage = () => {
         </CardContent>
       </Card>
 
-      {/* Create Login Dialog */}
+      {/* Create/Reset Login Dialog */}
       <Dialog open={authDialogOpen} onOpenChange={setAuthDialogOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Create Login for {authForm.userName}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{authForm.hasLogin ? "Reset Login for" : "Create Login for"} {authForm.userName}</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div>
               <Label>Email *</Label>
@@ -395,7 +393,7 @@ const UsersPage = () => {
                   });
                   if (error) throw error;
                   if (data?.error) throw new Error(data.error);
-                  toast.success("Login account created successfully");
+                  toast.success(authForm.hasLogin ? "Login password reset successfully" : "Login account created successfully");
                   setAuthDialogOpen(false);
                   fetchData();
                 } catch (err: any) {
@@ -405,7 +403,7 @@ const UsersPage = () => {
                 }
               }}
             >
-              {authLoading ? "Creating..." : "Create Login Account"}
+              {authLoading ? (authForm.hasLogin ? "Resetting..." : "Creating...") : (authForm.hasLogin ? "Reset Login Password" : "Create Login Account")}
             </Button>
           </div>
         </DialogContent>
