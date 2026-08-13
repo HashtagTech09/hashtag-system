@@ -30,7 +30,13 @@ import InstructorHome from "./pages/instructor/Home";
 import InstructorReportForm from "./pages/instructor/ReportForm";
 import InstructorMyReports from "./pages/instructor/MyReports";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();

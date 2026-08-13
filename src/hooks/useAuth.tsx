@@ -1,4 +1,4 @@
-import { useEffect, useState, createContext, useContext, ReactNode } from "react";
+import { useEffect, useRef, useState, createContext, useContext, ReactNode } from "react";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { type UserRole, hasRole } from "@/lib/roleUtils";
@@ -38,6 +38,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [staffUser, setStaffUser] = useState<StaffUser | null>(null);
   const [staffRoles, setStaffRoles] = useState<UserRole[]>([]);
+  const loadedAuthIdRef = useRef<string | null>(null);
 
   const fetchStaffData = async (authId: string) => {
     try {
@@ -61,24 +62,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       setStaffUser(null);
       setStaffRoles([]);
+    } finally {
+      loadedAuthIdRef.current = authId;
     }
   };
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setLoading(true);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
-      if (session?.user) {
-        // Defer to avoid Supabase client deadlock
-        setTimeout(() => {
-          fetchStaffData(session.user.id).finally(() => setLoading(false));
-        }, 0);
-      } else {
+
+      if (!session?.user) {
+        loadedAuthIdRef.current = null;
         setStaffUser(null);
         setStaffRoles([]);
         setLoading(false);
+        return;
       }
+
+      const authId = session.user.id;
+      if (event === "TOKEN_REFRESHED" && loadedAuthIdRef.current === authId) {
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      // Defer to avoid Supabase client deadlock
+      setTimeout(() => {
+        fetchStaffData(authId).finally(() => setLoading(false));
+      }, 0);
     });
 
     supabase.auth.getSession().then(async ({ data: { session } }) => {
