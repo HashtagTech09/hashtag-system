@@ -117,13 +117,13 @@ const RegisterPage = ({ embedded = false }: RegisterPageProps) => {
           </TabsList>
           <p className="mt-3 text-center text-xs text-muted-foreground">{tabHelp}</p>
 
-          <TabsContent value="join" className="mt-6">
+          <TabsContent value="join" forceMount className={cn("mt-6", tab !== "join" && "hidden")}>
             <JoinBatchFlow />
           </TabsContent>
-          <TabsContent value="dropin" className="mt-6">
+          <TabsContent value="dropin" forceMount className={cn("mt-6", tab !== "dropin" && "hidden")}>
             <DropInFlow />
           </TabsContent>
-          <TabsContent value="account" className="mt-6">
+          <TabsContent value="account" forceMount className={cn("mt-6", tab !== "account" && "hidden")}>
             <AccountFlow />
           </TabsContent>
         </Tabs>
