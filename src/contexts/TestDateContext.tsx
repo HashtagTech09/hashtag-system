@@ -95,6 +95,6 @@ export function useTestDate() {
 
 /** Returns the simulated date (if set) or actual today in IST. */
 export function useSimulatedToday(): string {
-  const { simulatedDate } = useContext(TestDateContext);
-  return simulatedDate || todayIST();
+  const { isTestMode, simulatedDate } = useContext(TestDateContext);
+  return isTestMode && simulatedDate ? simulatedDate : todayIST();
 }

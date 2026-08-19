@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { format } from "date-fns";
-import { nowIST, toISTDateString } from "@/lib/dateUtils";
+import { nowIST, todayIST, toISTDateString } from "@/lib/dateUtils";
 import { supabase } from "@/integrations/supabase/client";
 import AdminLayout from "@/components/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,7 +11,7 @@ import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ChevronDown, CalendarIcon, ClipboardCopy } from "lucide-react";
+import { AlertTriangle, ChevronDown, CalendarIcon, ClipboardCopy, RotateCcw } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { useScopedStudents } from "@/hooks/useScopedStudents";
@@ -20,6 +20,7 @@ import { useLongPress } from "@/hooks/useLongPress";
 import { filterEnrollmentsByCycle } from "@/lib/cycleUtils";
 import { getDisplayPhone } from "@/lib/studentUtils";
 import { toast } from "sonner";
+import { useTestDate } from "@/contexts/TestDateContext";
 
 interface Studio { id: number; name: string; code: string | null; }
 interface Batch { id: number; name: string; batch_code: string | null; studio_id: number | null; capacity: number | null; style_base: string | null; level: string | null; }
@@ -64,6 +65,18 @@ function formatSheetDate(date: string | null | undefined): string {
   const dateOnly = date.includes("T") ? toISTDateString(date) : date;
   const [year, month, day] = dateOnly.split("-");
   return year && month && day ? `${day}/${month}/${year}` : dateOnly;
+}
+
+function dateStringToPickerDate(date: string): Date {
+  const [year, month, day] = date.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function pickerDateToDateString(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function formatSheetValidity(startDate: string | null | undefined, endDate: string | null | undefined): string {
@@ -142,6 +155,7 @@ const ACCENT = "#ff007f";
 
 const Dashboard = () => {
   const scope = useScopedStudents();
+  const { isTestMode, simulatedDate, setSimulatedDate } = useTestDate();
   const { loading: scopeLoading, unrestricted: scopeUnrestricted, batchIds: scopeBatchIds, studioIds: scopeStudioIds } = scope;
   const [studios, setStudios] = useState<Studio[]>([]);
   const [selectedStudio, setSelectedStudio] = useState<string>("all");
@@ -173,6 +187,14 @@ const Dashboard = () => {
   const [studentNames, setStudentNames] = useState<Map<number, { name: string; phone: string | null }>>(new Map());
   const [selectedBatch, setSelectedBatch] = useState<{ id: number; name: string; filter: BatchDetailFilter } | null>(null);
   const [copyingSheet, setCopyingSheet] = useState<"registrations" | "dropIns" | "dateWise" | null>(null);
+  const simulatedPickerDate = simulatedDate ? dateStringToPickerDate(simulatedDate) : undefined;
+
+  const selectCycleForDate = (date: string) => {
+    const matchingCycle = allCycles.find((cycle) =>
+      cycle.start_date <= date && (cycle.end_date || "2099-12-31") >= date
+    );
+    if (matchingCycle) setSelectedCycleId(String(matchingCycle.id));
+  };
 
   useEffect(() => {
     if (scopeLoading) return;
@@ -200,6 +222,12 @@ const Dashboard = () => {
 
   const selectedCycle = useMemo(() => allCycles.find(c => String(c.id) === selectedCycleId) || null, [allCycles, selectedCycleId]);
   const visibleBatchIds = useMemo(() => new Set(batches.map(b => b.id)), [batches]);
+
+  useEffect(() => {
+    if (!isTestMode || !simulatedDate) return;
+    setSelectedDate(dateStringToPickerDate(simulatedDate));
+    selectCycleForDate(simulatedDate);
+  }, [isTestMode, simulatedDate, allCycles]);
 
   useEffect(() => {
     if (!selectedCycle) return;
@@ -1034,6 +1062,55 @@ const Dashboard = () => {
           <span className="text-sm text-muted-foreground">
             {selectedCycle.start_date} → {selectedCycle.end_date || "ongoing"}
           </span>
+        )}
+        {isTestMode && (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2">
+            <AlertTriangle className="h-4 w-4 text-warning shrink-0" />
+            <span className="text-xs font-medium text-warning">TEST MODE current date</span>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={cn("h-8 justify-start text-left font-normal", !simulatedDate && "text-muted-foreground")}
+                >
+                  <CalendarIcon className="mr-2 h-3.5 w-3.5" />
+                  {simulatedPickerDate ? format(simulatedPickerDate, "PPP") : `Real today (${format(dateStringToPickerDate(todayIST()), "PPP")})`}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={simulatedPickerDate}
+                  onSelect={(date) => {
+                    if (!date) return;
+                    const dateString = pickerDateToDateString(date);
+                    setSimulatedDate(dateString);
+                    setSelectedDate(date);
+                    selectCycleForDate(dateString);
+                    toast.success(`System date simulated as ${format(date, "PPP")}`);
+                  }}
+                  initialFocus
+                  className={cn("p-3 pointer-events-auto")}
+                />
+              </PopoverContent>
+            </Popover>
+            {simulatedDate && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2"
+                onClick={() => {
+                  setSimulatedDate(null);
+                  setSelectedDate(nowIST());
+                  toast.success("System date reset to real today");
+                }}
+                title="Reset to real today"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          </div>
         )}
       </div>
 
