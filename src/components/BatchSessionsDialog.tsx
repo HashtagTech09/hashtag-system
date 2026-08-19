@@ -63,12 +63,11 @@ export default function BatchSessionsDialog({ open, onOpenChange, batch }: Props
       .lt("session_date", today)
       .eq("status", "scheduled");
 
-    // Fetch only non-completed sessions
+    // Fetch every session so completed slots remain visible in both list and calendar views.
     const { data } = await supabase
       .from("batch_sessions")
       .select("*")
       .eq("batch_id", batch.id)
-      .neq("status", "completed")
       .order("session_date", { ascending: true });
     setSessions(data || []);
   };
