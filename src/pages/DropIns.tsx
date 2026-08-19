@@ -181,6 +181,7 @@ const DropInsPage = () => {
       final_amount: finalTotal,
       payment_mode: form.payment_mode,
       status: "success",
+      business_date: simulatedToday,
     }).select().single();
 
     if (payErr) { toast.error("Payment failed"); return; }

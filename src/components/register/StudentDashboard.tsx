@@ -507,6 +507,8 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
             gst: breakdown.gst,
             final_amount: breakdown.total,
             enrollment_data: {
+              business_date: simulatedToday,
+              date: simulatedToday,
               enrollments: enrollmentRecords,
               enrollment_cycles_template: cyclesTemplate,
               payment_allocations: allocations,
@@ -538,6 +540,8 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
         gst: breakdown.gst,
         total: breakdown.total,
         enrollmentData: {
+          business_date: simulatedToday,
+          date: simulatedToday,
           enrollments: enrollmentRecords,
           enrollment_cycles_template: cyclesTemplate,
           payment_allocations: allocations,
@@ -692,6 +696,8 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
             gst: addBatchBreakdown.gst,
             final_amount: addBatchBreakdown.total,
             enrollment_data: {
+              business_date: simulatedToday,
+              date: simulatedToday,
               enrollments: newEnrollmentRecords,
               enrollment_cycles_template: allocatedCycles,
               existing_extensions: existingExtensions,
@@ -722,6 +728,8 @@ export default function StudentDashboard({ student, user, onDone, simulatedToday
         gst: addBatchBreakdown.gst,
         total: addBatchBreakdown.total,
         enrollmentData: {
+          business_date: simulatedToday,
+          date: simulatedToday,
           enrollments: newEnrollmentRecords,
           enrollment_cycles_template: allocatedCycles,
           existing_extensions: existingExtensions,

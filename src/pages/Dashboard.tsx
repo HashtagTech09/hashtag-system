@@ -67,6 +67,11 @@ function formatSheetDate(date: string | null | undefined): string {
   return year && month && day ? `${day}/${month}/${year}` : dateOnly;
 }
 
+function getBusinessDate(row?: { business_date?: string | null; created_at?: string | null } | null): string {
+  if (row?.business_date) return row.business_date;
+  return row?.created_at ? toISTDateString(row.created_at) : "";
+}
+
 function dateStringToPickerDate(date: string): Date {
   const [year, month, day] = date.split("-").map(Number);
   return new Date(year, month - 1, day);
@@ -131,7 +136,7 @@ interface ClassifiedEnrollment extends Enrollment {
 }
 interface Payment {
   id: number; amount: number; gst: number | null; final_amount: number | null;
-  payment_mode: string | null; created_at: string;
+  payment_mode: string | null; created_at: string; business_date: string | null;
 }
 interface PaymentAllocation {
   payment_id: number; batch_id: number; studio_id: number | null;
@@ -285,7 +290,7 @@ const Dashboard = () => {
       const paymentIds = [...new Set(enrollList.map(e => e.payment_id).filter(Boolean) as number[])];
       const enrolledBatchIds = [...new Set(enrollList.map(e => e.batch_id))];
       if (paymentIds.length > 0) {
-        const payRes = await supabase.from("payments").select("id, amount, gst, final_amount, payment_mode, created_at").in("id", paymentIds);
+        const payRes = await supabase.from("payments").select("id, amount, gst, final_amount, payment_mode, created_at, business_date").in("id", paymentIds);
         setPayments((payRes.data || []) as Payment[]);
         const allocationRes = await supabase
           .from("payment_allocations")
@@ -313,7 +318,7 @@ const Dashboard = () => {
         setDropIns(diList);
         const diPayIds = diList.map(d => d.payment_id).filter(Boolean) as number[];
         if (diPayIds.length > 0) {
-          const diPayRes = await supabase.from("payments").select("id, amount, gst, final_amount, payment_mode, created_at").in("id", diPayIds);
+          const diPayRes = await supabase.from("payments").select("id, amount, gst, final_amount, payment_mode, created_at, business_date").in("id", diPayIds);
           setDropInPayments((diPayRes.data || []) as Payment[]);
         } else { setDropInPayments([]); }
       } else {
@@ -502,7 +507,7 @@ const Dashboard = () => {
     };
     classifiedEnrollments.forEach(e => {
       if (e.displayStatus === "C/F") return; // C/F enrollments don't appear in date-wise
-      const date = toISTDateString(e.created_at);
+      const date = getBusinessDate(paymentMap.get(e.payment_id || 0)) || toISTDateString(e.created_at);
       const row = getOrCreate(date);
       if (e.displayStatus === "NEW") row.NEW++;
       else if (e.displayStatus === "REN") row.REN++;
@@ -529,7 +534,7 @@ const Dashboard = () => {
         ? Math.round((allocatedTotal / collectedAmount) * reportedFinalAmount)
         : allocatedTotal;
       const allocatedGst = reportedFinalAmount > 0 ? Math.round((reportedGst / reportedFinalAmount) * reportedAllocatedTotal) : 0;
-      const date = toISTDateString(payment.created_at);
+      const date = getBusinessDate(payment);
       const row = getOrCreate(date);
       row.gross += reportedAllocatedTotal - allocatedGst;
       row.gst += allocatedGst;
@@ -543,7 +548,7 @@ const Dashboard = () => {
       if (allocatedPaymentIds.has(paymentId)) return;
       const payment = paymentMap.get(paymentId);
       if (!payment) return;
-      const date = toISTDateString(payment.created_at);
+      const date = getBusinessDate(payment);
       const row = getOrCreate(date);
       const adjustment = adjustedDropInByPayment.get(paymentId);
       const total = Number(payment.final_amount || payment.amount || 0) + Number(adjustment?.total || 0);
@@ -556,12 +561,12 @@ const Dashboard = () => {
       else if (mode === "razorpay") row.razorpay += total;
     });
     dropIns.forEach(d => {
-      const date = toISTDateString(d.created_at);
+      const p = d.payment_id ? paymentMap.get(d.payment_id) : null;
+      const date = getBusinessDate(p) || toISTDateString(d.created_at);
       const row = getOrCreate(date);
       row.dropIn++;
       if (d.is_adjusted) row.diAdjusted++;
       if ((!d.is_adjusted || !d.adjusted_payment_id) && d.payment_id) {
-        const p = paymentMap.get(d.payment_id);
         if (p) {
           row.gross += Number(p.amount) || 0;
           row.gst += Number(p.gst) || 0;
@@ -787,21 +792,20 @@ const Dashboard = () => {
     }
     setCopyingSheet("registrations");
     try {
-      const { start, end } = range
-        ? getIstRangeBounds(range.startDate, range.endDate)
-        : getIstDayBounds(format(selectedDate, "yyyy-MM-dd"));
+      const businessStartDate = range ? range.startDate : format(selectedDate, "yyyy-MM-dd");
+      const businessEndDate = range ? range.endDate : businessStartDate;
       let query: any = supabase
         .from("enrollments")
         .select(`
           id, created_at, status_type, start_date, end_date, payment_id, batch_id, student_id,
           students(name, phone, email, users(phone, email)),
           batches(name, batch_code, studio_id, studios(name, code)),
-          payments!inner(id, amount, gst, final_amount, payment_mode, status, created_at, rzp_account, gateway_payment_id, confirmed_by_staff_id)
+          payments!inner(id, amount, gst, final_amount, payment_mode, status, created_at, business_date, rzp_account, gateway_payment_id, confirmed_by_staff_id)
         `)
         .eq("organization_id", 1)
         .in("batch_id", targetBatchIds)
-        .gte("payments.created_at", start)
-        .lt("payments.created_at", end)
+        .gte("payments.business_date", businessStartDate)
+        .lte("payments.business_date", businessEndDate)
         .order("created_at", { ascending: true });
       if (!scopeUnrestricted) query = query.in("student_id", scope.studentIds);
 
@@ -858,7 +862,7 @@ const Dashboard = () => {
 
       const paidToNames = await fetchPaidToNames(Array.from(grouped.values()).map(rows => rows[0]?.payments).filter(Boolean));
       const sheetRows = Array.from(grouped.entries())
-        .sort((a, b) => (a[1][0]?.payments?.created_at || "").localeCompare(b[1][0]?.payments?.created_at || ""))
+        .sort((a, b) => getBusinessDate(a[1][0]?.payments).localeCompare(getBusinessDate(b[1][0]?.payments)))
         .map(([paymentId, rows], index) => {
           const payment = rows[0]?.payments || {};
           const student = rows[0]?.students || {};
@@ -886,7 +890,7 @@ const Dashboard = () => {
           return [
             "",
             index + 1,
-            formatSheetDate(payment.created_at || rows[0]?.created_at),
+            formatSheetDate(getBusinessDate(payment) || rows[0]?.created_at),
             student.name || "",
             student ? getDisplayPhone(student) || "" : "",
             student.email || student.users?.email || "",
@@ -925,20 +929,19 @@ const Dashboard = () => {
     }
     setCopyingSheet("dropIns");
     try {
-      const { start, end } = range
-        ? getIstRangeBounds(range.startDate, range.endDate)
-        : getIstDayBounds(format(selectedDate, "yyyy-MM-dd"));
+      const sessionStartDate = range ? range.startDate : format(selectedDate, "yyyy-MM-dd");
+      const sessionEndDate = range ? range.endDate : sessionStartDate;
       let query: any = supabase
         .from("drop_ins")
         .select(`
           id, amount, is_adjusted, adjusted_payment_id, adjusted_amount, created_at, student_id,
           students(name, phone, email, users(phone, email)),
-          payment:payments!drop_ins_payment_id_fkey(id, amount, gst, final_amount, payment_mode, status, created_at, rzp_account, confirmed_by_staff_id),
-          batch_sessions(session_date, batches(id, name, batch_code, studio_id, studios(name, code)))
+          payment:payments!drop_ins_payment_id_fkey(id, amount, gst, final_amount, payment_mode, status, created_at, business_date, rzp_account, confirmed_by_staff_id),
+          batch_sessions!inner(session_date, batches(id, name, batch_code, studio_id, studios(name, code)))
         `)
         .eq("organization_id", 1)
-        .gte("created_at", start)
-        .lt("created_at", end)
+        .gte("batch_sessions.session_date", sessionStartDate)
+        .lte("batch_sessions.session_date", sessionEndDate)
         .order("created_at", { ascending: true });
       if (!scopeUnrestricted) query = query.in("student_id", scope.studentIds);
 

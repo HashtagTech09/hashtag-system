@@ -369,12 +369,15 @@ export default function JoinBatchFlow() {
             student_id: student.id, organization_id: 1, batch_ids: selectedBatchIds.map(Number),
             amount: breakdown.subtotal, gst: breakdown.gst, final_amount: breakdown.total,
             enrollment_data: {
+              business_date: simulatedToday,
+              date: simulatedToday,
               enrollments: enrollmentRecords,
               enrollment_cycles_template: cyclesTemplate,
               payment_allocations: allocations,
               ...(dropInAdjustmentPayload ? { drop_in_adjustment: dropInAdjustmentPayload } : {}),
             },
             student_name: student.name, student_phone: student.phone || "", batch_names: batchNames, plan_name: planName,
+            date: simulatedToday,
           },
           onSuccess: async (details) => {
             toast.success("Payment confirmed. Enrollment is complete.");
@@ -399,6 +402,8 @@ export default function JoinBatchFlow() {
         organization_id: 1, student_id: student.id, staff_user_id: primaryApprover.id,
         amount: breakdown.subtotal, gst: breakdown.gst, final_amount: breakdown.total,
         enrollment_data: {
+          business_date: simulatedToday,
+          date: simulatedToday,
           enrollments: enrollmentRecords,
           enrollment_cycles_template: cyclesTemplate,
           payment_allocations: allocations,

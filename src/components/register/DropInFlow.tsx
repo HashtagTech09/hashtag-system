@@ -203,11 +203,15 @@ export default function DropInFlow() {
             gst,
             final_amount: inclusiveTotal,
             enrollment_data: {
+              business_date: simulatedToday,
+              date: simulatedToday,
               drop_in: {
                 organization_id: 1,
                 student_id: student.id,
                 batch_session_id: selectedSession.id,
                 amount: baseAmount,
+                business_date: simulatedToday,
+                date: simulatedToday,
               },
             },
             student_name: student.name,
@@ -243,11 +247,15 @@ export default function DropInFlow() {
         gst,
         final_amount: inclusiveTotal,
         enrollment_data: {
+          business_date: simulatedToday,
+          date: simulatedToday,
           drop_in: {
             organization_id: 1,
             student_id: student.id,
             batch_session_id: selectedSession.id,
             amount: baseAmount,
+            business_date: simulatedToday,
+            date: simulatedToday,
           },
         } as unknown as Json,
         batch_ids: [selectedSession.batch_id] as unknown as Json,

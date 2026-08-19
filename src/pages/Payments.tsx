@@ -56,6 +56,8 @@ const PaymentsPage = () => {
     return `${d}/${m}/${y}`;
   };
 
+  const paymentDate = (payment: any) => payment.business_date || toISTDateString(payment.created_at);
+
   const handleDownloadCSV = () => {
     const headers = [
       "Date", "Name", "Phone No.", "Email ID", "Receipt No.", "Status", "Validity",
@@ -78,7 +80,7 @@ const PaymentsPage = () => {
       const paidTo = p.payment_mode === "cash" ? "" : (p.rzp_account || "");
 
       return [
-        formatDDMMYYYY(toISTDateString(p.created_at)),
+        formatDDMMYYYY(paymentDate(p)),
         student?.name || "",
         student ? getDisplayPhone(student) || "" : "",
         getDisplayEmail(student),
@@ -118,7 +120,7 @@ const PaymentsPage = () => {
         amount: payment.final_amount || payment.amount,
         payment_mode: payment.payment_mode || "cash",
         transaction_id: payment.gateway_payment_id || `CASH-${payment.id}`,
-        date: toISTDateString(payment.created_at),
+        date: paymentDate(payment),
       };
 
       // Send email if available
@@ -188,7 +190,7 @@ const PaymentsPage = () => {
                   <TableCell className="hidden md:table-cell">{p.rzp_account ? <Badge variant="outline" className="capitalize">{p.rzp_account}</Badge> : "—"}</TableCell>
                   <TableCell><Badge className={statusColors[p.status] || ""} variant="secondary">{p.status}</Badge></TableCell>
                   <TableCell className="hidden md:table-cell text-muted-foreground text-xs">{p.gateway_payment_id || "—"}</TableCell>
-                  <TableCell className="hidden md:table-cell text-muted-foreground">{toISTDateString(p.created_at)}</TableCell>
+                  <TableCell className="hidden md:table-cell text-muted-foreground">{paymentDate(p)}</TableCell>
                   <TableCell>
                     {p.status === "success" && (
                       <Button

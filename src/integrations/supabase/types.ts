@@ -1022,6 +1022,7 @@ export type Database = {
       payments: {
         Row: {
           amount: number
+          business_date: string | null
           confirmed_by_staff_id: number | null
           created_at: string
           final_amount: number | null
@@ -1038,6 +1039,7 @@ export type Database = {
         }
         Insert: {
           amount: number
+          business_date?: string | null
           confirmed_by_staff_id?: number | null
           created_at?: string
           final_amount?: number | null
@@ -1054,6 +1056,7 @@ export type Database = {
         }
         Update: {
           amount?: number
+          business_date?: string | null
           confirmed_by_staff_id?: number | null
           created_at?: string
           final_amount?: number | null

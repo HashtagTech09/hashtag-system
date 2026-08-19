@@ -39,6 +39,20 @@ function getCycleType(cycle: any) {
   return cycle?.cycle_type ?? cycle?.cycleType ?? "regular";
 }
 
+function normalizeBusinessDate(value?: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? trimmed : null;
+}
+
+function getEnrollmentBusinessDate(data: any): string | null {
+  return normalizeBusinessDate(data?.business_date)
+    || normalizeBusinessDate(data?.date)
+    || normalizeBusinessDate(data?.registration_date)
+    || normalizeBusinessDate(data?.drop_in?.business_date)
+    || normalizeBusinessDate(data?.drop_in?.date);
+}
+
 async function fillMissingPreviousBatchIds(supabase: any, records: any[]) {
   const resolved: any[] = [];
   for (const record of records) {
@@ -188,6 +202,7 @@ Deno.serve(async (req) => {
     claimedRequest = claimed;
 
     const enrollmentData = claimed.enrollment_data || {};
+    const businessDate = getEnrollmentBusinessDate(enrollmentData);
     await assertPromotionAccess(supabase, claimed, enrollmentData);
 
     const { data: payment, error: payErr } = await supabase.from("payments").insert({
@@ -199,6 +214,7 @@ Deno.serve(async (req) => {
       payment_mode: "cash",
       status: "success",
       confirmed_by_staff_id: claimed.staff_user_id,
+      ...(businessDate ? { business_date: businessDate } : {}),
     }).select().single();
     if (payErr) throw payErr;
 

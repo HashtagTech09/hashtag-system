@@ -204,7 +204,7 @@ Deno.serve(async (req) => {
       payment_status: "Confirmed",
       payment_id: `PAY-${payment.id}`,
       transaction_id: payment.gateway_payment_id || payment.gateway_order_id || `PAY-${payment.id}`,
-      date: formatDateTime(payment.created_at),
+      date: payment.business_date ? formatDate(payment.business_date) : formatDateTime(payment.created_at),
       confirmed_at: formatDateTime(payment.created_at),
     };
 

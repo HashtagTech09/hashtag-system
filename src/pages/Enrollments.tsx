@@ -737,6 +737,7 @@ const EnrollmentsPage = () => {
       organization_id: 1, student_id: Number(form.student_id), amount: breakdown.subtotal,
       gst: breakdown.gst, final_amount: totalAmount,
       payment_mode: form.payment_mode, status: "success",
+      business_date: simulatedToday,
     }).select().single();
 
     if (payError) { toast.error("Payment failed"); return; }
@@ -916,6 +917,7 @@ const EnrollmentsPage = () => {
       organization_id: 1, student_id: Number(addBatchForm.student_id),
       amount: addBatchFee.subtotal, gst: addBatchFee.gst, final_amount: addBatchFee.total,
       payment_mode: addBatchForm.payment_mode, status: "success",
+      business_date: simulatedToday,
     }).select().single();
 
     if (payError) { toast.error("Payment failed"); return; }

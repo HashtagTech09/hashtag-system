@@ -39,6 +39,20 @@ function getRequiredEnv(name: string): string {
   return value;
 }
 
+function normalizeBusinessDate(value?: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? trimmed : null;
+}
+
+function getEnrollmentBusinessDate(data: any): string | null {
+  return normalizeBusinessDate(data?.business_date)
+    || normalizeBusinessDate(data?.date)
+    || normalizeBusinessDate(data?.registration_date)
+    || normalizeBusinessDate(data?.drop_in?.business_date)
+    || normalizeBusinessDate(data?.drop_in?.date);
+}
+
 const normalize = (value?: string | null) => (value || "").trim().toLowerCase();
 
 function isOpenEntryLevel(level?: string | null) {
@@ -110,6 +124,7 @@ Deno.serve(async (req) => {
       student_phone,
       batch_names,
       plan_name,
+      date,
     } = body;
     const orderType = enrollment_data?.drop_in ? "drop_in" : "registration";
 
@@ -125,6 +140,7 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
     const orgId = organization_id || await getDefaultOrgId(supabase);
     const isTestMode = await getIsTestMode(supabase, orgId);
+    const businessDate = normalizeBusinessDate(date) || getEnrollmentBusinessDate(enrollment_data);
     await assertPromotionAccess(supabase, Number(student_id), batch_ids.map(Number));
 
     // Look up studio code from first batch
@@ -165,6 +181,7 @@ Deno.serve(async (req) => {
       payment_mode: "razorpay",
       status: "pending",
       rzp_account: isTestMode ? "test" : account,
+      ...(businessDate ? { business_date: businessDate } : {}),
     }).select().single();
 
     if (payErr) throw payErr;
