@@ -906,7 +906,7 @@ const Dashboard = () => {
           id, amount, is_adjusted, adjusted_payment_id, adjusted_amount, created_at, student_id,
           students(name, phone, email, users(phone, email)),
           payment:payments!drop_ins_payment_id_fkey(id, amount, gst, final_amount, payment_mode, status, created_at, rzp_account, confirmed_by_staff_id),
-          batch_sessions(session_date, batches(id, name, studio_id, studios(name, code)))
+          batch_sessions(session_date, batches(id, name, batch_code, studio_id, studios(name, code)))
         `)
         .eq("organization_id", 1)
         .gte("created_at", start)
@@ -936,7 +936,7 @@ const Dashboard = () => {
           student.name || "",
           student ? getDisplayPhone(student) || "" : "",
           student.email || student.users?.email || "",
-          batch.name || "",
+          batch.batch_code || batch.name || "",
           batch.studios?.name || "",
           base,
           gst,

@@ -27,7 +27,9 @@ type UserRow = Database["public"]["Tables"]["users"]["Row"];
 type StudentRow = Database["public"]["Tables"]["students"]["Row"] & {
   users?: UserRow | null;
 };
-type BatchSessionRow = Database["public"]["Tables"]["batch_sessions"]["Row"];
+type BatchSessionRow = Database["public"]["Tables"]["batch_sessions"]["Row"] & {
+  batch_label?: string | null;
+};
 type CashRecipient = Pick<UserRow, "id" | "name" | "email">;
 
 export default function DropInFlow() {
@@ -52,6 +54,9 @@ export default function DropInFlow() {
     regularTotal: dropInFee,
     longTotal: longDropInFee,
   });
+  const selectedSessionLabel = selectedSession
+    ? `${selectedSession.batch_label || `Batch ${selectedSession.batch_id}`} • ${selectedSession.session_date} • ${selectedSession.start_time}–${selectedSession.end_time}`
+    : "";
   const paymentActionLabel = paymentMode === "cash"
     ? `Request cash confirmation ₹${dropInPricing.inclusiveTotal.toLocaleString("en-IN")}`
     : `Pay ₹${dropInPricing.inclusiveTotal.toLocaleString("en-IN")} with Razorpay`;
@@ -165,7 +170,7 @@ export default function DropInFlow() {
     setSubmitting(true);
     try {
       const { baseAmount, gst, inclusiveTotal } = dropInPricing;
-      const sessionLabel = `${selectedSession.session_date} • ${selectedSession.start_time}–${selectedSession.end_time}`;
+      const sessionLabel = selectedSessionLabel;
 
       const showConfirmedReceipt = async (details?: { paymentId?: number; orderId?: string; gatewayPaymentId?: string }) => {
         const paymentId = details?.paymentId;
@@ -324,7 +329,7 @@ export default function DropInFlow() {
         <Card className="glass-card">
           <CardContent className="p-6">
             <div className="flex items-start justify-between gap-3 mb-4">
-              <p className="text-sm text-muted-foreground">Selected: {selectedSession?.start_time} – {selectedSession?.end_time} on {selectedSession?.session_date}</p>
+              <p className="text-sm text-muted-foreground">Selected: {selectedSessionLabel}</p>
               <Button variant="ghost" size="sm" onClick={() => setStep("browse")}>Change</Button>
             </div>
             <PhoneEntry
@@ -406,7 +411,7 @@ export default function DropInFlow() {
               )}
             </p>
             <div className="p-3 rounded-lg border border-border bg-muted/30 text-sm space-y-1">
-              <div className="flex justify-between"><span className="text-muted-foreground">Session</span><span>{selectedSession?.session_date} • {selectedSession?.start_time}–{selectedSession?.end_time}</span></div>
+              <div className="flex justify-between gap-3"><span className="text-muted-foreground">Session</span><span className="text-right">{selectedSessionLabel}</span></div>
               {dropInPricing.isLongSlot && (
                 <div className="flex justify-between"><span className="text-muted-foreground">Slot type</span><span>2.5-hour drop-in</span></div>
               )}

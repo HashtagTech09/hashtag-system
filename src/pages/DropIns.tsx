@@ -62,7 +62,7 @@ const DropInsPage = () => {
   const fetchData = async () => {
     let dropQ: any = supabase
       .from("drop_ins")
-      .select("*, students(name, phone, users(phone)), batch_sessions(session_date, start_time, end_time, style, batches(id, name, studio_id)), payment:payments!drop_ins_payment_id_fkey(final_amount, gst)")
+      .select("*, students(name, phone, users(phone)), batch_sessions(session_date, start_time, end_time, style, batches(id, name, batch_code, studio_id)), payment:payments!drop_ins_payment_id_fkey(final_amount, gst)")
       .eq("organization_id", 1)
       .order("created_at", { ascending: false });
     let studentQ: any = supabase.from("students").select("*").eq("organization_id", 1).order("name");
@@ -248,6 +248,7 @@ const DropInsPage = () => {
     regularTotal: regularDropInFee,
     longTotal: longDropInFee,
   });
+  const getBatchLabel = (batch: any) => batch?.batch_code || batch?.name || "—";
 
   return (
     <AdminLayout title="Drop-ins">
@@ -316,7 +317,7 @@ const DropInsPage = () => {
                   <Label>Batch</Label>
                   <Select value={form.batch_id} onValueChange={v => setForm({ ...form, batch_id: v, batch_session_id: "" })}>
                     <SelectTrigger><SelectValue placeholder="Select batch" /></SelectTrigger>
-                    <SelectContent>{batches.map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}</SelectContent>
+                    <SelectContent>{batches.map(b => <SelectItem key={b.id} value={String(b.id)}>{getBatchLabel(b)}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
                 {sessions.length > 0 && (
@@ -386,7 +387,7 @@ const DropInsPage = () => {
                   {filteredDropIns.map(d => (
                     <TableRow key={d.id}>
                       <TableCell className="font-medium">{d.students?.name}</TableCell>
-                      <TableCell className="text-muted-foreground">{d.batch_sessions?.batches?.name || "—"}</TableCell>
+                      <TableCell className="text-muted-foreground">{getBatchLabel(d.batch_sessions?.batches)}</TableCell>
                       <TableCell className="text-muted-foreground">{d.batch_sessions?.session_date || "—"}</TableCell>
                       <TableCell><Badge variant="outline">{d.batch_sessions?.style || "—"}</Badge></TableCell>
                       <TableCell className="font-display">

@@ -27,7 +27,7 @@ export default function SessionBrowser({ studioId, selectedSessionId, onBack, on
       setLoading(true);
       const { data: studioBatches } = await supabase
         .from("batches")
-        .select("id, name, style")
+        .select("id, name, style, batch_code")
         .eq("organization_id", 1)
         .eq("studio_id", studioId);
 
@@ -64,7 +64,11 @@ export default function SessionBrowser({ studioId, selectedSessionId, onBack, on
     fetch();
   }, [studioId, isTestMode, simulatedToday]);
 
-  const getBatchName = (id: number) => batches.find(b => b.id === id)?.name || `Batch ${id}`;
+  const getBatchLabel = (id: number) => {
+    const batch = batches.find(b => b.id === id);
+    if (!batch) return `Batch ${id}`;
+    return batch.batch_code || batch.name || `Batch ${id}`;
+  };
 
   if (loading) return <div className="space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-20" />)}</div>;
 
@@ -108,13 +112,13 @@ export default function SessionBrowser({ studioId, selectedSessionId, onBack, on
                   key={s.id}
                   className={`transition-all ${isBookable ? "cursor-pointer hover:border-primary/50" : "cursor-not-allowed opacity-60"} ${selected ? "ring-2 ring-primary glow-primary" : ""}`}
                   onClick={() => {
-                    if (isBookable) onSelectSession(s);
+                    if (isBookable) onSelectSession({ ...s, batch_label: getBatchLabel(s.batch_id) });
                   }}
                 >
                   <CardContent className="p-3 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div>
-                        <p className="font-medium text-foreground">{getBatchName(s.batch_id)}</p>
+                        <p className="font-medium text-foreground">{getBatchLabel(s.batch_id)}</p>
                         <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
                           <Clock className="h-3 w-3" />
                           <span>{s.start_time} – {s.end_time}</span>
