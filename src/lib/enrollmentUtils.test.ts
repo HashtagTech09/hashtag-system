@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeCycleAssignment, computeFeeBreakdown, detectStudentStatus, getRenewalStartCycleIndex, getStartCycleIndex, isPlanValid, matchPlanCycles, roundToNearest100, type PlanCycle, type SubPlan } from "./enrollmentUtils";
+import { computeAddBatchBreakdown, computeCycleAssignment, computeFeeBreakdown, detectStudentStatus, getRenewalStartCycleIndex, getStartCycleIndex, isPlanValid, matchPlanCycles, roundToNearest100, type PlanCycle, type SubPlan } from "./enrollmentUtils";
 
 const cycles: PlanCycle[] = [
   {
@@ -187,7 +187,7 @@ describe("registration fee and rounding", () => {
     expect(breakdown.applyRegFee).toBe(false);
     expect(breakdown.isLateRenewal).toBe(true);
     expect(breakdown.registrationFeeDiscounted).toBe(true);
-    expect(breakdown.registrationFeeDiscountLabel).toBe("Registration fee discounted for 6-month/yearly renewal");
+    expect(breakdown.registrationFeeDiscountLabel).toBe("Registration fee discounted for 6-month/yearly plan");
     expect(breakdown.roundedBatchTotal).toBe(26500);
     expect(breakdown.total).toBe(26500);
   });
@@ -211,6 +211,25 @@ describe("registration fee and rounding", () => {
     expect(breakdown.total).toBe(50000);
   });
 
+  it("waives registration fee for new 6-month registrations", () => {
+    const breakdown = computeFeeBreakdown({
+      batchCount: 1,
+      regularCycles: 5,
+      gridCycles: 1,
+      detectedStatus: "NEW",
+      latestEndDate: null,
+      dropInAmount: 0,
+      today: "2026-10-05",
+      regFee: 590,
+    });
+
+    expect(breakdown.regFee).toBe(0);
+    expect(breakdown.applyRegFee).toBe(false);
+    expect(breakdown.registrationFeeDiscounted).toBe(true);
+    expect(breakdown.registrationFeeDiscountLabel).toBe("Registration fee discounted for 6-month/yearly plan");
+    expect(breakdown.total).toBe(26500);
+  });
+
   it("rounds class totals to the nearest 100 before adding registration fee", () => {
     expect(roundToNearest100(11328)).toBe(11300);
     expect(roundToNearest100(11351)).toBe(11400);
@@ -232,5 +251,68 @@ describe("registration fee and rounding", () => {
     expect(breakdown.roundedBatchTotal).toBe(11300);
     expect(breakdown.regFee).toBe(590);
     expect(breakdown.total).toBe(11890);
+  });
+});
+
+describe("add-batch pricing", () => {
+  it("uses existing batches as the first pricing positions and discounts the new batch", () => {
+    const breakdown = computeAddBatchBreakdown({
+      existingBatches: [{
+        batch_id: 10,
+        batch_name: "Jazz 1.1",
+        style_base: "Jazz",
+        coveredCycleIds: [1, 2, 4],
+      }],
+      newBatches: [{ id: 20, name: "Heels 1", style_base: "Heels" }],
+      plan: plan(3, 0),
+      planCycles: cycles,
+      startCycleIndex: 0,
+    });
+
+    expect(breakdown).not.toBeNull();
+    expect(breakdown?.batchAllocations).toEqual([
+      expect.objectContaining({
+        batch_id: 10,
+        is_existing: true,
+        is_primary: true,
+        amount: 0,
+        discountPct: 0,
+      }),
+      expect.objectContaining({
+        batch_id: 20,
+        is_existing: false,
+        is_primary: false,
+        amount: 8448,
+        discountPct: 0.12,
+      }),
+    ]);
+    expect(breakdown?.subtotal).toBe(8448);
+  });
+
+  it("does not apply the add-batch discount to an existing batch validity extension", () => {
+    const breakdown = computeAddBatchBreakdown({
+      existingBatches: [{
+        batch_id: 10,
+        batch_name: "Jazz 1.1",
+        style_base: "Jazz",
+        coveredCycleIds: [1, 2],
+      }],
+      newBatches: [{ id: 20, name: "Heels 1", style_base: "Heels" }],
+      plan: plan(3, 0),
+      planCycles: cycles,
+      startCycleIndex: 0,
+    });
+
+    expect(breakdown?.batchAllocations[0]).toEqual(expect.objectContaining({
+      batch_id: 10,
+      amount: 3200,
+      discountPct: 0,
+      missingCycleIds: [4],
+    }));
+    expect(breakdown?.batchAllocations[1]).toEqual(expect.objectContaining({
+      batch_id: 20,
+      amount: 8448,
+      discountPct: 0.12,
+    }));
   });
 });

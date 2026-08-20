@@ -221,14 +221,16 @@ function computeFeeBreakdown(params: {
   const isLongTermPlan = regularCycles + gridCycles >= 6;
   const today = todayIST();
   const isLateRenewal = detectedStatus === "REN" && latestEndDate ? today > latestEndDate : false;
-  const waiveRenewalFeeForLongTermPlan = detectedStatus === "REN" && isLongTermPlan;
-  let applyRegFee = detectedStatus === "NEW" || detectedStatus === "REV" || isLateRenewal;
-  if (waiveRenewalFeeForLongTermPlan) applyRegFee = false;
+  const feeWouldApply = detectedStatus === "NEW" || detectedStatus === "REV" || isLateRenewal;
+  let applyRegFee = feeWouldApply;
+  if (isLongTermPlan) applyRegFee = false;
   const regFee = applyRegFee ? regFeeVal : 0;
-  const registrationFeeDiscounted = detectedStatus === "REN" && (!!latestEndDate && today <= latestEndDate || waiveRenewalFeeForLongTermPlan);
+  const registrationFeeDiscounted = isLongTermPlan
+    ? feeWouldApply || detectedStatus === "REN"
+    : detectedStatus === "REN" && !!latestEndDate && today <= latestEndDate;
   const registrationFeeDiscountLabel = registrationFeeDiscounted
-    ? waiveRenewalFeeForLongTermPlan
-      ? "Registration fee discounted for 6-month/yearly renewal"
+    ? isLongTermPlan
+      ? "Registration fee discounted for 6-month/yearly plan"
       : "Registration fee discounted during renewal period"
     : null;
   let perBatchFee: number;

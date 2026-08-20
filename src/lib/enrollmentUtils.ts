@@ -226,14 +226,16 @@ export function computeFeeBreakdown(params: {
 
   const todayStr = today || todayIST();
   const isLateRenewal = detectedStatus === "REN" && latestEndDate ? todayStr > latestEndDate : false;
-  const waiveRenewalFeeForLongTermPlan = detectedStatus === "REN" && isLongTermPlan;
-  let applyRegFee = detectedStatus === "NEW" || detectedStatus === "REV" || isLateRenewal;
-  if (waiveRenewalFeeForLongTermPlan) applyRegFee = false;
+  const feeWouldApply = detectedStatus === "NEW" || detectedStatus === "REV" || isLateRenewal;
+  let applyRegFee = feeWouldApply;
+  if (isLongTermPlan) applyRegFee = false;
   const regFee = applyRegFee ? effRegFee : 0;
-  const registrationFeeDiscounted = detectedStatus === "REN" && (!!latestEndDate && todayStr <= latestEndDate || waiveRenewalFeeForLongTermPlan);
+  const registrationFeeDiscounted = isLongTermPlan
+    ? feeWouldApply || detectedStatus === "REN"
+    : detectedStatus === "REN" && !!latestEndDate && todayStr <= latestEndDate;
   const registrationFeeDiscountLabel = registrationFeeDiscounted
-    ? waiveRenewalFeeForLongTermPlan
-      ? "Registration fee discounted for 6-month/yearly renewal"
+    ? isLongTermPlan
+      ? "Registration fee discounted for 6-month/yearly plan"
       : "Registration fee discounted during renewal period"
     : null;
 
@@ -364,8 +366,8 @@ export interface AddBatchBreakdown {
 
 /**
  * Compute fee breakdown for "Add Batch" with validity matching.
- * Existing batches are charged only for missing cycles at their positional discount.
- * New batches are charged the full plan fee at their incremental positional discount.
+ * Existing batches anchor the pricing positions. New batches are charged as the
+ * next batch(es), so the add-batch discount is applied to the newly-added batch.
  */
 export function computeAddBatchBreakdown(params: {
   existingBatches: { batch_id: number; batch_name: string; style_base: string; coveredCycleIds: number[] }[];
@@ -400,10 +402,10 @@ export function computeAddBatchBreakdown(params: {
   const allocations: AddBatchAllocation[] = [];
   let totalFee = 0;
 
-  // Existing batches are SECONDARY — positioned after new batches
-  // They are only charged for missing cycles at their positional discount
+  // Existing batches stay first. If validity has to be extended, any missing
+  // cycles are charged at the existing batch's position, not at the new-batch discount.
   existingBatches.forEach((eb, idx) => {
-    const position = newBatches.length + 1 + idx;
+    const position = idx + 1;
     const disc = getBatchDiscount(position);
     const coveredSet = new Set(eb.coveredCycleIds);
     const missingCycleIds = planCycleIds.filter(cid => !coveredSet.has(cid));
@@ -411,7 +413,7 @@ export function computeAddBatchBreakdown(params: {
     if (missingCycleIds.length === 0) {
       allocations.push({
         batch_id: eb.batch_id, batch_name: eb.batch_name, style_base: eb.style_base,
-        is_primary: false, is_existing: true, amount: 0, discountPct: disc,
+        is_primary: idx === 0, is_existing: true, amount: 0, discountPct: disc,
         missingCycleIds: [], fullCycleIds: [],
       });
       return;
@@ -429,21 +431,21 @@ export function computeAddBatchBreakdown(params: {
 
     allocations.push({
       batch_id: eb.batch_id, batch_name: eb.batch_name, style_base: eb.style_base,
-      is_primary: false, is_existing: true, amount: discountedFee, discountPct: disc,
+      is_primary: idx === 0, is_existing: true, amount: discountedFee, discountPct: disc,
       missingCycleIds, fullCycleIds: [],
     });
   });
 
-  // New batches become PRIMARY (position 1, 2, ...) — full price for first, then discounts
+  // New batches follow existing batches and receive the add-batch discount.
   newBatches.forEach((nb, idx) => {
-    const position = idx + 1;
+    const position = existingBatches.length + 1 + idx;
     const disc = getBatchDiscount(position);
     const amount = position === 1 ? fullPerBatch : Math.round(fullPerBatch * (1 - disc));
     totalFee += amount;
 
     allocations.push({
       batch_id: nb.id, batch_name: nb.name, style_base: nb.style_base || "",
-      is_primary: idx === 0, is_existing: false, amount, discountPct: disc,
+      is_primary: existingBatches.length === 0 && idx === 0, is_existing: false, amount, discountPct: disc,
       missingCycleIds: [], fullCycleIds: planCycleIds,
     });
   });

@@ -7,7 +7,9 @@ export type DropInLike = {
     session_date?: string | null;
     style?: string | null;
     batches?: {
+      id?: number | null;
       name?: string | null;
+      batch_code?: string | null;
       style?: string | null;
       style_base?: string | null;
     } | null;
@@ -17,6 +19,7 @@ export type DropInLike = {
 type BatchLike = {
   id?: number;
   name?: string | null;
+  batch_code?: string | null;
   style?: string | null;
   style_base?: string | null;
 };
@@ -29,6 +32,17 @@ function normalizeStyle(value?: string | null): string {
 }
 
 function styleMatchesDropIn(dropIn: DropInLike, batch: BatchLike): boolean {
+  const sessionBatch = dropIn.batch_sessions?.batches;
+  if (batch.id && sessionBatch?.id && Number(batch.id) === Number(sessionBatch.id)) return true;
+
+  const batchCode = normalizeStyle(batch.batch_code);
+  const sessionBatchCode = normalizeStyle(sessionBatch?.batch_code);
+  if (batchCode && sessionBatchCode && batchCode === sessionBatchCode) return true;
+
+  const batchName = normalizeStyle(batch.name);
+  const sessionBatchName = normalizeStyle(sessionBatch?.name);
+  if (batchName && sessionBatchName && batchName === sessionBatchName) return true;
+
   const sessionStyle = normalizeStyle(dropIn.batch_sessions?.style || dropIn.batch_sessions?.batches?.style);
   if (!sessionStyle) return false;
 

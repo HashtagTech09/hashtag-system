@@ -113,7 +113,7 @@ export default function JoinBatchFlow() {
 
       const { data, error } = await supabase
         .from("drop_ins")
-        .select("*, payment:payments!drop_ins_payment_id_fkey(final_amount, gst), batch_sessions(session_date, style, start_time, end_time, batches(name, style, style_base))")
+        .select("*, payment:payments!drop_ins_payment_id_fkey(final_amount, gst), batch_sessions(session_date, style, start_time, end_time, batches(id, name, batch_code, style, style_base))")
         .eq("student_id", student.id)
         .eq("is_adjusted", false)
         .eq("organization_id", 1)

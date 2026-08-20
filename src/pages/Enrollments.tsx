@@ -516,7 +516,7 @@ const EnrollmentsPage = () => {
       if (selectedBatches.length === 0) { setEligibleDropIn(null); return; }
 
       const { data } = await supabase.from("drop_ins")
-        .select("*, payment:payments!drop_ins_payment_id_fkey(final_amount, gst), batch_sessions(session_date, style, start_time, end_time, batches(name, style, style_base))")
+        .select("*, payment:payments!drop_ins_payment_id_fkey(final_amount, gst), batch_sessions(session_date, style, start_time, end_time, batches(id, name, batch_code, style, style_base))")
         .eq("student_id", Number(form.student_id))
         .eq("is_adjusted", false)
         .eq("organization_id", 1)
@@ -859,7 +859,7 @@ const EnrollmentsPage = () => {
       const selectedBatches = batches.filter(b => addBatchForm.new_batch_ids.includes(String(b.id)));
       if (selectedBatches.length === 0) { setAddBatchDropIn(null); return; }
       const { data } = await supabase.from("drop_ins")
-        .select("*, payment:payments!drop_ins_payment_id_fkey(final_amount, gst), batch_sessions(session_date, style, start_time, end_time, batches(name, style, style_base))")
+        .select("*, payment:payments!drop_ins_payment_id_fkey(final_amount, gst), batch_sessions(session_date, style, start_time, end_time, batches(id, name, batch_code, style, style_base))")
         .eq("student_id", Number(addBatchForm.student_id))
         .eq("is_adjusted", false)
         .eq("organization_id", 1)
