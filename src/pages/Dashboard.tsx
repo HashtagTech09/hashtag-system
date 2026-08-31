@@ -780,13 +780,13 @@ const Dashboard = () => {
     toast.success(`Copied ${rows.length} ${label}${rows.length === 1 ? "" : "s"} for Google Sheets`);
   };
 
-  const copyRegistrationsForSheets = async (range?: { startDate: string; endDate: string }) => {
+  const copyRegistrationsForSheets = async (range?: { startDate: string; endDate: string; cycleOnly?: boolean }) => {
     const targetBatchIds = batches.map(b => b.id);
     if (targetBatchIds.length === 0) {
       toast.info("No scoped batches available for this selection");
       return;
     }
-    if (range && range.endDate < range.startDate) {
+    if (range && !range.cycleOnly && range.endDate < range.startDate) {
       toast.error("End date cannot be before start date");
       return;
     }
@@ -794,6 +794,17 @@ const Dashboard = () => {
     try {
       const businessStartDate = range ? range.startDate : format(selectedDate, "yyyy-MM-dd");
       const businessEndDate = range ? range.endDate : businessStartDate;
+      const cycleEnrollmentIds = range?.cycleOnly
+        ? classifiedEnrollments
+          .filter(row => row.displayStatus !== "C/F" && row.payment_id && visibleBatchIds.has(row.batch_id))
+          .map(row => row.id)
+        : [];
+
+      if (range?.cycleOnly && cycleEnrollmentIds.length === 0) {
+        toast.info("No registrations found for the selected cycle and studio");
+        return;
+      }
+
       let query: any = supabase
         .from("enrollments")
         .select(`
@@ -804,9 +815,15 @@ const Dashboard = () => {
         `)
         .eq("organization_id", 1)
         .in("batch_id", targetBatchIds)
-        .gte("payments.business_date", businessStartDate)
-        .lte("payments.business_date", businessEndDate)
         .order("created_at", { ascending: true });
+
+      if (range?.cycleOnly) {
+        query = query.in("id", cycleEnrollmentIds);
+      } else {
+        query = query
+          .gte("payments.business_date", businessStartDate)
+          .lte("payments.business_date", businessEndDate);
+      }
       if (!scopeUnrestricted) query = query.in("student_id", scope.studentIds);
 
       const { data, error } = await query;
@@ -1261,11 +1278,11 @@ const Dashboard = () => {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => copyRegistrationsForSheets({ startDate: copyStartDate, endDate: copyEndDate })}
-                  disabled={copyingSheet !== null || batches.length === 0}
+                  onClick={() => copyRegistrationsForSheets({ startDate: copyStartDate, endDate: copyEndDate, cycleOnly: true })}
+                  disabled={copyingSheet !== null || batches.length === 0 || !selectedCycle}
                 >
                   <ClipboardCopy className="h-4 w-4" />
-                  Copy All Reg
+                  Copy Cycle Reg
                 </Button>
                 <Button
                   variant="outline"
