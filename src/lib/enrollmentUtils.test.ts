@@ -252,6 +252,70 @@ describe("registration fee and rounding", () => {
     expect(breakdown.regFee).toBe(590);
     expect(breakdown.total).toBe(11890);
   });
+
+  it("rounds 6-month two-batch plans to the expected fixed class total", () => {
+    const breakdown = computeFeeBreakdown({
+      batchCount: 2,
+      regularCycles: 5,
+      gridCycles: 1,
+      detectedStatus: "REN",
+      latestEndDate: "2026-12-31",
+      dropInAmount: 0,
+      today: "2026-09-01",
+      regFee: 590,
+      sortedBatches: [
+        { id: 1, name: "Jazz 1", style_base: "Jazz" },
+        { id: 2, name: "Heels 1", style_base: "Heels" },
+      ],
+    });
+
+    expect(breakdown.batchTotalWithGst).toBe(49821);
+    expect(breakdown.roundedBatchTotal).toBe(49800);
+    expect(breakdown.total).toBe(49800);
+  });
+
+  it("uses the expected two-batch total for 2 regular plus 1 grid plans", () => {
+    const breakdown = computeFeeBreakdown({
+      batchCount: 2,
+      regularCycles: 2,
+      gridCycles: 1,
+      detectedStatus: "REN",
+      latestEndDate: "2026-12-31",
+      dropInAmount: 0,
+      today: "2026-09-01",
+      regFee: 590,
+      sortedBatches: [
+        { id: 1, name: "Jazz 1", style_base: "Jazz" },
+        { id: 2, name: "Heels 1", style_base: "Heels" },
+      ],
+    });
+
+    expect(breakdown.batchTotalWithGst).toBe(31206);
+    expect(breakdown.roundedBatchTotal).toBe(30800);
+    expect(breakdown.total).toBe(30800);
+  });
+
+  it("uses the expected three-batch total for 2 regular plus 1 grid plans", () => {
+    const breakdown = computeFeeBreakdown({
+      batchCount: 3,
+      regularCycles: 2,
+      gridCycles: 1,
+      detectedStatus: "REN",
+      latestEndDate: "2026-12-31",
+      dropInAmount: 0,
+      today: "2026-09-01",
+      regFee: 590,
+      sortedBatches: [
+        { id: 1, name: "Jazz 1", style_base: "Jazz" },
+        { id: 2, name: "Heels 1", style_base: "Heels" },
+        { id: 3, name: "Hip Hop 1", style_base: "Hip Hop" },
+      ],
+    });
+
+    expect(breakdown.batchTotalWithGst).toBe(45647);
+    expect(breakdown.roundedBatchTotal).toBe(44700);
+    expect(breakdown.total).toBe(44700);
+  });
 });
 
 describe("add-batch pricing", () => {

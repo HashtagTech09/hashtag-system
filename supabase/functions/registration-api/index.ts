@@ -27,6 +27,9 @@ function todayIST(): string {
 const REGULAR_PRICE = 3200;
 const GRID_PRICE = 7667;
 const PLAN_FIXED_TOTALS: Record<string, number> = { "5R1G": 26500, "10R2G": 50000 };
+const PLAN_BATCH_FIXED_TOTALS: Record<string, Record<number, number>> = {
+  "2R1G": { 2: 30800, 3: 44700 },
+};
 
 // ── Settings loader (cached across warm invocations) ─────────────────
 let CACHED_SETTINGS: { orgId: number; regFee: number; dropInFee: number; gstRate: number } | null = null;
@@ -85,6 +88,9 @@ async function assertPromotionAccess(supabase: any, studentId: number, batches: 
 }
 function roundToNearest100(n: number) { return Math.round(n / 100) * 100; }
 function getPlanKey(r: number, g: number) { return `${r}R${g}G`; }
+function getFixedBatchTotal(planKey: string, batchCount: number) {
+  return PLAN_BATCH_FIXED_TOTALS[planKey]?.[batchCount] ?? null;
+}
 function getCycleForDate(cycles: PlanCycle[], date: string): PlanCycle | null {
   return cycles.find(c => c.start_date <= date && (c.end_date || "2099-12-31") >= date) || null;
 }
@@ -246,7 +252,8 @@ function computeFeeBreakdown(params: {
   const subtotal = totalBatchFee;
   const gst = Math.round(subtotal * gstRate);
   const batchTotalWithGst = subtotal + gst;
-  const roundedBatchTotal = isFixedPricePlan ? batchTotalWithGst : roundToNearest100(batchTotalWithGst);
+  const fixedBatchTotal = getFixedBatchTotal(planKey, batchCount);
+  const roundedBatchTotal = fixedBatchTotal ?? roundToNearest100(batchTotalWithGst);
   const roundingAdjustment = roundedBatchTotal - batchTotalWithGst;
   const total = Math.max(0, roundedBatchTotal + regFee - dropInAmount);
   return {

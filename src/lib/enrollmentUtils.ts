@@ -20,12 +20,24 @@ export const PLAN_FIXED_TOTALS: Record<string, number> = {
   "10R2G": 50000,
 };
 
+/** Fixed after-GST class totals for specific plan+batch combinations. */
+export const PLAN_BATCH_FIXED_TOTALS: Record<string, Record<number, number>> = {
+  "2R1G": {
+    2: 30800,
+    3: 44700,
+  },
+};
+
 export function getPlanKey(regularCycles: number, gridCycles: number): string {
   return `${regularCycles}R${gridCycles}G`;
 }
 
 export function roundToNearest100(n: number): number {
   return Math.round(n / 100) * 100;
+}
+
+function getFixedBatchTotal(planKey: string, batchCount: number): number | null {
+  return PLAN_BATCH_FIXED_TOTALS[planKey]?.[batchCount] ?? null;
 }
 
 export interface PlanCycle {
@@ -272,7 +284,8 @@ export function computeFeeBreakdown(params: {
   const subtotal = totalBatchFee;
   const gst = Math.round(subtotal * effGstRate);
   const batchTotalWithGst = subtotal + gst;
-  const roundedBatchTotal = isFixedPricePlan ? batchTotalWithGst : roundToNearest100(batchTotalWithGst);
+  const fixedBatchTotal = getFixedBatchTotal(planKey, batchCount);
+  const roundedBatchTotal = fixedBatchTotal ?? roundToNearest100(batchTotalWithGst);
   const roundingAdjustment = roundedBatchTotal - batchTotalWithGst;
   const total = Math.max(0, roundedBatchTotal + regFee - dropInAmount);
 
@@ -453,7 +466,7 @@ export function computeAddBatchBreakdown(params: {
   const subtotal = totalFee;
   const gst = Math.round(subtotal * GST_RATE);
   const batchTotalWithGst = subtotal + gst;
-  const roundedBatchTotal = isFixedPricePlan ? batchTotalWithGst : roundToNearest100(batchTotalWithGst);
+  const roundedBatchTotal = roundToNearest100(batchTotalWithGst);
   const roundingAdjustment = roundedBatchTotal - batchTotalWithGst;
   const total = Math.max(0, roundedBatchTotal - dropInAmount);
 
