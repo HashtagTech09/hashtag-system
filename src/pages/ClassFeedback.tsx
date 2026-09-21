@@ -142,6 +142,20 @@ const ClassFeedbackPage = () => {
                     <TableCell>
                       <div className="font-medium">{student?.name || "—"}</div>
                       <div className="text-xs text-muted-foreground">{getDisplayPhone(student || {})}</div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Button size="sm" variant="outline" onClick={() => copyLink(row.feedback_url)}>
+                          <Copy className="h-4 w-4" />
+                          Copy form link
+                        </Button>
+                        {row.feedback_url && (
+                          <Button size="sm" variant="outline" asChild>
+                            <a href={row.feedback_url} target="_blank" rel="noreferrer">
+                              <ExternalLink className="h-4 w-4" />
+                              Open form
+                            </a>
+                          </Button>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <Badge className={statusClass[row.status] || statusClass.created}>{row.status}</Badge>
