@@ -26,6 +26,7 @@ const AttendancePage = () => {
   const [reasons, setReasons] = useState<Record<number, string>>({});
   const [date] = useState(todayIST());
   const [planCycles, setPlanCycles] = useState<any[]>([]);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     const param = searchParams.get("batch");
@@ -134,12 +135,36 @@ const AttendancePage = () => {
     if (error) toast.error("Failed to save reason");
   };
 
-  const handleSubmit = () => {
-    toast.success("Attendance saved");
-    if (isInstructor && !isAdminOrManager) {
-      navigate("/instructor");
-    } else {
-      navigate(-1);
+  const handleSubmit = async () => {
+    if (!selectedBatch) return;
+    setSubmitting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("class-feedback", {
+        body: { action: "create", batch_id: Number(selectedBatch), date },
+      });
+      if (error) throw error;
+
+      if (data?.created) {
+        toast.success("Attendance saved. Feedback link created for one present student.");
+      } else if (data?.existing) {
+        toast.success("Attendance saved. Feedback request already exists for this class.");
+      } else if (data?.reason === "no_present_students") {
+        toast.success("Attendance saved. No present student found for feedback.");
+      } else if (data?.reason === "no_contactable_present_students") {
+        toast.success("Attendance saved. No present student had contact details for feedback.");
+      } else {
+        toast.success("Attendance saved");
+      }
+
+      if (isInstructor && !isAdminOrManager) {
+        navigate("/instructor");
+      } else {
+        navigate(-1);
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Attendance saved, but feedback link could not be created");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -196,7 +221,9 @@ const AttendancePage = () => {
                   </div>
                 ))}
                 <div className="pt-3 flex justify-end">
-                  <Button onClick={handleSubmit} size="lg">Submit</Button>
+                  <Button onClick={handleSubmit} size="lg" disabled={submitting}>
+                    {submitting ? "Submitting..." : "Submit"}
+                  </Button>
                 </div>
               </div>
             )}

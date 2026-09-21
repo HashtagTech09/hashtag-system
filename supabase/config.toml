@@ -7,3 +7,5 @@ project_id = "plrpurjponddhelgtebw"
     verify_jwt = true
   [functions.complete-account-setup]
     verify_jwt = true
+  [functions.class-feedback]
+    verify_jwt = false

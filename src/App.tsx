@@ -17,6 +17,8 @@ import ApplicationCasesPage from "./pages/ApplicationCases";
 import PromotionRequestsPage from "./pages/PromotionRequests";
 import PaymentsPage from "./pages/Payments";
 import AttendancePage from "./pages/Attendance";
+import ClassFeedbackPage from "./pages/ClassFeedback";
+import ClassFeedbackForm from "./pages/ClassFeedbackForm";
 import SettingsPage from "./pages/Settings";
 import PlanCyclesPage from "./pages/PlanCycles";
 import DropInsPage from "./pages/DropIns";
@@ -90,9 +92,11 @@ const AppRoutes = () => (
     <Route path="/drop-ins" element={<ProtectedRoute><DropInsPage /></ProtectedRoute>} />
     <Route path="/payments" element={<ProtectedRoute><PaymentsPage /></ProtectedRoute>} />
     <Route path="/attendance" element={<ProtectedRoute><AttendancePage /></ProtectedRoute>} />
+    <Route path="/class-feedback" element={<ProtectedRoute><ClassFeedbackPage /></ProtectedRoute>} />
     <Route path="/settings" element={<GlobalAdminRoute><SettingsPage /></GlobalAdminRoute>} />
     <Route path="/import" element={<GlobalAdminRoute><ImportPage /></GlobalAdminRoute>} />
     <Route path="/register" element={<RegisterPage />} />
+    <Route path="/feedback/:token" element={<ClassFeedbackForm />} />
     <Route path="/confirm-cash" element={<ConfirmCashPage />} />
     <Route path="/reset-password" element={<ResetPasswordPage />} />
     <Route path="/instructor" element={<ProtectedRoute><InstructorHome /></ProtectedRoute>} />
