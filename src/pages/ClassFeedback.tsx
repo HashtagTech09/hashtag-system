@@ -3,11 +3,13 @@ import { supabase } from "@/integrations/supabase/client";
 import AdminLayout from "@/components/AdminLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Search, Star } from "lucide-react";
+import { Copy, ExternalLink, Search, Star } from "lucide-react";
 import { getDisplayPhone } from "@/lib/studentUtils";
 import { useScopedStudents } from "@/hooks/useScopedStudents";
+import { toast } from "sonner";
 
 const statusClass: Record<string, string> = {
   sent: "bg-blue-500/15 text-blue-300",
@@ -79,6 +81,15 @@ const ClassFeedbackPage = () => {
     });
   }, [rows, search]);
 
+  const copyLink = async (url: string | null | undefined) => {
+    if (!url) {
+      toast.error("No feedback link available yet");
+      return;
+    }
+    await navigator.clipboard.writeText(url);
+    toast.success("Feedback link copied");
+  };
+
   return (
     <AdminLayout title="Class Feedback">
       <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -107,6 +118,7 @@ const ClassFeedbackPage = () => {
                 <TableHead>Rating</TableHead>
                 <TableHead className="hidden lg:table-cell">Comments</TableHead>
                 <TableHead className="hidden md:table-cell">Sent To</TableHead>
+                <TableHead>Form</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -156,12 +168,26 @@ const ClassFeedbackPage = () => {
                       <div className="text-sm">{row.contact_channel || "—"}</div>
                       <div className="text-xs text-muted-foreground">{row.recipient || row.notification_status || "—"}</div>
                     </TableCell>
+                    <TableCell>
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="outline" onClick={() => copyLink(row.feedback_url)}>
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                        {row.feedback_url && (
+                          <Button size="sm" variant="outline" asChild>
+                            <a href={row.feedback_url} target="_blank" rel="noreferrer">
+                              <ExternalLink className="h-4 w-4" />
+                            </a>
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
                   </TableRow>
                 );
               })}
               {filtered.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="py-10 text-center text-muted-foreground">
+                  <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
                     No feedback requests yet.
                   </TableCell>
                 </TableRow>
