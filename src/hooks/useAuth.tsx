@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState, createContext, useContext, ReactNode } from "react";
+import { useEffect, useState, createContext, useContext, ReactNode } from "react";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { type UserRole, hasRole } from "@/lib/roleUtils";
+import { initialRecoveryIntent } from "@/lib/authRecovery";
 
 interface StaffUser {
   id: number;
@@ -20,6 +21,8 @@ interface AuthContextType {
   loading: boolean;
   staffUser: StaffUser | null;
   staffRoles: UserRole[];
+  recoveryRequested: boolean;
+  finishRecovery: () => void;
   isAdmin: boolean;
   isManager: boolean;
   isInstructor: boolean;
@@ -38,71 +41,62 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [staffUser, setStaffUser] = useState<StaffUser | null>(null);
   const [staffRoles, setStaffRoles] = useState<UserRole[]>([]);
-  const loadedAuthIdRef = useRef<string | null>(null);
-
-  const fetchStaffData = async (authId: string) => {
-    try {
-      const { data: staffData } = await supabase
-        .from("users")
-        .select("id, name, email, phone, photo, organization_id, auth_id, scope_restricted")
-        .eq("auth_id", authId)
-        .single();
-
-      if (staffData) {
-        setStaffUser(staffData as StaffUser);
-        const { data: rolesData } = await supabase
-          .from("user_roles")
-          .select("id, role_id, organization_id, is_primary, roles(name, type)")
-          .eq("user_id", staffData.id);
-        setStaffRoles((rolesData || []) as unknown as UserRole[]);
-      } else {
-        setStaffUser(null);
-        setStaffRoles([]);
-      }
-    } catch {
-      setStaffUser(null);
-      setStaffRoles([]);
-    } finally {
-      loadedAuthIdRef.current = authId;
-    }
-  };
+  const [recoveryRequested, setRecoveryRequested] = useState(initialRecoveryIntent.requested);
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-
-      if (!session?.user) {
-        loadedAuthIdRef.current = null;
-        setStaffUser(null);
-        setStaffRoles([]);
-        setLoading(false);
-        return;
-      }
-
-      const authId = session.user.id;
-      if (event === "TOKEN_REFRESHED" && loadedAuthIdRef.current === authId) {
-        setLoading(false);
-        return;
-      }
-
-      setLoading(true);
-      // Defer to avoid Supabase client deadlock
-      setTimeout(() => {
-        fetchStaffData(authId).finally(() => setLoading(false));
+    let active = true;
+    let currentAuthId: string | null | undefined;
+    let revision = 0;
+    let receivedEvent = false;
+    const applySession = (nextSession: Session | null) => {
+      if (!active) return;
+      setSession(nextSession);
+      setUser(nextSession?.user ?? null);
+      const authId = nextSession?.user.id ?? null;
+      // SIGNED_IN also fires on tab focus. Do not unmount the current workflow.
+      if (currentAuthId === authId) return;
+      currentAuthId = authId;
+      const request = ++revision;
+      setStaffUser(null);
+      setStaffRoles([]);
+      setLoading(!!authId);
+      if (!authId) return;
+      const isCurrent = () => active && revision === request;
+      // Keep database calls outside Supabase's auth callback lock.
+      setTimeout(async () => {
+        if (!isCurrent()) return;
+        try {
+          const { data: staff, error } = await supabase.from("users")
+            .select("id, name, email, phone, photo, organization_id, auth_id, scope_restricted")
+            .eq("auth_id", authId).maybeSingle();
+          if (error) throw error;
+          if (!staff || !isCurrent()) return;
+          const { data: roles, error: roleError } = await supabase.from("user_roles")
+            .select("id, role_id, organization_id, is_primary, roles(name, type)")
+            .eq("user_id", staff.id).eq("organization_id", staff.organization_id);
+          if (roleError) throw roleError;
+          if (isCurrent()) {
+            setStaffUser(staff as StaffUser);
+            setStaffRoles((roles || []) as unknown as UserRole[]);
+          }
+        } catch {
+          // Missing or unreadable authorization never grants implicit admin access.
+          if (isCurrent()) { setStaffUser(null); setStaffRoles([]); }
+        } finally {
+          if (isCurrent()) setLoading(false);
+        }
       }, 0);
+    };
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      receivedEvent = true;
+      if (event === "PASSWORD_RECOVERY") setRecoveryRequested(true);
+      if (event === "SIGNED_OUT") setRecoveryRequested(false);
+      applySession(nextSession);
     });
-
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        await fetchStaffData(session.user.id);
-      }
-      setLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
+    supabase.auth.getSession().then(({ data, error }) => {
+      if (!receivedEvent) applySession(error ? null : data.session);
+    }).catch(() => { if (!receivedEvent) applySession(null); });
+    return () => { active = false; revision++; subscription.unsubscribe(); };
   }, []);
 
   const isAdmin = hasRole(staffRoles, "admin");
@@ -130,7 +124,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider value={{
-      session, user, loading, staffUser, staffRoles,
+      session, user, loading, staffUser, staffRoles, recoveryRequested,
+      finishRecovery: () => setRecoveryRequested(false),
       isAdmin, isManager, isInstructor, isFrontdesk, isAdminOrManager,
       signIn, signUp, signOut,
     }}>

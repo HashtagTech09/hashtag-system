@@ -5,6 +5,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { TestDateProvider } from "@/contexts/TestDateContext";
+import { isOrgRole } from "@/lib/roleUtils";
+import { Button } from "@/components/ui/button";
 import LoginPage from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import StaffDashboard from "./pages/StaffDashboard";
@@ -41,10 +43,17 @@ const queryClient = new QueryClient({
 });
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, loading, staffUser, staffRoles, signOut } = useAuth();
   const location = useLocation();
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-background"><div className="text-muted-foreground">Loading...</div></div>;
   if (!user) return <Navigate to="/login" replace state={{ from: location }} />;
+  if (!staffUser || !staffRoles.some(role => isOrgRole(role.roles?.name || ""))) {
+    return <main className="min-h-screen flex flex-col items-center justify-center gap-4 p-6 text-center">
+      <h1 className="text-xl font-semibold">Staff access not configured</h1>
+      <p>Ask your administrator to link this login to a staff profile and role.</p>
+      <Button onClick={() => void signOut()}>Sign Out</Button>
+    </main>;
+  }
   return <>{children}</>;
 }
 
@@ -65,18 +74,24 @@ function GlobalAdminRoute({ children }: { children: React.ReactNode }) {
   const { isAdmin, isManager, staffUser, loading } = useAuth();
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-background"><div className="text-muted-foreground">Loading...</div></div>;
   const scopedManager = !isAdmin && isManager && (staffUser as any)?.scope_restricted === true;
-  if (scopedManager) return <Navigate to="/" replace />;
+  if (!isAdmin && (!isManager || scopedManager)) return <Navigate to="/" replace />;
   return <ProtectedRoute>{children}</ProtectedRoute>;
 }
 
 function HomePage() {
-  const { isAdminOrManager, staffUser } = useAuth();
-  // If admin/manager or no staff record (superadmin), show full dashboard
-  if (isAdminOrManager || !staffUser) return <Dashboard />;
+  const { isAdminOrManager } = useAuth();
+  if (isAdminOrManager) return <Dashboard />;
   return <StaffDashboard />;
 }
 
-const AppRoutes = () => (
+const AppRoutes = () => {
+  const { recoveryRequested, loading } = useAuth();
+  const location = useLocation();
+  if (recoveryRequested && location.pathname !== "/reset-password") {
+    if (loading) return <div role="status">Verifying reset link...</div>;
+    return <Navigate to="/reset-password" replace />;
+  }
+  return (
   <Routes>
     <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
     <Route path="/" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
@@ -104,7 +119,8 @@ const AppRoutes = () => (
     <Route path="/instructor/report/:sessionId" element={<ProtectedRoute><InstructorReportForm /></ProtectedRoute>} />
     <Route path="*" element={<NotFound />} />
   </Routes>
-);
+  );
+};
 
 const App = () => (
   <QueryClientProvider client={queryClient}>

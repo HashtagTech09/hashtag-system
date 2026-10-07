@@ -68,8 +68,7 @@ export function AppSidebar() {
 
   const roleNames = staffRoles.map(r => r.roles?.name).filter(Boolean) as string[];
   const scopedManager = !isAdmin && roleNames.includes("manager") && (staffUser as any)?.scope_restricted === true;
-  // If no staff record found (e.g. superadmin), show everything
-  const showAll = roleNames.length === 0 || (isAdminOrManager && !scopedManager);
+  const showAll = isAdminOrManager && !scopedManager;
   const hiddenForScopedManagers = new Set(["/users", "/plan-cycles", "/settings", "/import"]);
 
   const filterByRole = (items: typeof allMainItems) => {

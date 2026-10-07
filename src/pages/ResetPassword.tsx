@@ -1,13 +1,16 @@
 import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase, recoveryInitialization } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
+import { clearRecoveryUrl, initialRecoveryIntent } from "@/lib/authRecovery";
+import { useAuth } from "@/hooks/useAuth";
 
 const ResetPasswordPage = () => {
   const navigate = useNavigate();
+  const { finishRecovery } = useAuth();
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -15,23 +18,43 @@ const ResetPasswordPage = () => {
   const [validSession, setValidSession] = useState<boolean | null>(null);
 
   useEffect(() => {
-    // Supabase handles the recovery token from the URL hash automatically
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === "PASSWORD_RECOVERY") {
-        setValidSession(true);
+    let active = true;
+    // getSession waits for the SDK's implicit/PKCE callback processing; never exchange twice.
+    const validate = async () => {
+      try {
+        const initialization = await recoveryInitialization;
+        const { data, error } = await supabase.auth.getSession();
+        if (initialRecoveryIntent.failed || initialization.failed || error || !data.session) {
+          if (active) setValidSession(false);
+          return;
+        }
+        const { data: verified, error: verificationError } = await supabase.auth.getUser();
+        if (active) setValidSession(!verificationError && !!verified.user);
+      } catch {
+        if (active) setValidSession(false);
+      } finally {
+        if (active) clearRecoveryUrl();
       }
-    });
-
-    // Also check if already in a recovery session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) setValidSession(true);
-    });
-
-    return () => subscription.unsubscribe();
+    };
+    void validate();
+    return () => { active = false; };
   }, []);
+
+  const returnToLogin = async () => {
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.signOut({ scope: "local" });
+      if (error) throw error;
+      finishRecovery();
+      navigate("/login", { replace: true });
+    } catch {
+      toast.error("Could not sign out. Please try again.");
+    } finally { setLoading(false); }
+  };
 
   const handleReset = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!validSession || loading) return;
     if (password !== confirmPassword) {
       toast.error("Passwords do not match");
       return;
@@ -41,9 +64,14 @@ const ResetPasswordPage = () => {
       const { error } = await supabase.auth.updateUser({ password });
       if (error) throw error;
       setSuccess(true);
+      setPassword("");
+      setConfirmPassword("");
+      // End only this browser's recovery session; do not sign other staff out.
+      const { error: signOutError } = await supabase.auth.signOut({ scope: "local" });
+      if (signOutError) toast.error("Password updated. Please sign out before signing in again.");
       toast.success("Password updated successfully");
-    } catch (err: any) {
-      toast.error(err.message || "Failed to update password");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to update password");
     } finally {
       setLoading(false);
     }
@@ -65,7 +93,7 @@ const ResetPasswordPage = () => {
             <p className="text-sm text-muted-foreground">
               Your password has been updated. You can now sign in with your new password.
             </p>
-            <Button className="w-full gradient-primary" onClick={() => navigate("/login")}>
+            <Button className="w-full gradient-primary" disabled={loading} onClick={() => void returnToLogin()}>
               Go to Login
             </Button>
           </div>
@@ -74,10 +102,12 @@ const ResetPasswordPage = () => {
             <p className="text-sm text-muted-foreground">
               Invalid or expired reset link. Please request a new one.
             </p>
-            <Button className="w-full gradient-primary" onClick={() => navigate("/login")}>
+            <Button className="w-full gradient-primary" disabled={loading} onClick={() => void returnToLogin()}>
               Go to Login
             </Button>
           </div>
+        ) : validSession === null ? (
+          <p role="status" className="text-center text-sm text-muted-foreground">Verifying reset link...</p>
         ) : (
           <form onSubmit={handleReset} className="space-y-5">
             <div className="space-y-2">
@@ -85,6 +115,7 @@ const ResetPasswordPage = () => {
               <Input
                 id="password"
                 type="password"
+                autoComplete="new-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
@@ -97,6 +128,7 @@ const ResetPasswordPage = () => {
               <Input
                 id="confirmPassword"
                 type="password"
+                autoComplete="new-password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="••••••••"
