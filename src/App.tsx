@@ -31,6 +31,7 @@ import NotFound from "./pages/NotFound";
 import InstructorHome from "./pages/instructor/Home";
 import InstructorReportForm from "./pages/instructor/ReportForm";
 import InstructorMyReports from "./pages/instructor/MyReports";
+import LeadsPage from "./pages/Leads";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -83,6 +84,7 @@ const AppRoutes = () => (
     <Route path="/studios" element={<ProtectedRoute><StudiosPage /></ProtectedRoute>} />
     <Route path="/users" element={<GlobalAdminRoute><UsersPage /></GlobalAdminRoute>} />
     <Route path="/students" element={<ProtectedRoute><StudentsPage /></ProtectedRoute>} />
+    <Route path="/leads" element={<ProtectedRoute><LeadsPage /></ProtectedRoute>} />
     <Route path="/batches" element={<ProtectedRoute><BatchesPage /></ProtectedRoute>} />
     <Route path="/plan-cycles" element={<GlobalAdminRoute><PlanCyclesPage /></GlobalAdminRoute>} />
     <Route path="/enrollments" element={<ProtectedRoute><EnrollmentsPage /></ProtectedRoute>} />

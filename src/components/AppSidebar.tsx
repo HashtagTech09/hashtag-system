@@ -35,6 +35,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
+import { useCrmScope } from "@/hooks/useCrmScope";
 
 const allMainItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard, roles: ["admin", "manager", "instructor", "frontdesk"] },
@@ -65,6 +66,7 @@ export function AppSidebar() {
   const location = useLocation();
   const { signOut, staffUser, staffRoles, isAdminOrManager, isAdmin } = useAuth();
   const { pendingCount } = useApplicationCasesCount();
+  const crmScope = useCrmScope();
 
   const roleNames = staffRoles.map(r => r.roles?.name).filter(Boolean) as string[];
   const scopedManager = !isAdmin && roleNames.includes("manager") && (staffUser as any)?.scope_restricted === true;
@@ -77,7 +79,8 @@ export function AppSidebar() {
     return scopedManager ? roleFiltered.filter(item => !hiddenForScopedManagers.has(item.url)) : roleFiltered;
   };
 
-  const mainItems = filterByRole(allMainItems);
+  const mainItems = [...filterByRole(allMainItems)];
+  if (crmScope.data?.length) mainItems.push({ title: "Leads", url: "/leads", icon: Users, roles: [] });
   const operationItems = filterByRole(allOperationItems);
 
   const isActive = (path: string) =>
