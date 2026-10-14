@@ -1,5 +1,9 @@
 project_id = "plrpurjponddhelgtebw"
 
+# Dedicated worker secret is checked in the handler. Never invoke from a browser.
+[functions.crm-meta-dispatch]
+verify_jwt = false
+
 [functions]
   [functions.auth-email-hook]
     verify_jwt = false
