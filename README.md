@@ -808,17 +808,19 @@ Standard deployment flow:
 
 1. Commit code.
 2. Push to GitHub.
-3. Deploy the Supabase Edge Functions to project `plrpurjponddhelgtebw`.
+3. Deploy the Supabase Edge Functions to project `cughejedfefvblxyodtm`.
 4. Deploy the Vite app on Vercel.
 5. Smoke test production app.
 
-Required Vercel environment variables:
+Required Vercel environment variables (set for both Production and Preview in the Vercel dashboard; see `.env.example`):
 
 ```text
 VITE_SUPABASE_URL
 VITE_SUPABASE_PROJECT_ID
 VITE_SUPABASE_PUBLISHABLE_KEY
 ```
+
+Local development: copy `.env.example` to `.env.local` and fill in values. `.env.local`, `.env.production` and every other `.env*` file except `.env.example` are git-ignored - never commit real values. The Supabase service role key must never be placed in a `VITE_` variable or in Vercel; Edge Functions get `SUPABASE_SERVICE_ROLE_KEY` from Supabase automatically.
 
 Required Supabase Edge Function secret:
 
@@ -829,8 +831,8 @@ APP_BASE_URL=https://<your-vercel-domain>
 Useful deploy commands:
 
 ```sh
-npx supabase@latest functions deploy --project-ref plrpurjponddhelgtebw
-npx supabase@latest secrets set APP_BASE_URL=https://<your-vercel-domain> --project-ref plrpurjponddhelgtebw
+npx supabase@latest functions deploy --project-ref cughejedfefvblxyodtm
+npx supabase@latest secrets set APP_BASE_URL=https://<your-vercel-domain> --project-ref cughejedfefvblxyodtm
 npx vercel --prod
 ```
 
